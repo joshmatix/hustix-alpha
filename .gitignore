@@ -1,0 +1,7 @@
+/test.py
+/frontend/node_modules
+# Add this line to your .gitignore file
+**/node_modules/
+# Add these lines to your .gitignore
+supabase/.temp/
+**/supabase/.temp/

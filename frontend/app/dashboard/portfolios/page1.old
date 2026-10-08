@@ -1,0 +1,231 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import CreatePortfolioModal from '@/components/CreatePortfolioModal';
+
+
+interface Holding {
+  ticker: string;
+  weight: number;
+}
+
+interface Portfolio {
+  id: string;
+  name: string;
+  holdings: Holding[];
+}
+
+export default function PortfoliosPage() {
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([
+    { 
+      id: '1', 
+      name: 'Growth Aggressive 80/20', 
+      holdings: [
+        { ticker: 'SPY', weight: 0.8 }, 
+        { ticker: 'AGG', weight: 0.2 }
+      ] 
+    }
+  ]);
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState('1');
+
+  // Form States
+  const [tickerInput, setTickerInput] = useState('');
+  const [weightInput, setWeightInput] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+
+  // 1. Modal Creation Handler
+  const handlePortfolioCreated = (newPortfolio: { id: string; name: string }) => {
+    const portfolioWithHoldings: Portfolio = { ...newPortfolio, holdings: [] };
+    setPortfolios((prev) => [...prev, portfolioWithHoldings]);
+    setSelectedPortfolioId(newPortfolio.id);
+  };
+
+  // 2. Add Ticker to Active Portfolio
+  const handleAddTicker = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tickerInput || !weightInput) return;
+
+    setPortfolios((prevPortfolios) =>
+      prevPortfolios.map((p) => {
+        if (p.id === selectedPortfolioId) {
+          return {
+            ...p,
+            holdings: [
+              ...p.holdings,
+              { ticker: tickerInput.toUpperCase(), weight: parseFloat(weightInput) }
+            ]
+          };
+        }
+        return p;
+      })
+    );
+
+    setTickerInput('');
+    setWeightInput('');
+  };
+
+  // 3. Handle CSV File Import
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('http://localhost:8000/api/portfolios/upload-csv', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const importedHoldings: Holding[] = data.holdings.map((item: any) => ({
+          ticker: item.Ticker.toUpperCase(),
+          weight: parseFloat(item.Weight)
+        }));
+
+        setPortfolios((prevPortfolios) =>
+          prevPortfolios.map((p) => {
+            if (p.id === selectedPortfolioId) {
+              return { ...p, holdings: [...p.holdings, ...importedHoldings] };
+            }
+            return p;
+          })
+        );
+      }
+    } catch (err) {
+      console.error('Failed to import CSV', err);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const activePortfolio = portfolios.find((p) => p.id === selectedPortfolioId);
+
+  return (
+    <main className="min-h-screen bg-slate-950 text-slate-100 p-8 space-y-8">
+      {/* Header Bar */}
+      <div className="flex justify-between items-center border-b border-slate-800 pb-6">
+        <div>
+          <Link href="/dashboard" className="text-xs text-indigo-400 hover:underline">
+            &larr; Back to Dashboard
+          </Link>
+          <h1 className="text-2xl font-bold text-white mt-1">Portfolio Management</h1>
+        </div>
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-3">
+          <label className="cursor-pointer px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-sm font-medium transition">
+            {isUploading ? 'Create Portfolio...' : 'Create Portfolio'}
+            <input type="file" accept=".csv" onChange={handlePortfolioCreated} className="hidden" />
+
+          </label>          <label className="cursor-pointer px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-sm font-medium transition">
+            {isUploading ? 'Uploading CSV...' : '📥 Import CSV'}
+            <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
+          </label>
+
+          <CreatePortfolioModal onPortfolioCreated={handlePortfolioCreated} />
+        </div>
+      </div>
+
+      {/* Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left Column: Select Portfolio */}
+        <div className="space-y-6">
+          <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
+            <h2 className="text-lg font-semibold text-white">Your Portfolios</h2>
+            <div className="space-y-2">
+              {portfolios.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedPortfolioId(p.id)}
+                  className={`w-full text-left p-3 rounded-lg text-sm font-medium transition ${
+                    p.id === selectedPortfolioId
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-950/50 text-slate-400 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  {p.name} ({p.holdings.length} holdings)
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Active Portfolio Tickers */}
+        <div className="lg:col-span-2 space-y-6">
+          {activePortfolio ? (
+            <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-6">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+                <h2 className="text-xl font-bold text-white">{activePortfolio.name}</h2>
+                <span className="text-xs text-slate-400">ID: {activePortfolio.id}</span>
+              </div>
+
+              {/* Add Ticker Form */}
+              <form onSubmit={handleAddTicker} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  placeholder="Ticker (e.g. AAPL)"
+                  value={tickerInput}
+                  onChange={(e) => setTickerInput(e.target.value)}
+                  className="px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Weight (e.g. 0.15)"
+                  value={weightInput}
+                  onChange={(e) => setWeightInput(e.target.value)}
+                  className="px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                />
+                <button
+                  type="submit"
+                  className="py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg text-sm transition"
+                >
+                  + Add Ticker
+                </button>
+              </form>
+
+              {/* Holdings Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase">
+                      <th className="py-3 px-4">Ticker</th>
+                      <th className="py-3 px-4">Allocation Weight</th>
+                      <th className="py-3 px-4">Percentage</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-sm">
+                    {activePortfolio.holdings.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="py-8 text-center text-slate-500">
+                          No tickers added yet. Add a ticker manually or import a CSV.
+                        </td>
+                      </tr>
+                    ) : (
+                      activePortfolio.holdings.map((h, index) => (
+                        <tr key={index} className="hover:bg-slate-800/50">
+                          <td className="py-3 px-4 font-semibold text-white">{h.ticker}</td>
+                          <td className="py-3 px-4 text-slate-300">{h.weight}</td>
+                          <td className="py-3 px-4 text-indigo-400">{(h.weight * 100).toFixed(1)}%</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="p-12 text-center text-slate-500 bg-slate-900 border border-slate-800 rounded-2xl">
+              Select or create a portfolio to manage holdings.
+            </div>
+          )}
+        </div>
+      </div>
+    </main>
+  );
+}

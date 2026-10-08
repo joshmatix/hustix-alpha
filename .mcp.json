@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "weather-server": {
+      "type": "stdio",
+      "command": "/usr/bin/npx",
+      "cwd": "/home/tomma/my-macro-app",
+      "args": [
+        "-y", 
+        "@modelcontextprotocol/server-weather"
+      ]
+    }
+  }
+}
+
+
+
