@@ -2,6 +2,9 @@ fastapi
 uvicorn
 pandas
 numpy
-yfinance
 python-dotenv
 pydantic
+supabase
+python-multipart
+requests
+httpx

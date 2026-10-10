@@ -1,7 +1,16 @@
 /test.py
-/frontend/node_modules
-# Add this line to your .gitignore file
 **/node_modules/
-# Add these lines to your .gitignore
+frontend/.next/
+**/.next/
 supabase/.temp/
 **/supabase/.temp/
+**/__pycache__/
+*.pyc
+.env
+.env.local
+.env.*.local
+backend/.venv/
+**/.venv/
+backend/.env
+frontend/.env.local
+.DS_Store

@@ -3,14 +3,8 @@
     "weather-server": {
       "type": "stdio",
       "command": "/usr/bin/npx",
-      "cwd": "/home/tomma/my-macro-app",
-      "args": [
-        "-y", 
-        "@modelcontextprotocol/server-weather"
-      ]
+      "cwd": "/home/tomma/cursor/hustix-alpha",
+      "args": ["-y", "@modelcontextprotocol/server-weather"]
     }
   }
 }
-
-
-

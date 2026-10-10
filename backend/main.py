@@ -1,43 +1,40 @@
-# my-macro-app/backend/main.py
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import portfolios  # Import the portfolio router module
+
+from routers import portfolios, simulate, macro
 
 app = FastAPI(
     title="Macro & Risk Stress-Testing API",
     description="Quantitative engine & multi-tenant portfolio middleware for financial advisors",
-    version="1.0.0"
+    version="1.0.0",
 )
 
-# ------------------------------------------------------------------------------
-# CORS Middleware Configuration
-# ------------------------------------------------------------------------------
-# Ensures preflight OPTIONS requests return 200 OK and allow cross-origin
-# communication between Next.js (frontend) and FastAPI (backend).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],            # In production, replace with exact frontend domain, e.g., ["http://localhost:3000"]
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],            # Allows GET, POST, OPTIONS, PUT, DELETE, etc.
-    allow_headers=["*"],            # Allows Content-Type, Authorization, etc.
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# ------------------------------------------------------------------------------
-# Include Modular Routers
-# ------------------------------------------------------------------------------
 app.include_router(portfolios.router)
+app.include_router(simulate.router)
+app.include_router(macro.router)
 
-# ------------------------------------------------------------------------------
-# Root & Health Check Endpoints
-# ------------------------------------------------------------------------------
+
 @app.get("/", tags=["Health"])
 async def root():
     return {
         "status": "online",
         "service": "Macro Risk Engine Backend",
-        "docs_url": "/docs"
+        "docs_url": "/docs",
     }
+
 
 @app.get("/health", tags=["Health"])
 async def health_check():

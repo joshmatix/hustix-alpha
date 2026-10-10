@@ -2,12 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { supabase } from '@/lib/supabaseClient';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -20,11 +15,12 @@ export default function AuthGuard({ children }: AuthGuardProps) {
 
   useEffect(() => {
     async function checkAuth() {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
       if (!session) {
-        // No active session found; redirect to signup/login page
-        router.push('/signup');
+        router.push('/login');
       } else {
         setAuthenticated(true);
       }
@@ -33,11 +29,12 @@ export default function AuthGuard({ children }: AuthGuardProps) {
 
     checkAuth();
 
-    // Listen for auth state changes (e.g. sign-outs)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
         setAuthenticated(false);
-        router.push('/signup');
+        router.push('/login');
       } else {
         setAuthenticated(true);
       }

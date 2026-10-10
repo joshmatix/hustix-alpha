@@ -34,7 +34,7 @@
     ".next/types/**/*.ts",
     "**/*.ts",
     "**/*.tsx"
-, "app/dashboard/portfolios/page1.old"  ],
+  ],
   "exclude": [
     "node_modules"
   ]
