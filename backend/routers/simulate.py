@@ -1,70 +1,117 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Header, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from typing import Dict
-import numpy as np
+from typing import Optional
+from uuid import UUID
 
+from database import supabase
+from engine.live_risk import LiveRiskError, run_all_scenarios, run_live_stress
 from engine.output_formatter import format_analysis_output
+from engine.report_pdf import build_stress_report
 
 router = APIRouter(prefix="/api/v1", tags=["Simulation"])
 
-SCENARIO_DELTAS = {
-    "Stagflation": np.array([-0.12, -0.09, 0.10, -0.02]),
-    "Rate_Shock": np.array([-0.05, -0.08, 0.00, 0.02]),
-    "Soft_Landing": np.array([0.04, 0.03, 0.01, 0.00]),
-    "Base": np.array([0.02, 0.01, 0.01, 0.00]),
-}
-
-ASSET_KEYS = ["Equities", "Bonds", "Real_Assets", "Cash"]
-
 
 class SimulationRequest(BaseModel):
-    portfolio_value: float = Field(gt=0, json_schema_extra={"example": 1000000})
-    weights: Dict[str, float] = Field(
-        default_factory=lambda: {
-            "Equities": 0.60,
-            "Bonds": 0.25,
-            "Real_Assets": 0.10,
-            "Cash": 0.05,
-        }
-    )
+    portfolio_id: UUID
     scenario: str = Field(default="Rate_Shock")
+    portfolio_value: Optional[float] = None
+    weights: Optional[dict] = None
+
+
+def _cash_daily_return() -> float:
+    try:
+        from engine.macro_feeds import fetch_macro_indicators
+
+        fed_funds = fetch_macro_indicators().get("Fed_Funds_Rate") or 0.0
+        return float(fed_funds) / 100.0 / 252.0
+    except Exception:
+        return 0.0
 
 
 @router.post("/simulate")
-def run_stress_test(req: SimulationRequest):
-    scenario_key = req.scenario if req.scenario in SCENARIO_DELTAS else "Base"
-    drift_deltas = SCENARIO_DELTAS[scenario_key]
+def run_stress_test(req: SimulationRequest, authorization: Optional[str] = Header(default=None)):
+    from routers.portfolios import _require_user_id
 
-    w = np.array([float(req.weights.get(k, 0.0)) for k in ASSET_KEYS])
-    weight_sum = float(np.sum(w))
-    if weight_sum > 0:
-        w = w / weight_sum
+    user_id = _require_user_id(authorization)
+    owned = (
+        supabase.table("portfolios")
+        .select("id")
+        .eq("id", str(req.portfolio_id))
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not owned.data:
+        raise HTTPException(status_code=404, detail="Portfolio not found.")
 
-    returns_sim = np.random.normal(0.05 + float(np.dot(w, drift_deltas)), 0.12, 1000)
-    shocked_values = req.portfolio_value * (1 + returns_sim)
-    mean_shocked = float(np.mean(shocked_values))
-    var_95_loss = float(np.percentile(shocked_values, 5) - req.portfolio_value)
-    loss_ratio = abs(var_95_loss) / req.portfolio_value
-    overall_score = int(min(100, max(0, round(loss_ratio * 400))))
+    holdings = (
+        supabase.table("portfolio_holdings")
+        .select("ticker,asset_class,quantity,current_price")
+        .eq("portfolio_id", str(req.portfolio_id))
+        .execute()
+    )
+    try:
+        result = run_live_stress(holdings.data or [], req.scenario, _cash_daily_return())
+    except LiveRiskError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Live market data request failed: {exc}") from exc
 
     simulation_results = {
-        "baseline_value": req.portfolio_value,
-        "mean_shocked_value": mean_shocked,
-        "var_95_loss": var_95_loss,
+        "baseline_value": result["baseline_value"],
+        "mean_shocked_value": result["mean_shocked_value"],
+        "var_95_loss": result["var_95_loss"],
+        "history_days": result["history_days"],
         "status": "completed",
     }
-    formatted = format_analysis_output(simulation_results, scenario_key)
-
+    formatted = format_analysis_output(simulation_results, result["scenario"])
     return {
         **simulation_results,
-        "scenario": scenario_key,
-        "overall_score": overall_score,
-        "asset_impacts": {
-            "Equities": round(float(drift_deltas[0]) * 100, 1),
-            "Bonds": round(float(drift_deltas[1]) * 100, 1),
-            "Real_Assets": round(float(drift_deltas[2]) * 100, 1),
-            "Cash": round(float(drift_deltas[3]) * 100, 1),
-        },
+        "scenario": result["scenario"],
+        "overall_score": result["overall_score"],
+        "asset_impacts": result["asset_impacts"],
+        "scenario_days": result["scenario_days"],
+        "paths": result["paths"],
+        "data_mode": "live",
         "narrative": formatted["client_narrative"],
         "metrics": formatted["metrics"],
     }
+
+
+@router.post("/report")
+def download_stress_report(req: SimulationRequest, authorization: Optional[str] = Header(default=None)):
+    from routers.portfolios import _require_user_id
+
+    user_id = _require_user_id(authorization)
+    owned = (
+        supabase.table("portfolios")
+        .select("id,name")
+        .eq("id", str(req.portfolio_id))
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not owned.data:
+        raise HTTPException(status_code=404, detail="Portfolio not found.")
+
+    holdings = (
+        supabase.table("portfolio_holdings")
+        .select("ticker,asset_class,quantity,current_price")
+        .eq("portfolio_id", str(req.portfolio_id))
+        .execute()
+    )
+    try:
+        scenarios = run_all_scenarios(holdings.data or [], _cash_daily_return())
+        pdf_bytes = build_stress_report(owned.data[0].get("name") or "Portfolio", scenarios)
+    except LiveRiskError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not build the stress-test report: {exc}") from exc
+
+    filename = "macro-stress-test.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

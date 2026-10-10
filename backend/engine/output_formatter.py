@@ -4,12 +4,20 @@ def format_analysis_output(simulation_results: dict, scenario_name: str) -> dict
     loss_val = abs(simulation_results["var_95_loss"])
     percent_loss = (loss_val / simulation_results["baseline_value"]) * 100
 
-    # Auto-generate plain-language advisor commentary
-    narrative = (
-        f"Under the {scenario_name} regime, the portfolio shows an expected 95% Value at Risk (VaR) "
-        f"of ${loss_val:,.2f} ({percent_loss:.1f}% downside). The primary risk driver is duration "
-        f"compression in fixed-income allocations coupled with equity multiple contraction."
-    )
+    history_days = simulation_results.get("history_days")
+    label = scenario_name.replace("_", " ")
+    if history_days:
+        narrative = (
+            f"Under the {label} scenario, the 95% one-year loss is "
+            f"${loss_val:,.0f} ({percent_loss:.1f}% of the account). "
+            f"Prices and yield sensitivity come from {history_days} Yahoo Finance trading days "
+            f"for the holdings in this portfolio. The scenario is applied once, on top of that live volatility."
+        )
+    else:
+        narrative = (
+            f"Under the {label} scenario, the portfolio shows an expected 95% Value at Risk (VaR) "
+            f"of ${loss_val:,.2f} ({percent_loss:.1f}% downside)."
+        )
 
     return {
         "metrics": {

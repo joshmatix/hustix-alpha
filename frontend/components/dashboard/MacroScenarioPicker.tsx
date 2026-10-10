@@ -89,10 +89,10 @@ export default function MacroScenarioPicker({
         {isCalculating ? (
           <>
             <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            Calculating Fast-Engine Risk Model...
+            Pricing from live market history...
           </>
         ) : (
-          'Run Stress Test Simulation'
+          'Run live stress test'
         )}
       </button>
     </div>
