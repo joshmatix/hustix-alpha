@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, status, Header
+from fastapi import APIRouter, HTTPException, Response, UploadFile, File, status, Header
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from uuid import UUID, uuid4
@@ -206,6 +206,39 @@ async def get_holdings(portfolio_id: UUID, authorization: Optional[str] = Header
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch holdings: {str(e)}")
+
+
+@router.delete("/{portfolio_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_portfolio(portfolio_id: UUID, authorization: Optional[str] = Header(default=None)):
+    user_id, db = _require_user_id(authorization)
+    portfolio_key = str(portfolio_id)
+    try:
+        owned = (
+            db.table("portfolios")
+            .select("id")
+            .eq("id", portfolio_key)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not owned.data:
+            raise HTTPException(status_code=404, detail="Portfolio not found.")
+
+        db.table("portfolio_holdings").delete().eq("portfolio_id", portfolio_key).execute()
+        deleted = (
+            db.table("portfolios")
+            .delete()
+            .eq("id", portfolio_key)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if not deleted.data:
+            raise HTTPException(status_code=404, detail="Portfolio not found.")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete portfolio: {str(e)}")
 
 
 @router.post("/create", response_model=PortfolioResponse, status_code=status.HTTP_201_CREATED)

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CreatePortfolioModal from '@/components/CreatePortfolioModal';
+import DeletePortfolioModal from '@/components/DeletePortfolioModal';
 import Button from '@/components/ui/Button';
 import { apiFetch, type Holding, type Portfolio } from '@/lib/api';
 
@@ -18,6 +19,7 @@ export default function PortfoliosPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
+  const [portfolioToDelete, setPortfolioToDelete] = useState<Portfolio | null>(null);
 
   const fetchPortfolios = async (quiet = false) => {
     try {
@@ -77,6 +79,20 @@ export default function PortfoliosPage() {
     }
 
     await fetchPortfolios();
+  };
+
+  const handleDeletePortfolio = async () => {
+    if (!portfolioToDelete) return;
+    const res = await apiFetch(`/api/portfolios/${portfolioToDelete.id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || 'Could not delete portfolio.');
+    }
+    if (selectedId === portfolioToDelete.id) {
+      setSelectedId(null);
+      setHoldings([]);
+    }
+    await fetchPortfolios(true);
   };
 
   const handleCsvUpload = async (portfolioId: string, file: File) => {
@@ -173,6 +189,15 @@ export default function PortfoliosPage() {
                   </span>
                 </label>
               </div>
+              <div className="mt-4 border-t border-slate-800 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setPortfolioToDelete(portfolio)}
+                  className="text-xs font-semibold text-rose-400 hover:text-rose-300"
+                >
+                  Delete portfolio
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -228,6 +253,11 @@ export default function PortfoliosPage() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleCreatePortfolio}
+      />
+      <DeletePortfolioModal
+        portfolioName={portfolioToDelete?.name ?? null}
+        onClose={() => setPortfolioToDelete(null)}
+        onConfirm={handleDeletePortfolio}
       />
     </div>
   );
