@@ -17,9 +17,14 @@ app.add_middleware(
         "http://localhost:3001",
         "http://127.0.0.1:3001",
     ],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # The app is opened at localhost:3000 while the API is 127.0.0.1:8000.
+    # Chrome treats that as a private-network request and blocks it unless
+    # the preflight is explicitly allowed.
+    allow_private_network=True,
 )
 
 app.include_router(portfolios.router)

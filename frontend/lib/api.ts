@@ -1,7 +1,26 @@
 import { supabase } from '@/lib/supabaseClient';
 
-export const API_BASE =
-  process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://127.0.0.1:8000';
+function resolveApiBase() {
+  const configured = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://127.0.0.1:8000';
+  if (typeof window === 'undefined') return configured;
+
+  try {
+    const url = new URL(configured);
+    const pageHost = window.location.hostname;
+    const apiIsLoopback = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+    const pageIsLoopback = pageHost === '127.0.0.1' || pageHost === 'localhost';
+    if (apiIsLoopback && pageIsLoopback) {
+      url.hostname = pageHost;
+      return url.origin;
+    }
+  } catch {
+    return configured;
+  }
+
+  return configured;
+}
+
+export const API_BASE = resolveApiBase();
 
 export type AssetAllocation = {
   equities: number;
