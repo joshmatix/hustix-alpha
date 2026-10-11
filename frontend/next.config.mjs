@@ -1,8 +1,23 @@
-const apiOrigin = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://127.0.0.1:8000';
+// Local Next proxies /api to the FastAPI process. On Vercel, vercel.json
+// already sends /api and /health to that service, so these rewrites must
+// not point at the public host (and a host without https:// fails the build).
+function localApiOrigin() {
+  const configured = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://127.0.0.1:8000';
+  const withScheme = /^https?:\/\//i.test(configured) ? configured : `http://${configured}`;
+  try {
+    const url = new URL(withScheme);
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return url.origin;
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async rewrites() {
+    const apiOrigin = localApiOrigin();
+    if (!apiOrigin) return [];
     return [
       { source: '/api/portfolios', destination: `${apiOrigin}/api/portfolios` },
       { source: '/api/portfolios/:path*', destination: `${apiOrigin}/api/portfolios/:path*` },
