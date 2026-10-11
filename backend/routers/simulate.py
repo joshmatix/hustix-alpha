@@ -30,18 +30,10 @@ def _cash_daily_return() -> float:
 
 @router.post("/simulate")
 def run_stress_test(req: SimulationRequest, authorization: Optional[str] = Header(default=None)):
-    from routers.portfolios import _require_user_id
+    from routers.portfolios import _require_assignments
 
-    user_id, db = _require_user_id(authorization)
-    owned = (
-        db.table("portfolios")
-        .select("id")
-        .eq("id", str(req.portfolio_id))
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
-    )
-    if not owned.data:
+    _, assigned, db = _require_assignments(authorization)
+    if str(req.portfolio_id) not in assigned:
         raise HTTPException(status_code=404, detail="Portfolio not found.")
 
     holdings = (
@@ -80,14 +72,15 @@ def run_stress_test(req: SimulationRequest, authorization: Optional[str] = Heade
 
 @router.post("/report")
 def download_stress_report(req: SimulationRequest, authorization: Optional[str] = Header(default=None)):
-    from routers.portfolios import _require_user_id
+    from routers.portfolios import _require_assignments
 
-    user_id, db = _require_user_id(authorization)
+    _, assigned, db = _require_assignments(authorization)
+    if str(req.portfolio_id) not in assigned:
+        raise HTTPException(status_code=404, detail="Portfolio not found.")
     owned = (
         db.table("portfolios")
         .select("id,name")
         .eq("id", str(req.portfolio_id))
-        .eq("user_id", user_id)
         .limit(1)
         .execute()
     )

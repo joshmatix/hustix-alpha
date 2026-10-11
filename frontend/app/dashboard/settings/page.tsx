@@ -10,7 +10,6 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState('');
-  const [firmName, setFirmName] = useState('');
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(
     null
   );
@@ -24,13 +23,12 @@ export default function SettingsPage() {
       if (user) {
         const { data } = await supabase
           .from('profiles')
-          .select('full_name, firm_name')
+          .select('full_name')
           .eq('id', user.id)
           .single();
 
         if (data) {
           setFullName(data.full_name || '');
-          setFirmName(data.firm_name || '');
         }
       }
       setLoading(false);
@@ -57,7 +55,6 @@ export default function SettingsPage() {
     const { error } = await supabase.from('profiles').upsert({
       id: user.id,
       full_name: fullName,
-      firm_name: firmName,
       updated_at: new Date().toISOString(),
     });
 
@@ -74,7 +71,7 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-white">Advisor Settings</h1>
         <p className="text-xs text-slate-400 mt-1">
-          Manage your personal profile and wealth advisory firm configuration.
+          Manage your personal profile.
         </p>
       </div>
 
@@ -91,13 +88,6 @@ export default function SettingsPage() {
               placeholder="e.g. Sarah Jenkins"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-            />
-
-            <Input
-              label="Firm / Advisory Name"
-              placeholder="e.g. Apex Wealth Management"
-              value={firmName}
-              onChange={(e) => setFirmName(e.target.value)}
             />
 
             <div className="pt-2 flex items-center justify-between">

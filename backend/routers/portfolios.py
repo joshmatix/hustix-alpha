@@ -31,6 +31,7 @@ class PortfolioCreateRequest(BaseModel):
     target_risk_profile: Optional[str] = "Balanced"
     portfolio_value: Optional[float] = 0
     asset_allocation: Optional[Dict[str, float]] = None
+    firm_id: Optional[UUID] = None
 
 
 class PortfolioResponse(BaseModel):
@@ -101,6 +102,60 @@ def _require_user_id(authorization: Optional[str]):
         raise HTTPException(status_code=401, detail=f"Invalid session token: {message}") from exc
 
 
+def _firm_ids_for_user(user_id: str, db) -> List[str]:
+    membership = (
+        db.table("firm_members")
+        .select("firm_id")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    firm_ids = [str(row["firm_id"]) for row in (membership.data or [])]
+    if firm_ids:
+        return firm_ids
+
+    created = db.rpc("ensure_shadow_firm").execute()
+    firm_id = created.data
+    if isinstance(firm_id, list):
+        firm_id = firm_id[0] if firm_id else None
+    if not firm_id:
+        raise HTTPException(status_code=409, detail="This advisor is not attached to a firm.")
+    return [str(firm_id)]
+
+
+def _require_firms(authorization: Optional[str]):
+    user_id, db = _require_user_id(authorization)
+    return user_id, _firm_ids_for_user(user_id, db), db
+
+
+def _assigned_portfolio_ids(user_id: str, db) -> List[str]:
+    rows = (
+        db.table("portfolio_advisors")
+        .select("portfolio_id")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    return [str(row["portfolio_id"]) for row in (rows.data or [])]
+
+
+def _require_assignments(authorization: Optional[str]):
+    user_id, _, db = _require_firms(authorization)
+    return user_id, _assigned_portfolio_ids(user_id, db), db
+
+
+def _firm_for_new_portfolio(firm_ids: List[str], requested: Optional[UUID]) -> str:
+    if requested is not None:
+        chosen = str(requested)
+        if chosen not in firm_ids:
+            raise HTTPException(status_code=404, detail="Firm not found.")
+        return chosen
+    if len(firm_ids) == 1:
+        return firm_ids[0]
+    raise HTTPException(
+        status_code=422,
+        detail="firm_id is required when the advisor belongs to more than one firm.",
+    )
+
+
 def _normalize_allocation(raw: Any) -> Dict[str, float]:
     if not isinstance(raw, dict):
         return dict(DEFAULT_ALLOCATION)
@@ -128,12 +183,14 @@ def _to_list_item(item: dict) -> dict:
 @router.get("", response_model=List[PortfolioListResponse])
 @router.get("/", response_model=List[PortfolioListResponse], include_in_schema=False)
 async def get_portfolios(authorization: Optional[str] = Header(default=None)):
-    user_id, db = _require_user_id(authorization)
+    _, assigned, db = _require_assignments(authorization)
+    if not assigned:
+        return []
     try:
         response = (
             db.table("portfolios")
             .select("*")
-            .eq("user_id", user_id)
+            .in_("id", assigned)
             .order("created_at", desc=True)
             .execute()
         )
@@ -146,13 +203,14 @@ async def get_portfolios(authorization: Optional[str] = Header(default=None)):
 
 @router.get("/{portfolio_id}", response_model=PortfolioListResponse)
 async def get_portfolio(portfolio_id: UUID, authorization: Optional[str] = Header(default=None)):
-    user_id, db = _require_user_id(authorization)
+    _, assigned, db = _require_assignments(authorization)
+    if str(portfolio_id) not in assigned:
+        raise HTTPException(status_code=404, detail="Portfolio not found.")
     try:
         response = (
             db.table("portfolios")
             .select("*")
             .eq("id", str(portfolio_id))
-            .eq("user_id", user_id)
             .limit(1)
             .execute()
         )
@@ -167,16 +225,8 @@ async def get_portfolio(portfolio_id: UUID, authorization: Optional[str] = Heade
 
 @router.get("/{portfolio_id}/holdings", response_model=List[HoldingListItem])
 async def get_holdings(portfolio_id: UUID, authorization: Optional[str] = Header(default=None)):
-    user_id, db = _require_user_id(authorization)
-    owned = (
-        db.table("portfolios")
-        .select("id")
-        .eq("id", str(portfolio_id))
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
-    )
-    if not owned.data:
+    _, assigned, db = _require_assignments(authorization)
+    if str(portfolio_id) not in assigned:
         raise HTTPException(status_code=404, detail="Portfolio not found.")
     try:
         response = (
@@ -210,26 +260,16 @@ async def get_holdings(portfolio_id: UUID, authorization: Optional[str] = Header
 
 @router.delete("/{portfolio_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_portfolio(portfolio_id: UUID, authorization: Optional[str] = Header(default=None)):
-    user_id, db = _require_user_id(authorization)
+    _, assigned, db = _require_assignments(authorization)
     portfolio_key = str(portfolio_id)
+    if portfolio_key not in assigned:
+        raise HTTPException(status_code=404, detail="Portfolio not found.")
     try:
-        owned = (
-            db.table("portfolios")
-            .select("id")
-            .eq("id", portfolio_key)
-            .eq("user_id", user_id)
-            .limit(1)
-            .execute()
-        )
-        if not owned.data:
-            raise HTTPException(status_code=404, detail="Portfolio not found.")
-
         db.table("portfolio_holdings").delete().eq("portfolio_id", portfolio_key).execute()
         deleted = (
             db.table("portfolios")
             .delete()
             .eq("id", portfolio_key)
-            .eq("user_id", user_id)
             .execute()
         )
         if not deleted.data:
@@ -246,13 +286,15 @@ async def create_portfolio(
     portfolio_data: PortfolioCreateRequest,
     authorization: Optional[str] = Header(default=None),
 ):
-    user_id, db = _require_user_id(authorization)
+    user_id, firm_ids, db = _require_firms(authorization)
     name = (portfolio_data.name or portfolio_data.account_alias or "").strip()
     if not name:
         raise HTTPException(status_code=422, detail="Portfolio name is required.")
+    firm_id = _firm_for_new_portfolio(firm_ids, portfolio_data.firm_id)
 
     payload = {
-        "user_id": user_id,
+        "firm_id": firm_id,
+        "created_by": user_id,
         "name": name,
         "description": portfolio_data.description or "",
         "account_alias": portfolio_data.account_alias or name,
@@ -266,8 +308,16 @@ async def create_portfolio(
         if not response.data:
             raise HTTPException(status_code=400, detail="Database rejected portfolio insertion.")
         created = response.data[0]
+        portfolio_id = created.get("id") or created.get("portfolio_id")
+        assignment = db.table("portfolio_advisors").insert({
+            "portfolio_id": str(portfolio_id),
+            "user_id": user_id,
+        }).execute()
+        if not assignment.data:
+            db.table("portfolios").delete().eq("id", str(portfolio_id)).execute()
+            raise HTTPException(status_code=400, detail="Database rejected the advisor assignment.")
         return PortfolioResponse(
-            portfolio_id=created.get("id") or created.get("portfolio_id"),
+            portfolio_id=portfolio_id,
             account_alias=created.get("account_alias") or created.get("name") or name,
             target_risk_profile=created.get("target_risk_profile") or "Balanced",
             created_at=created["created_at"],
@@ -280,7 +330,9 @@ async def create_portfolio(
 
 @router.post("/add-ticker", response_model=HoldingResponse, status_code=status.HTTP_201_CREATED)
 async def add_ticker(holding: HoldingCreate, authorization: Optional[str] = Header(default=None)):
-    _, db = _require_user_id(authorization)
+    _, assigned, db = _require_assignments(authorization)
+    if str(holding.portfolio_id) not in assigned:
+        raise HTTPException(status_code=404, detail="Portfolio not found.")
     try:
         ticker = yahoo_symbol(holding.ticker)
         price = holding.current_price
@@ -332,19 +384,10 @@ async def upload_csv(
     file: UploadFile = File(...),
     authorization: Optional[str] = Header(default=None),
 ):
-    user_id, db = _require_user_id(authorization)
+    _, assigned, db = _require_assignments(authorization)
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV format (.csv)")
-
-    owned = (
-        db.table("portfolios")
-        .select("id")
-        .eq("id", str(portfolio_id))
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
-    )
-    if not owned.data:
+    if str(portfolio_id) not in assigned:
         raise HTTPException(status_code=404, detail="Portfolio not found.")
 
     try:
@@ -432,7 +475,7 @@ async def upload_csv(
             db.table("portfolios").update({
                 "portfolio_value": total_value,
                 "asset_allocation": allocation,
-            }).eq("id", str(portfolio_id)).eq("user_id", user_id).execute()
+            }).eq("id", str(portfolio_id)).execute()
 
         return {
             "status": "success",

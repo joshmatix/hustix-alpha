@@ -73,7 +73,7 @@ elif _on_vercel and _loopback(SUPABASE_URL):
 
 def authorize_client(client: Client, jwt: str) -> Client:
     # A publishable or anon key has no user id, so inserts fail RLS.
-    # The session token is what makes auth.uid() match portfolios.user_id.
+    # The session token is what makes auth.uid() match firm_members.user_id.
     if _bypasses_rls(SUPABASE_KEY):
         return client
     client.options.headers["Authorization"] = f"Bearer {jwt}"
