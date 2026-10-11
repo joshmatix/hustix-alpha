@@ -6,7 +6,7 @@ import datetime
 import io
 import pandas as pd
 
-from database import supabase
+from database import SUPABASE_UNREACHABLE, SUPABASE_URL, client_for_token
 from engine.equity_prices import fetch_equity_price, fetch_equity_prices, is_equity_class, yahoo_symbol
 
 router = APIRouter(prefix="/api/portfolios", tags=["Portfolios"])
@@ -71,19 +71,33 @@ class HoldingListItem(BaseModel):
 DEFAULT_ALLOCATION = {"equities": 60, "bonds": 25, "realAssets": 10, "cash": 5}
 
 
-def _require_user_id(authorization: Optional[str]) -> str:
+def _require_user_id(authorization: Optional[str]):
+    if SUPABASE_UNREACHABLE:
+        raise HTTPException(status_code=503, detail=SUPABASE_UNREACHABLE)
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Missing Authorization bearer token.")
     token = authorization.split(" ", 1)[1].strip()
     try:
-        result = supabase.auth.get_user(token)
+        db = client_for_token(token)
+        result = db.auth.get_user(token)
         user = getattr(result, "user", None)
         user_id = getattr(user, "id", None) if user else None
         if not user_id:
             raise ValueError("No user on token")
-        return str(user_id)
+        return str(user_id), db
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=401, detail=f"Invalid session token: {exc}") from exc
+        message = str(exc)
+        if "Connection refused" in message or "Errno 111" in message:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    f"Cannot reach Supabase at {SUPABASE_URL}. "
+                    "On Vercel, SUPABASE_URL must be the hosted project URL, not 127.0.0.1."
+                ),
+            ) from exc
+        raise HTTPException(status_code=401, detail=f"Invalid session token: {message}") from exc
 
 
 def _normalize_allocation(raw: Any) -> Dict[str, float]:
@@ -113,10 +127,10 @@ def _to_list_item(item: dict) -> dict:
 @router.get("", response_model=List[PortfolioListResponse])
 @router.get("/", response_model=List[PortfolioListResponse], include_in_schema=False)
 async def get_portfolios(authorization: Optional[str] = Header(default=None)):
-    user_id = _require_user_id(authorization)
+    user_id, db = _require_user_id(authorization)
     try:
         response = (
-            supabase.table("portfolios")
+            db.table("portfolios")
             .select("*")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
@@ -131,10 +145,10 @@ async def get_portfolios(authorization: Optional[str] = Header(default=None)):
 
 @router.get("/{portfolio_id}", response_model=PortfolioListResponse)
 async def get_portfolio(portfolio_id: UUID, authorization: Optional[str] = Header(default=None)):
-    user_id = _require_user_id(authorization)
+    user_id, db = _require_user_id(authorization)
     try:
         response = (
-            supabase.table("portfolios")
+            db.table("portfolios")
             .select("*")
             .eq("id", str(portfolio_id))
             .eq("user_id", user_id)
@@ -152,9 +166,9 @@ async def get_portfolio(portfolio_id: UUID, authorization: Optional[str] = Heade
 
 @router.get("/{portfolio_id}/holdings", response_model=List[HoldingListItem])
 async def get_holdings(portfolio_id: UUID, authorization: Optional[str] = Header(default=None)):
-    user_id = _require_user_id(authorization)
+    user_id, db = _require_user_id(authorization)
     owned = (
-        supabase.table("portfolios")
+        db.table("portfolios")
         .select("id")
         .eq("id", str(portfolio_id))
         .eq("user_id", user_id)
@@ -165,7 +179,7 @@ async def get_holdings(portfolio_id: UUID, authorization: Optional[str] = Header
         raise HTTPException(status_code=404, detail="Portfolio not found.")
     try:
         response = (
-            supabase.table("portfolio_holdings")
+            db.table("portfolio_holdings")
             .select("*")
             .eq("portfolio_id", str(portfolio_id))
             .order("ticker")
@@ -198,7 +212,7 @@ async def create_portfolio(
     portfolio_data: PortfolioCreateRequest,
     authorization: Optional[str] = Header(default=None),
 ):
-    user_id = _require_user_id(authorization)
+    user_id, db = _require_user_id(authorization)
     name = (portfolio_data.name or portfolio_data.account_alias or "").strip()
     if not name:
         raise HTTPException(status_code=422, detail="Portfolio name is required.")
@@ -214,7 +228,7 @@ async def create_portfolio(
     }
 
     try:
-        response = supabase.table("portfolios").insert(payload).execute()
+        response = db.table("portfolios").insert(payload).execute()
         if not response.data:
             raise HTTPException(status_code=400, detail="Database rejected portfolio insertion.")
         created = response.data[0]
@@ -232,7 +246,7 @@ async def create_portfolio(
 
 @router.post("/add-ticker", response_model=HoldingResponse, status_code=status.HTTP_201_CREATED)
 async def add_ticker(holding: HoldingCreate, authorization: Optional[str] = Header(default=None)):
-    _require_user_id(authorization)
+    _, db = _require_user_id(authorization)
     try:
         ticker = yahoo_symbol(holding.ticker)
         price = holding.current_price
@@ -256,7 +270,7 @@ async def add_ticker(holding: HoldingCreate, authorization: Optional[str] = Head
             "beta": holding.beta or 1.0,
             "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
-        response = supabase.table("portfolio_holdings").insert(payload).execute()
+        response = db.table("portfolio_holdings").insert(payload).execute()
         if not response.data:
             raise HTTPException(status_code=400, detail="Database failed to persist the holding record.")
         created = response.data[0]
@@ -284,12 +298,12 @@ async def upload_csv(
     file: UploadFile = File(...),
     authorization: Optional[str] = Header(default=None),
 ):
-    user_id = _require_user_id(authorization)
+    user_id, db = _require_user_id(authorization)
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV format (.csv)")
 
     owned = (
-        supabase.table("portfolios")
+        db.table("portfolios")
         .select("id")
         .eq("id", str(portfolio_id))
         .eq("user_id", user_id)
@@ -371,7 +385,7 @@ async def upload_csv(
                 "updated_at": now_iso,
             })
 
-        response = supabase.table("portfolio_holdings").insert(records_to_insert).execute()
+        response = db.table("portfolio_holdings").insert(records_to_insert).execute()
         if not response.data:
             raise HTTPException(status_code=400, detail="Database rejected bulk CSV records insert.")
 
@@ -381,7 +395,7 @@ async def upload_csv(
                 key: round((value / total_value) * 100, 1)
                 for key, value in class_totals.items()
             }
-            supabase.table("portfolios").update({
+            db.table("portfolios").update({
                 "portfolio_value": total_value,
                 "asset_allocation": allocation,
             }).eq("id", str(portfolio_id)).eq("user_id", user_id).execute()

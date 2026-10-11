@@ -4,7 +4,6 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from uuid import UUID
 
-from database import supabase
 from engine.live_risk import LiveRiskError, run_all_scenarios, run_live_stress
 from engine.output_formatter import format_analysis_output
 from engine.report_pdf import build_stress_report
@@ -33,9 +32,9 @@ def _cash_daily_return() -> float:
 def run_stress_test(req: SimulationRequest, authorization: Optional[str] = Header(default=None)):
     from routers.portfolios import _require_user_id
 
-    user_id = _require_user_id(authorization)
+    user_id, db = _require_user_id(authorization)
     owned = (
-        supabase.table("portfolios")
+        db.table("portfolios")
         .select("id")
         .eq("id", str(req.portfolio_id))
         .eq("user_id", user_id)
@@ -46,7 +45,7 @@ def run_stress_test(req: SimulationRequest, authorization: Optional[str] = Heade
         raise HTTPException(status_code=404, detail="Portfolio not found.")
 
     holdings = (
-        supabase.table("portfolio_holdings")
+        db.table("portfolio_holdings")
         .select("ticker,asset_class,quantity,current_price")
         .eq("portfolio_id", str(req.portfolio_id))
         .execute()
@@ -83,9 +82,9 @@ def run_stress_test(req: SimulationRequest, authorization: Optional[str] = Heade
 def download_stress_report(req: SimulationRequest, authorization: Optional[str] = Header(default=None)):
     from routers.portfolios import _require_user_id
 
-    user_id = _require_user_id(authorization)
+    user_id, db = _require_user_id(authorization)
     owned = (
-        supabase.table("portfolios")
+        db.table("portfolios")
         .select("id,name")
         .eq("id", str(req.portfolio_id))
         .eq("user_id", user_id)
@@ -96,7 +95,7 @@ def download_stress_report(req: SimulationRequest, authorization: Optional[str] 
         raise HTTPException(status_code=404, detail="Portfolio not found.")
 
     holdings = (
-        supabase.table("portfolio_holdings")
+        db.table("portfolio_holdings")
         .select("ticker,asset_class,quantity,current_price")
         .eq("portfolio_id", str(req.portfolio_id))
         .execute()
