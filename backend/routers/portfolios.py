@@ -6,7 +6,7 @@ import datetime
 import io
 import pandas as pd
 
-from database import SUPABASE_UNREACHABLE, SUPABASE_URL, client_for_token
+from database import SUPABASE_UNREACHABLE, SUPABASE_URL, authorize_client, client_for_token
 from engine.equity_prices import fetch_equity_price, fetch_equity_prices, is_equity_class, yahoo_symbol
 
 router = APIRouter(prefix="/api/portfolios", tags=["Portfolios"])
@@ -80,6 +80,7 @@ def _require_user_id(authorization: Optional[str]):
     try:
         db = client_for_token(token)
         result = db.auth.get_user(token)
+        db = authorize_client(db, token)
         user = getattr(result, "user", None)
         user_id = getattr(user, "id", None) if user else None
         if not user_id:

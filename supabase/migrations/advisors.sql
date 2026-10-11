@@ -72,11 +72,21 @@ CREATE POLICY "Users can insert own profile"
   ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
 CREATE POLICY "Advisors can manage own client portfolios"
-  ON public.portfolios FOR ALL USING (auth.uid() = user_id);
+  ON public.portfolios FOR ALL
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Advisors can manage own holdings"
   ON public.portfolio_holdings FOR ALL
+  TO authenticated
   USING (
+    EXISTS (
+      SELECT 1 FROM public.portfolios p
+      WHERE p.id = portfolio_id AND p.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
     EXISTS (
       SELECT 1 FROM public.portfolios p
       WHERE p.id = portfolio_id AND p.user_id = auth.uid()
