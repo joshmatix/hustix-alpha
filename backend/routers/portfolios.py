@@ -70,6 +70,10 @@ class HoldingListItem(BaseModel):
 
 
 DEFAULT_ALLOCATION = {"equities": 60, "bonds": 25, "realAssets": 10, "cash": 5}
+PORTFOLIO_COLUMNS = (
+    "id,name,description,account_alias,target_risk_profile,"
+    "portfolio_value,asset_allocation,created_at,firm_id,created_by"
+)
 
 
 def _require_user_id(authorization: Optional[str]):
@@ -189,7 +193,7 @@ async def get_portfolios(authorization: Optional[str] = Header(default=None)):
     try:
         response = (
             db.table("portfolios")
-            .select("*")
+            .select(PORTFOLIO_COLUMNS)
             .in_("id", assigned)
             .order("created_at", desc=True)
             .execute()
@@ -209,7 +213,7 @@ async def get_portfolio(portfolio_id: UUID, authorization: Optional[str] = Heade
     try:
         response = (
             db.table("portfolios")
-            .select("*")
+            .select(PORTFOLIO_COLUMNS)
             .eq("id", str(portfolio_id))
             .limit(1)
             .execute()
