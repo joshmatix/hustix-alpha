@@ -83,10 +83,21 @@ CREATE POLICY "Advisors can manage own holdings"
     )
   );
 
-CREATE OR REPLACE FUNCTION public.handle_new_user()
+-- Hosted projects created after 2026-05-30 do not grant Data API access automatically.
+-- Local Supabase still does, which is why signup appears to work only on localhost.
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.profiles TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.portfolios TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.portfolio_holdings TO authenticated, service_role;
+
+-- Dropping the function cascades to the auth.users trigger. A direct DROP TRIGGER
+-- on auth.users fails on hosted Supabase because postgres does not own that table.
+DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
+
+CREATE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
-SECURITY DEFINER SET search_path = public
+SECURITY DEFINER
+SET search_path = ''
 AS $$
 BEGIN
   INSERT INTO public.profiles (id, full_name)
@@ -96,7 +107,16 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+ALTER FUNCTION public.handle_new_user() OWNER TO postgres;
+
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO supabase_auth_admin, postgres, service_role;
+
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+INSERT INTO public.profiles (id, full_name)
+SELECT id, COALESCE(raw_user_meta_data->>'full_name', '')
+FROM auth.users
+ON CONFLICT (id) DO NOTHING;

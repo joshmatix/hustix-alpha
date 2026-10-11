@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { ensureProfile } from '@/lib/ensureProfile';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -17,7 +18,7 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
@@ -25,9 +26,22 @@ export default function SignupPage() {
     if (error) {
       setError(error.message);
       setLoading(false);
-    } else {
-      router.push('/dashboard');
+      return;
     }
+
+    // Email confirmation leaves session null, so the auth.users trigger is the
+    // only writer until the user signs in. When a session exists, create the
+    // row here too — hosted projects often never installed that trigger.
+    if (data.session && data.user) {
+      const profileError = await ensureProfile(data.user.id);
+      if (profileError) {
+        setError(profileError.message);
+        setLoading(false);
+        return;
+      }
+    }
+
+    router.push('/dashboard');
   };
 
   return (

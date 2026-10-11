@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { ensureProfile } from '@/lib/ensureProfile';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -22,6 +23,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
       if (!session) {
         router.push('/login');
       } else {
+        await ensureProfile(session.user.id);
         setAuthenticated(true);
       }
       setLoading(false);
@@ -36,6 +38,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
         setAuthenticated(false);
         router.push('/login');
       } else {
+        void ensureProfile(session.user.id);
         setAuthenticated(true);
       }
     });
