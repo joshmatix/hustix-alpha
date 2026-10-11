@@ -1,23 +1,11 @@
 import { supabase } from '@/lib/supabaseClient';
 
 function resolveApiBase() {
-  const configured = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://127.0.0.1:8000';
-  if (typeof window === 'undefined') return configured;
-
-  try {
-    const url = new URL(configured);
-    const pageHost = window.location.hostname;
-    const apiIsLoopback = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
-    const pageIsLoopback = pageHost === '127.0.0.1' || pageHost === 'localhost';
-    if (apiIsLoopback && pageIsLoopback) {
-      url.hostname = pageHost;
-      return url.origin;
-    }
-  } catch {
-    return configured;
-  }
-
-  return configured;
+  // The browser always calls this site. Locally, Next proxies /api to
+  // 127.0.0.1:8000. In production, Vercel sends /api to the FastAPI service.
+  // Neither path is a public page calling a loopback address.
+  if (typeof window !== 'undefined') return '';
+  return process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://127.0.0.1:8000';
 }
 
 export const API_BASE = resolveApiBase();
