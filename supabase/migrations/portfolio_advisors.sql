@@ -66,6 +66,27 @@ BEGIN
   END IF;
 END $$;
 
+-- Insert asks PostgREST to return the new row before the creator is assigned.
+-- The creator may read that row only while it has no assignees. Once anyone
+-- is assigned, only those advisors can read it.
+CREATE OR REPLACE FUNCTION public.portfolio_has_assignee(portfolio UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.portfolio_advisors a WHERE a.portfolio_id = portfolio
+  );
+END;
+$$;
+
+ALTER FUNCTION public.portfolio_has_assignee(UUID) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.portfolio_has_assignee(UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.portfolio_has_assignee(UUID) TO authenticated, service_role, postgres;
+
 DROP POLICY IF EXISTS "Advisors can manage firm portfolios" ON public.portfolios;
 DROP POLICY IF EXISTS "Advisors can read assigned portfolios" ON public.portfolios;
 DROP POLICY IF EXISTS "Advisors can create firm portfolios" ON public.portfolios;
@@ -79,6 +100,10 @@ CREATE POLICY "Advisors can read assigned portfolios"
     EXISTS (
       SELECT 1 FROM public.portfolio_advisors a
       WHERE a.portfolio_id = id AND a.user_id = auth.uid()
+    )
+    OR (
+      created_by = auth.uid()
+      AND NOT public.portfolio_has_assignee(id)
     )
   );
 
