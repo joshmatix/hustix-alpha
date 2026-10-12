@@ -131,6 +131,13 @@ export default function PortfoliosPage() {
         <Button onClick={() => setIsModalOpen(true)}>+ Create Portfolio</Button>
       </div>
 
+      <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-xs leading-relaxed text-slate-400">
+        <p className="font-semibold text-slate-300">Data Privacy &amp; Processing Notice:</p>
+        <p className="mt-1">
+          Portfolio files are parsed in temporary memory during your session to generate analytical metrics and are immediately discarded upon request completion. Files are neither saved, stored, nor archived on our servers or databases.
+        </p>
+      </div>
+
       {error && (
         <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
           {error}
