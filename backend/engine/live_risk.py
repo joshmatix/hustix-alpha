@@ -239,6 +239,9 @@ def _build_context(holdings: list[dict], cash_daily_return: float = 0.0) -> dict
         "spy_returns": spy_returns,
         "demeaned": sample - float(np.mean(sample)),
         "history_days": len(days),
+        "history_start": days[0],
+        "history_end": days[-1],
+        "cash_daily_return": cash_daily_return,
         "holding_rows": holding_rows,
     }
 
@@ -279,10 +282,17 @@ def _apply_scenario(context: dict, scenario: str) -> dict:
         "overall_score": int(min(100, max(0, round(loss_ratio * 400)))),
         "asset_impacts": impacts,
         "history_days": context["history_days"],
+        "history_start": context["history_start"],
+        "history_end": context["history_end"],
         "scenario_days": context["history_days"],
         "scenario": scenario_key,
         "paths": N_PATHS,
+        "horizon_days": HORIZON_DAYS,
+        "yield_shock": yield_shock,
+        "growth_shock": growth_shock,
+        "cash_daily_return": context["cash_daily_return"],
         "holding_rows": context["holding_rows"],
+        "portfolio_impact": round(scenario_return * 100, 1),
     }
 
 
@@ -294,6 +304,48 @@ def run_live_stress(holdings: list[dict], scenario: str, cash_daily_return: floa
 def run_all_scenarios(holdings: list[dict], cash_daily_return: float = 0.0) -> list[dict]:
     context = _build_context(holdings, cash_daily_return)
     return [_apply_scenario(context, scenario) for scenario in ("Rate_Shock", "Stagflation", "Soft_Landing")]
+
+
+def live_starting_value(holdings: list[dict]) -> float:
+    """Mark the book at the latest Yahoo close. Cash keeps its stored price."""
+    if not holdings:
+        raise LiveRiskError("This portfolio has no holdings. Upload a CSV first.")
+
+    positions = []
+    for holding in holdings:
+        ticker = yahoo_symbol(holding["ticker"])
+        quantity = float(holding["quantity"])
+        if quantity <= 0:
+            continue
+        positions.append({
+            "ticker": ticker,
+            "quantity": quantity,
+            "cash": is_cash_holding(ticker, str(holding.get("asset_class") or "")),
+        })
+    if not positions:
+        raise LiveRiskError("This portfolio has no holdings. Upload a CSV first.")
+
+    symbols = sorted({row["ticker"] for row in positions if not row["cash"]})
+    closes: dict[str, dict[str, float]] = {}
+    if symbols:
+        workers = min(8, len(symbols))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for symbol, series in zip(symbols, pool.map(fetch_daily_closes, symbols)):
+                closes[symbol] = series
+        missing = [symbol for symbol in symbols if not closes.get(symbol)]
+        if missing:
+            raise LiveRiskError(f"Yahoo Finance has no price for: {', '.join(missing)}")
+
+    total = 0.0
+    for row in positions:
+        if row["cash"]:
+            total += row["quantity"] * float(holding_price(row, holdings))
+            continue
+        last_day = max(closes[row["ticker"]])
+        total += row["quantity"] * closes[row["ticker"]][last_day]
+    if total <= 0:
+        raise LiveRiskError("This portfolio has no market value.")
+    return total
 
 
 def holding_price(position: dict, holdings: list[dict]) -> float:

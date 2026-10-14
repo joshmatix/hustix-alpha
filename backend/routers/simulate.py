@@ -4,7 +4,8 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from uuid import UUID
 
-from engine.live_risk import LiveRiskError, run_all_scenarios, run_live_stress
+from engine.distribution import DISTRIBUTION_PARAMETERS, longevity_cone, run_distribution
+from engine.live_risk import LiveRiskError, live_starting_value, run_all_scenarios, run_live_stress
 from engine.output_formatter import format_analysis_output
 from engine.report_pdf import build_stress_report
 
@@ -16,6 +17,19 @@ class SimulationRequest(BaseModel):
     scenario: str = Field(default="Rate_Shock")
     portfolio_value: Optional[float] = None
     weights: Optional[dict] = None
+    audience: str = Field(default="advisor")
+    distribution_model: str = Field(default="student_t")
+    macro_shock_bps: float = Field(default=200.0)
+    simulations: int = Field(default=10000, ge=1000, le=50000)
+    time_horizon_years: int = Field(default=5, ge=1, le=30)
+
+
+class DistributionRequest(BaseModel):
+    portfolio_id: UUID
+    simulations: int = Field(default=10000, ge=1000, le=50000)
+    time_horizon_years: int = Field(default=5, ge=1, le=30)
+    distribution_model: str = Field(default="student_t")
+    macro_shock_bps: float = Field(default=0.0)
 
 
 def _cash_daily_return() -> float:
@@ -70,16 +84,69 @@ def run_stress_test(req: SimulationRequest, authorization: Optional[str] = Heade
     }
 
 
-@router.post("/report")
-def download_stress_report(req: SimulationRequest, authorization: Optional[str] = Header(default=None)):
+@router.post("/distribution-simulate")
+def run_distribution_simulation(
+    req: DistributionRequest,
+    authorization: Optional[str] = Header(default=None),
+):
     from routers.portfolios import _require_assignments
 
     _, assigned, db = _require_assignments(authorization)
     if str(req.portfolio_id) not in assigned:
         raise HTTPException(status_code=404, detail="Portfolio not found.")
+
+    holdings = (
+        db.table("portfolio_holdings")
+        .select("ticker,asset_class,quantity,current_price")
+        .eq("portfolio_id", str(req.portfolio_id))
+        .execute()
+    )
+    try:
+        starting_value = live_starting_value(holdings.data or [])
+        return run_distribution(
+            starting_value,
+            req.simulations,
+            req.time_horizon_years,
+            req.distribution_model,
+            req.macro_shock_bps,
+        )
+    except LiveRiskError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Live market data request failed: {exc}") from exc
+
+
+def _report_identity(user_id: str, firm_id, db) -> tuple[str, str]:
+    profile = (
+        db.table("profiles")
+        .select("full_name,firm_name")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    )
+    row = (profile.data or [{}])[0]
+    advisor_name = str(row.get("full_name") or "").strip()
+    firm_name = str(row.get("firm_name") or "").strip()
+    if firm_id:
+        firm = db.table("firms").select("name").eq("id", str(firm_id)).limit(1).execute()
+        stored = str((firm.data or [{}])[0].get("name") or "").strip()
+        if stored:
+            firm_name = stored
+    return firm_name, advisor_name
+
+
+@router.post("/report")
+def download_stress_report(req: SimulationRequest, authorization: Optional[str] = Header(default=None)):
+    from routers.portfolios import _require_assignments
+
+    user_id, assigned, db = _require_assignments(authorization)
+    if str(req.portfolio_id) not in assigned:
+        raise HTTPException(status_code=404, detail="Portfolio not found.")
     owned = (
         db.table("portfolios")
-        .select("id,name")
+        .select("id,name,firm_id")
         .eq("id", str(req.portfolio_id))
         .limit(1)
         .execute()
@@ -94,14 +161,34 @@ def download_stress_report(req: SimulationRequest, authorization: Optional[str] 
         .execute()
     )
     try:
+        audience = req.audience if req.audience in {"client", "advisor"} else "advisor"
+        if audience == "advisor" and req.distribution_model not in DISTRIBUTION_PARAMETERS:
+            raise HTTPException(status_code=400, detail="Unsupported distribution model.")
         scenarios = run_all_scenarios(holdings.data or [], _cash_daily_return())
-        pdf_bytes = build_stress_report(owned.data[0].get("name") or "Portfolio", scenarios)
+        cone = longevity_cone(float(scenarios[0]["baseline_value"])) if audience == "client" else None
+        firm_name, advisor_name = _report_identity(user_id, owned.data[0].get("firm_id"), db)
+        pdf_bytes = build_stress_report(
+            owned.data[0].get("name") or "Portfolio",
+            scenarios,
+            audience,
+            cone,
+            {
+                "distribution_model": req.distribution_model,
+                "macro_shock_bps": req.macro_shock_bps,
+                "simulations": req.simulations,
+                "time_horizon_years": req.time_horizon_years,
+            },
+            firm_name,
+            advisor_name,
+        )
     except LiveRiskError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Could not build the stress-test report: {exc}") from exc
 
-    filename = "macro-stress-test.pdf"
+    filename = f"{audience}-report.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
