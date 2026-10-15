@@ -13,6 +13,9 @@ def format_analysis_output(simulation_results: dict, scenario_name: str) -> dict
             f"Prices and yield sensitivity come from {history_days} Yahoo Finance trading days "
             f"for the holdings in this portfolio. The scenario is applied once, on top of that live volatility."
         )
+        cash_note = str(simulation_results.get("cash_note") or "").strip()
+        if cash_note:
+            narrative = f"{narrative} {cash_note}"
     else:
         narrative = (
             f"Under the {label} scenario, the portfolio shows an expected 95% Value at Risk (VaR) "

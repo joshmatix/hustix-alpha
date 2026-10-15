@@ -26,8 +26,11 @@ type HistoryResults = {
   equityDrawdown: number;
   bondImpact: number;
   realAssetHedge: number;
+  unclassifiedImpact: number | null;
   var95: number;
   narrative: string;
+  fallbackNote: string;
+  fallbackLabel: string;
 };
 
 type DistributionResults = {
@@ -113,14 +116,21 @@ function RiskModelsPage() {
       if (!res.ok) {
         throw new Error(body.detail || 'Simulation failed.');
       }
+      const unclassifiedValue = Number(body.class_values?.Unclassified ?? 0);
+      const fallbackHoldings = Array.isArray(body.fallback_holdings) ? body.fallback_holdings : [];
       setSimulationResults({
         kind: 'history',
         overallScore: Number(body.overall_score ?? 50),
         equityDrawdown: Number(body.asset_impacts?.Equities ?? 0),
         bondImpact: Number(body.asset_impacts?.Bonds ?? 0),
         realAssetHedge: Number(body.asset_impacts?.Real_Assets ?? 0),
+        unclassifiedImpact: unclassifiedValue > 0 ? Number(body.asset_impacts?.Unclassified ?? 0) : null,
         var95: Math.abs(Math.round(Number(body.var_95_loss ?? 0))),
         narrative: body.narrative || '',
+        fallbackNote: body.fallback_note || '',
+        fallbackLabel: fallbackHoldings
+          .map((row: { ticker?: string; method_label?: string }) => `${row.ticker} (${row.method_label})`)
+          .join(', '),
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not reach the risk engine.');
@@ -385,9 +395,13 @@ function RiskModelsPage() {
 
               <Card
                 title="Asset Class Impact Analysis"
-                subtitle="Average 12-month return on the days that match this scenario"
+                subtitle="Immediate price impact of this scenario"
               >
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
+                <div
+                  className={`grid grid-cols-1 gap-4 mt-2 ${
+                    historyResults?.unclassifiedImpact != null ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3'
+                  }`}
+                >
                   <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
                     <span className="text-xs uppercase font-semibold text-slate-400">Equities</span>
                     <p
@@ -422,7 +436,27 @@ function RiskModelsPage() {
                         : '—'}
                     </p>
                   </div>
+                  {historyResults?.unclassifiedImpact != null && (
+                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
+                      <span className="text-xs uppercase font-semibold text-slate-400">Unclassified</span>
+                      <p
+                        className={`text-2xl font-bold mt-2 ${
+                          historyResults.unclassifiedImpact < 0 ? 'text-rose-400' : 'text-emerald-400'
+                        }`}
+                      >
+                        {`${historyResults.unclassifiedImpact > 0 ? '+' : ''}${historyResults.unclassifiedImpact}%`}
+                      </p>
+                    </div>
+                  )}
                 </div>
+                {historyResults?.fallbackLabel && (
+                  <p className="text-xs text-slate-400 mt-3 leading-relaxed">
+                    Class fallback: {historyResults.fallbackLabel}.
+                  </p>
+                )}
+                {historyResults?.fallbackNote && (
+                  <p className="text-xs text-amber-200/90 mt-2 leading-relaxed">{historyResults.fallbackNote}</p>
+                )}
               </Card>
             </>
           ) : (

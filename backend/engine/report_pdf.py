@@ -17,13 +17,13 @@ SCENARIO_LABELS = {
     "Soft_Landing": "Soft Landing Cut",
 }
 SCENARIO_NOTES = {
-    "Rate_Shock": "Yields rise 200 basis points. Impacts use each holding's live sensitivity to the 10-year yield.",
-    "Stagflation": "Yields rise 100 basis points, and the worst three-month S&P move in the price history is applied through each holding's market beta.",
-    "Soft_Landing": "Yields fall 100 basis points. Impacts use each holding's live sensitivity to the 10-year yield.",
+    "Rate_Shock": "Yields rise 200 basis points and reprice the book immediately. Equity sensitivity is the partial beta to the 10-year after controlling for the S&P, estimated on weekly returns when 30 weeks are available. The following year resamples historical variation around that new value.",
+    "Stagflation": "Yields rise 100 basis points, and the worst three-month S&P move in the price history is applied through each holding's partial betas to yields and the market. Both shocks reprice the book immediately. The following year resamples historical variation around that new value.",
+    "Soft_Landing": "Yields fall 100 basis points and reprice the book immediately. Bonds use modified duration and convexity. Equity sensitivity is the partial beta to the 10-year after controlling for the S&P, estimated on weekly returns when 30 weeks are available. Cash is not repriced, so its weight damps the portfolio impact. The following year resamples historical variation around that new value.",
 }
 CLIENT_NOTES = {
     "Rate_Shock": "Interest rates rise by 2 percentage points.",
-    "Stagflation": "Inflation stays high while markets fall.",
+    "Stagflation": "Yields rise by 1 percentage point and markets fall.",
     "Soft_Landing": "Interest rates fall by 1 percentage point.",
 }
 HEADER_BRANDING = {
@@ -328,7 +328,7 @@ def build_stress_report(
         pdf.cell(
             0,
             6,
-            f"Priced from {history_days} Yahoo Finance trading days. Each scenario is applied once, on top of live volatility.",
+            f"Priced from {history_days} Yahoo Finance trading days. The shock reprices the account once, then the year resamples those days.",
             new_x="LMARGIN",
             new_y="NEXT",
         )
@@ -349,6 +349,7 @@ def build_stress_report(
                 "mean_shocked_value": result["mean_shocked_value"],
                 "var_95_loss": result["var_95_loss"],
                 "history_days": history_days,
+                "cash_note": result.get("cash_note") or "",
             },
             key,
         )["client_narrative"]
@@ -374,15 +375,27 @@ def build_stress_report(
                 ],
             )
             block.ln(2)
-            _asset_table(
-                block,
-                [
-                    ("Equities", _pct(float(impacts.get("Equities", 0)))),
-                    ("Bonds", _pct(float(impacts.get("Bonds", 0)))),
-                    ("Real assets", _pct(float(impacts.get("Real_Assets", 0)))),
-                    ("Cash", _pct(float(impacts.get("Cash", 0)))),
-                ],
-            )
+            asset_rows = [
+                ("Equities", _pct(float(impacts.get("Equities", 0)))),
+                ("Bonds", _pct(float(impacts.get("Bonds", 0)))),
+                ("Real assets", _pct(float(impacts.get("Real_Assets", 0)))),
+            ]
+            class_values = result.get("class_values") or {}
+            if float(class_values.get("Unclassified") or 0) > 0:
+                asset_rows.append(("Unclassified", _pct(float(impacts.get("Unclassified", 0)))))
+            asset_rows.append(("Cash", _pct(float(impacts.get("Cash", 0)))))
+            _asset_table(block, asset_rows)
+            block.ln(2)
+            fallback_rows = result.get("fallback_holdings") or []
+            if fallback_rows:
+                listed = ", ".join(f"{row['ticker']} ({row['method_label']})" for row in fallback_rows)
+                block.set_text_color(80, 80, 80)
+                block.set_font("Helvetica", "", 9)
+                block.multi_cell(0, 5, _latin(f"Class fallback: {listed}."), new_x="LMARGIN", new_y="NEXT")
+            if result.get("fallback_note"):
+                block.set_text_color(80, 80, 80)
+                block.set_font("Helvetica", "", 9)
+                block.multi_cell(0, 5, _latin(result["fallback_note"]), new_x="LMARGIN", new_y="NEXT")
             block.ln(2)
             block.set_text_color(20, 20, 20)
             block.set_font("Helvetica", "", 9)
@@ -427,6 +440,11 @@ def _write_methodology(pdf: FPDF, scenarios: list[dict], distribution: dict) -> 
         ("Overlapping trading days", f"{int(first['history_days']):,} (holdings, SPY, and the 10-year yield)"),
         ("Stress test paths", f"{int(first.get('paths') or N_PATHS):,}"),
         ("Stress test horizon", f"{int(first.get('horizon_days') or HORIZON_DAYS)} trading days"),
+        ("Shock application", "Each shock reprices the starting value once. The paths then resample demeaned historical returns."),
+        ("Regression gate", "A holding's own regression is used when R-squared is at least 5% on 60 or more days. Otherwise the report uses a class fallback."),
+        ("Equity yield beta", "Partial beta on the 10-year after controlling for the S&P. Weekly returns when at least 30 weeks are available; otherwise daily."),
+        ("Cash price shock", "Zero. Cash weight damps the portfolio impact and is stated when it is at least 0.5% of the book."),
+        ("Stagflation factors", "Partial betas from one regression on the 10-year yield change and the S&P return."),
         ("Cash accrual", f"{float(first.get('cash_daily_return') or 0):.8f} per day"),
     ]
     for result in scenarios:
@@ -435,7 +453,15 @@ def _write_methodology(pdf: FPDF, scenarios: list[dict], distribution: dict) -> 
         rows.append((f"Yield shock, {name}", f"{points * 100:+.0f} basis points ({points:+.1f} percentage points)"))
         growth = float(result.get("growth_shock") or 0)
         if growth:
-            rows.append(("Stagflation equity-window shock", f"{growth * 100:+.1f}% over 63 trading days"))
+            rows.append(("Stagflation equity-window shock", f"{growth * 100:+.1f}% over 63 trading days, applied immediately"))
+        if result["scenario"] == "Soft_Landing":
+            rows.append(("Soft landing bonds", "Modified duration and convexity, applied once to price"))
+        listed = result.get("fallback_holdings") or []
+        if listed:
+            text = ", ".join(f"{row['ticker']} ({row['method_label']})" for row in listed)
+            rows.append((f"Class fallback, {name}", text))
+        if result.get("fallback_note"):
+            rows.append((f"Fallback share, {name}", result["fallback_note"]))
     rows.extend([
         ("Distribution model", f"{label} ({model_key})"),
         ("Distribution parameters", ", ".join(f"{name}={value:g}" for name, value in params.items())),
@@ -492,6 +518,14 @@ def _write_client_body(pdf: FPDF, scenarios: list[dict], baseline: float, cone: 
         pdf.multi_cell(0, 5, _latin(_client_takeaway(key, impact, baseline)))
         pdf.ln(1)
 
+    if any(result.get("fallback_note") for result in scenarios):
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(50, 50, 50)
+        pdf.multi_cell(
+            0,
+            5,
+            "Some holdings do not have enough price history to measure on their own, so those results use a stated stand-in.",
+        )
     pdf.ln(2)
     pdf.set_text_color(20, 20, 20)
     pdf.set_font("Helvetica", "B", 12)

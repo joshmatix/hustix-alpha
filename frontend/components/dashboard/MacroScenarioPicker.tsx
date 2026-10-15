@@ -5,30 +5,29 @@ interface Scenario {
   name: string;
   description: string;
   rateChangeBps: number;
-  inflationDelta: number;
 }
 
 const presetScenarios: Scenario[] = [
   {
     id: 'rate_shock',
     name: '+200bps Rate Hike',
-    description: 'Aggressive monetary tightening in response to inflation stickiness.',
+    description:
+      'Yields rise 200 basis points and reprice the book once. Equity sensitivity is the partial beta to the 10-year after controlling for the S&P.',
     rateChangeBps: 200,
-    inflationDelta: 0.5,
   },
   {
     id: 'stagflation',
     name: 'Stagflation Shock',
-    description: 'Slowing GDP growth coupled with sustained supply-side price spikes.',
+    description:
+      "Yields rise 100 basis points, and the worst three-month S&P move is applied through each holding's partial beta to yields and the market.",
     rateChangeBps: 100,
-    inflationDelta: 3.5,
   },
   {
     id: 'soft_landing',
     name: 'Soft Landing Cut',
-    description: 'Controlled disinflation prompting moderate central bank rate cuts.',
+    description:
+      'Yields fall 100 basis points and reprice the book once. Bonds use duration and convexity. Equities use a market-controlled yield beta. Cash is not repriced.',
     rateChangeBps: -100,
-    inflationDelta: -1.0,
   },
 ];
 

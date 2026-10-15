@@ -52,7 +52,7 @@ def run_stress_test(req: SimulationRequest, authorization: Optional[str] = Heade
 
     holdings = (
         db.table("portfolio_holdings")
-        .select("ticker,asset_class,quantity,current_price")
+        .select("ticker,asset_class,quantity,current_price,duration_years")
         .eq("portfolio_id", str(req.portfolio_id))
         .execute()
     )
@@ -68,6 +68,7 @@ def run_stress_test(req: SimulationRequest, authorization: Optional[str] = Heade
         "mean_shocked_value": result["mean_shocked_value"],
         "var_95_loss": result["var_95_loss"],
         "history_days": result["history_days"],
+        "cash_note": result.get("cash_note") or "",
         "status": "completed",
     }
     formatted = format_analysis_output(simulation_results, result["scenario"])
@@ -76,6 +77,9 @@ def run_stress_test(req: SimulationRequest, authorization: Optional[str] = Heade
         "scenario": result["scenario"],
         "overall_score": result["overall_score"],
         "asset_impacts": result["asset_impacts"],
+        "class_values": result["class_values"],
+        "fallback_holdings": result["fallback_holdings"],
+        "fallback_note": result["fallback_note"],
         "scenario_days": result["scenario_days"],
         "paths": result["paths"],
         "data_mode": "live",
@@ -167,7 +171,7 @@ def download_stress_report(req: SimulationRequest, authorization: Optional[str] 
 
     holdings = (
         db.table("portfolio_holdings")
-        .select("ticker,asset_class,quantity,current_price")
+        .select("ticker,asset_class,quantity,current_price,duration_years")
         .eq("portfolio_id", str(req.portfolio_id))
         .execute()
     )
