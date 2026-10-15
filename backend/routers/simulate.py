@@ -22,6 +22,9 @@ class SimulationRequest(BaseModel):
     macro_shock_bps: float = Field(default=200.0)
     simulations: int = Field(default=10000, ge=1000, le=50000)
     time_horizon_years: int = Field(default=5, ge=1, le=30)
+    yield_bps: Optional[float] = Field(default=None, ge=-1000, le=1000)
+    equity_pct: Optional[float] = Field(default=None, ge=-80, le=100)
+    use_worst_equity_window: bool = False
 
 
 class DistributionRequest(BaseModel):
@@ -57,7 +60,14 @@ def run_stress_test(req: SimulationRequest, authorization: Optional[str] = Heade
         .execute()
     )
     try:
-        result = run_live_stress(holdings.data or [], req.scenario, _cash_daily_return())
+        result = run_live_stress(
+            holdings.data or [],
+            req.scenario,
+            _cash_daily_return(),
+            req.yield_bps,
+            req.equity_pct,
+            req.use_worst_equity_window,
+        )
     except LiveRiskError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
@@ -71,10 +81,16 @@ def run_stress_test(req: SimulationRequest, authorization: Optional[str] = Heade
         "cash_note": result.get("cash_note") or "",
         "status": "completed",
     }
-    formatted = format_analysis_output(simulation_results, result["scenario"])
+    formatted = format_analysis_output(
+        simulation_results,
+        result.get("shock_label") or result["scenario"],
+    )
     return {
         **simulation_results,
         "scenario": result["scenario"],
+        "shock_label": result.get("shock_label") or "",
+        "yield_shock": result["yield_shock"],
+        "growth_shock": result["growth_shock"],
         "overall_score": result["overall_score"],
         "asset_impacts": result["asset_impacts"],
         "class_values": result["class_values"],
@@ -179,7 +195,13 @@ def download_stress_report(req: SimulationRequest, authorization: Optional[str] 
         audience = req.audience if req.audience in {"client", "advisor"} else "advisor"
         if audience == "advisor" and req.distribution_model not in DISTRIBUTION_PARAMETERS:
             raise HTTPException(status_code=400, detail="Unsupported distribution model.")
-        scenarios = run_all_scenarios(holdings.data or [], _cash_daily_return())
+        scenarios = run_all_scenarios(
+            holdings.data or [],
+            _cash_daily_return(),
+            req.yield_bps,
+            req.equity_pct,
+            req.use_worst_equity_window,
+        )
         cone = longevity_cone(float(scenarios[0]["baseline_value"])) if audience == "client" else None
         firm_name, advisor_name, firm_header = _report_identity(user_id, owned.data[0].get("firm_id"), db)
         pdf_bytes = build_stress_report(

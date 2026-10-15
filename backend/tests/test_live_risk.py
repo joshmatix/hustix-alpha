@@ -2,7 +2,10 @@
 
 import numpy as np
 
+import pytest
+
 from engine.live_risk import (
+    LiveRiskError,
     _apply_scenario,
     _beta,
     _duration_return,
@@ -271,3 +274,80 @@ def test_fallback_note_starts_at_one_fifth_of_the_book():
 
     large = _apply_scenario(mixed(0.25), "Stagflation")
     assert large["fallback_note"].startswith("25%")
+
+
+def test_custom_pair_that_matches_a_preset_keeps_the_preset_name():
+    spy, yield_change = _market()
+    book = _book(spy, "Equities", spy, yield_change)
+    named = _apply_scenario(book, "Rate_Shock")
+    filled = _apply_scenario(book, "Custom", yield_bps=200, equity_pct=0)
+    assert filled["scenario"] == "Rate_Shock"
+    assert filled["shock_label"] == ""
+    assert filled["portfolio_impact"] == named["portfolio_impact"]
+
+    cut = _apply_scenario(
+        _book(np.zeros(len(spy)), "Bonds", spy, yield_change, duration=8),
+        "Custom",
+        yield_bps=-100,
+        equity_pct=0,
+    )
+    assert cut["scenario"] == "Soft_Landing"
+
+    window = _apply_scenario(book, "Custom", yield_bps=100, use_worst_equity_window=True)
+    preset = _apply_scenario(book, "Stagflation")
+    assert window["scenario"] == "Stagflation"
+    assert window["growth_shock"] == preset["growth_shock"]
+    assert window["portfolio_impact"] == preset["portfolio_impact"]
+
+
+def test_custom_yield_scales_the_rate_path():
+    rng = np.random.default_rng(4)
+    n = 80
+    yield_change = rng.normal(0, 0.03, n)
+    spy = rng.normal(0, 0.01, n)
+    series = 0.8 * yield_change
+    result = _apply_scenario(
+        _book(series, "Equities", spy, yield_change),
+        "Custom",
+        yield_bps=100,
+        equity_pct=0,
+    )
+    assert result["scenario"] == "Custom"
+    assert result["yield_shock"] == 1.0
+    assert result["growth_shock"] == 0.0
+    assert abs(result["portfolio_impact"] / 100.0 - 0.8) < 0.005
+    assert "100" in result["shock_label"]
+
+
+def test_custom_cut_uses_duration_and_convexity():
+    spy, yield_change = _market()
+    result = _apply_scenario(
+        _book(np.zeros(len(spy)), "Bonds", spy, yield_change, duration=8),
+        "Custom",
+        yield_bps=-150,
+        equity_pct=0,
+    )
+    priced = _duration_return(8, 0.04, -1.5)
+    assert result["scenario"] == "Custom"
+    assert "convexity" in result["shock_note"]
+    assert abs(result["portfolio_impact"] / 100.0 - priced) < 0.005
+
+
+def test_custom_equity_move_is_applied_with_the_yield_move():
+    rng = np.random.default_rng(4)
+    n = 80
+    yield_change = rng.normal(0, 0.03, n)
+    spy = rng.normal(0, 0.01, n)
+    book = _book(spy, "Equities", spy, yield_change)
+    rates_only = _apply_scenario(book, "Custom", yield_bps=150, equity_pct=0)
+    both = _apply_scenario(book, "Custom", yield_bps=150, equity_pct=-20)
+    assert both["scenario"] == "Custom"
+    assert both["growth_shock"] == -0.2
+    assert "S&P -20.0%" in both["shock_label"]
+    assert both["portfolio_impact"] < rates_only["portfolio_impact"]
+
+
+def test_custom_without_a_move_is_rejected():
+    spy, yield_change = _market()
+    with pytest.raises(LiveRiskError):
+        _apply_scenario(_book(spy, "Equities", spy, yield_change), "Custom")

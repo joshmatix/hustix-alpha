@@ -4,19 +4,17 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AllocationPie from '@/components/dashboard/AllocationPie';
 import DistributionPanel from '@/components/dashboard/DistributionPanel';
-import MacroScenarioPicker from '@/components/dashboard/MacroScenarioPicker';
+import MacroScenarioPicker, {
+  defaultAdvisorShock,
+  shockRequest,
+  type AdvisorShock,
+} from '@/components/dashboard/MacroScenarioPicker';
 import RiskGauge from '@/components/dashboard/RiskGauge';
 import Card from '@/components/ui/Card';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import { apiFetch, type Portfolio } from '@/lib/api';
 import { chooseAdvisorReportDestination, saveReportBlob } from '@/lib/saveReportFile';
-
-const SCENARIO_MAP: Record<string, string> = {
-  rate_shock: 'Rate_Shock',
-  stagflation: 'Stagflation',
-  soft_landing: 'Soft_Landing',
-};
 
 type Engine = 'history' | 'distribution';
 
@@ -56,7 +54,7 @@ function RiskModelsPage() {
   const searchParams = useSearchParams();
   const portfolioId = searchParams.get('portfolio');
   const [engine, setEngine] = useState<Engine>('history');
-  const [selectedScenarioId, setSelectedScenarioId] = useState('rate_shock');
+  const [shock, setShock] = useState<AdvisorShock>(defaultAdvisorShock);
   const [distribution, setDistribution] = useState('student_t');
   const [macroShockBps, setMacroShockBps] = useState(200);
   const [simulations, setSimulations] = useState(10000);
@@ -102,6 +100,10 @@ function RiskModelsPage() {
       setError('Upload holdings before running a stress test. This account has no value yet.');
       return;
     }
+    if (!Number.isFinite(shock.yieldBps) || !Number.isFinite(shock.equityPct)) {
+      setError('Enter a yield move and an S&P move before running a stress test.');
+      return;
+    }
     setIsCalculating(true);
     setError(null);
     try {
@@ -109,7 +111,7 @@ function RiskModelsPage() {
         method: 'POST',
         body: JSON.stringify({
           portfolio_id: portfolioId,
-          scenario: SCENARIO_MAP[selectedScenarioId] || 'Rate_Shock',
+          ...shockRequest(shock),
         }),
       });
       const body = await res.json();
@@ -199,6 +201,10 @@ function RiskModelsPage() {
       setError('Upload holdings before downloading a report. This account has no value yet.');
       return;
     }
+    if (!Number.isFinite(shock.yieldBps) || !Number.isFinite(shock.equityPct)) {
+      setError('Enter a yield move and an S&P move before downloading a report.');
+      return;
+    }
     setReporting(audience);
     setError(null);
     try {
@@ -218,6 +224,7 @@ function RiskModelsPage() {
           macro_shock_bps: macroShockBps,
           simulations,
           time_horizon_years: timeHorizonYears,
+          ...shockRequest(shock),
         }),
       });
       if (!res.ok) {
@@ -318,8 +325,8 @@ function RiskModelsPage() {
           {engine === 'history' ? (
             <>
               <MacroScenarioPicker
-                selectedScenarioId={selectedScenarioId}
-                onSelectScenario={(sc) => setSelectedScenarioId(sc.id)}
+                shock={shock}
+                onShock={setShock}
                 onRunSimulation={handleRunSimulation}
                 isCalculating={isCalculating}
               />

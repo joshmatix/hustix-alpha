@@ -549,12 +549,112 @@ def _holding_impact(
     return _class_fallback(bucket, ticker, context, fits, yield_shock, growth_shock)
 
 
-def _apply_scenario(context: dict, scenario: str) -> dict:
-    scenario_key = scenario if scenario in YIELD_SHOCK else "Rate_Shock"
-    yield_shock = YIELD_SHOCK[scenario_key]
-    growth_shock = _worst_window(context["spy_returns"]) if scenario_key == "Stagflation" else 0.0
+def _custom_copy(yield_shock: float, growth_shock: float, use_worst_equity_window: bool) -> tuple[str, str, str]:
+    """Label, advisor note, and client sentence for a shock that is not a named preset."""
+    bps = yield_shock * 100.0
+    if use_worst_equity_window:
+        label = f"Custom shock ({bps:+.0f} bp, worst 3-month S&P)"
+        note = (
+            f"Yields move {bps:+.0f} basis points, and the worst three-month S&P move "
+            f"in the price history ({growth_shock * 100:+.1f}%) is applied through each holding's "
+            "partial betas to yields and the market. Both shocks reprice the book immediately. "
+            "The following year resamples historical variation around that new value."
+        )
+        client = "Yields move and markets follow the worst three-month stretch in this history."
+        return label, note, client
+    if abs(growth_shock) > 1e-12:
+        label = f"Custom shock ({bps:+.0f} bp, S&P {growth_shock * 100:+.1f}%)"
+        note = (
+            f"Yields move {bps:+.0f} basis points and the S&P moves {growth_shock * 100:+.1f}%. "
+            "Each holding is repriced with its partial betas to the 10-year and the S&P. "
+            "The following year resamples historical variation around that new value."
+        )
+        if abs(yield_shock) < 1e-12:
+            client = f"The S&P moves {growth_shock * 100:+.1f}%."
+        else:
+            client = (
+                f"Yields move by {abs(yield_shock):.2f} percentage points"
+                f"{' higher' if yield_shock > 0 else ' lower'} "
+                f"and the S&P moves {growth_shock * 100:+.1f}%."
+            )
+        return label, note, client
+    label = f"Custom shock ({bps:+.0f} bp)"
+    if yield_shock < 0:
+        note = (
+            f"Yields move {bps:+.0f} basis points and reprice the book immediately. "
+            "Bonds use modified duration and convexity. Equities use a market-controlled yield beta. "
+            "Cash is not repriced. The following year resamples historical variation around that new value."
+        )
+    else:
+        note = (
+            f"Yields move {bps:+.0f} basis points and reprice the book immediately. "
+            "Equity sensitivity is the partial beta to the 10-year after controlling for the S&P. "
+            "The following year resamples historical variation around that new value."
+        )
+    direction = "rise" if yield_shock > 0 else "fall" if yield_shock < 0 else "do not move"
+    client = f"Interest rates {direction} by {abs(yield_shock):.2f} percentage points."
+    return label, note, client
+
+
+def _resolve_shock(
+    context: dict,
+    scenario: str,
+    yield_bps: float | None,
+    equity_pct: float | None,
+    use_worst_equity_window: bool,
+) -> tuple[str, float, float, bool, str]:
+    """Scenario name, yield move in percentage points, S&P move, worst-window flag, pricing path.
+
+    A pair that matches a preset keeps that preset's name so the report does not repeat it.
+    Any other pair is Custom and is priced on the preset path that uses the same channels.
+    """
+    custom_request = (
+        scenario == "Custom"
+        or yield_bps is not None
+        or equity_pct is not None
+        or use_worst_equity_window
+    )
+    if not custom_request:
+        scenario_key = scenario if scenario in YIELD_SHOCK else "Rate_Shock"
+        yield_shock = YIELD_SHOCK[scenario_key]
+        growth_shock = _worst_window(context["spy_returns"]) if scenario_key == "Stagflation" else 0.0
+        return scenario_key, yield_shock, growth_shock, scenario_key == "Stagflation", scenario_key
+
+    if yield_bps is None and equity_pct is None and not use_worst_equity_window:
+        raise LiveRiskError("Set a yield move, an S&P move, or both.")
+
+    yield_shock = round(float(yield_bps or 0.0), 1) / 100.0
+    if use_worst_equity_window:
+        growth_shock = _worst_window(context["spy_returns"])
+        if abs(yield_shock - YIELD_SHOCK["Stagflation"]) < 1e-6:
+            return "Stagflation", yield_shock, growth_shock, True, "Stagflation"
+        return "Custom", yield_shock, growth_shock, True, "Stagflation"
+
+    growth_shock = round(float(equity_pct or 0.0), 2) / 100.0
+    if abs(growth_shock) < 1e-12 and abs(yield_shock - YIELD_SHOCK["Rate_Shock"]) < 1e-6:
+        return "Rate_Shock", yield_shock, 0.0, False, "Rate_Shock"
+    if abs(growth_shock) < 1e-12 and abs(yield_shock - YIELD_SHOCK["Soft_Landing"]) < 1e-6:
+        return "Soft_Landing", yield_shock, 0.0, False, "Soft_Landing"
+    pricing_key = "Stagflation" if abs(growth_shock) >= 1e-12 else "Soft_Landing" if yield_shock < 0 else "Rate_Shock"
+    return "Custom", yield_shock, growth_shock, False, pricing_key
+
+
+def _apply_scenario(
+    context: dict,
+    scenario: str,
+    yield_bps: float | None = None,
+    equity_pct: float | None = None,
+    use_worst_equity_window: bool = False,
+) -> dict:
+    scenario_key, yield_shock, growth_shock, use_worst, pricing_key = _resolve_shock(
+        context,
+        scenario,
+        yield_bps,
+        equity_pct,
+        use_worst_equity_window,
+    )
     total_value = context["total_value"]
-    fits = _proxy_fits(context, scenario_key == "Stagflation")
+    fits = _proxy_fits(context, pricing_key == "Stagflation")
     ticker_impact: dict[str, float] = {}
     fallback_rows = []
     for ticker, series in context["ticker_returns"].items():
@@ -563,7 +663,7 @@ def _apply_scenario(context: dict, scenario: str) -> dict:
             series,
             context,
             fits,
-            scenario_key,
+            pricing_key,
             yield_shock,
             growth_shock,
         )
@@ -610,6 +710,11 @@ def _apply_scenario(context: dict, scenario: str) -> dict:
     terminal = shocked_start * np.prod(1.0 + sampled, axis=1)
     var_95_loss = float(np.percentile(terminal, 5) - total_value)
     loss_ratio = abs(var_95_loss) / total_value
+    shock_label = ""
+    shock_note = ""
+    client_note = ""
+    if scenario_key == "Custom":
+        shock_label, shock_note, client_note = _custom_copy(yield_shock, growth_shock, use_worst)
     return {
         "baseline_value": total_value,
         "mean_shocked_value": float(np.mean(terminal)),
@@ -626,6 +731,10 @@ def _apply_scenario(context: dict, scenario: str) -> dict:
         "horizon_days": HORIZON_DAYS,
         "yield_shock": yield_shock,
         "growth_shock": growth_shock,
+        "use_worst_equity_window": use_worst,
+        "shock_label": shock_label,
+        "shock_note": shock_note,
+        "client_note": client_note,
         "cash_daily_return": context["cash_daily_return"],
         "holding_rows": context["holding_rows"],
         "portfolio_impact": round(scenario_return * 100, 1),
@@ -637,14 +746,37 @@ def _apply_scenario(context: dict, scenario: str) -> dict:
     }
 
 
-def run_live_stress(holdings: list[dict], scenario: str, cash_daily_return: float = 0.0) -> dict:
-    scenario_key = scenario if scenario in YIELD_SHOCK else "Rate_Shock"
-    return _apply_scenario(_build_context(holdings, cash_daily_return), scenario_key)
+def run_live_stress(
+    holdings: list[dict],
+    scenario: str,
+    cash_daily_return: float = 0.0,
+    yield_bps: float | None = None,
+    equity_pct: float | None = None,
+    use_worst_equity_window: bool = False,
+) -> dict:
+    return _apply_scenario(
+        _build_context(holdings, cash_daily_return),
+        scenario,
+        yield_bps,
+        equity_pct,
+        use_worst_equity_window,
+    )
 
 
-def run_all_scenarios(holdings: list[dict], cash_daily_return: float = 0.0) -> list[dict]:
+def run_all_scenarios(
+    holdings: list[dict],
+    cash_daily_return: float = 0.0,
+    yield_bps: float | None = None,
+    equity_pct: float | None = None,
+    use_worst_equity_window: bool = False,
+) -> list[dict]:
     context = _build_context(holdings, cash_daily_return)
-    return [_apply_scenario(context, scenario) for scenario in ("Rate_Shock", "Stagflation", "Soft_Landing")]
+    results = [_apply_scenario(context, scenario) for scenario in ("Rate_Shock", "Stagflation", "Soft_Landing")]
+    if yield_bps is not None or equity_pct is not None or use_worst_equity_window:
+        custom = _apply_scenario(context, "Custom", yield_bps, equity_pct, use_worst_equity_window)
+        if custom["scenario"] == "Custom":
+            results.append(custom)
+    return results
 
 
 def live_starting_value(holdings: list[dict]) -> float:

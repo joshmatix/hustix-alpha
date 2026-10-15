@@ -351,17 +351,17 @@ def build_stress_report(
                 "history_days": history_days,
                 "cash_note": result.get("cash_note") or "",
             },
-            key,
+            result.get("shock_label") or key,
         )["client_narrative"]
 
         pdf.ln(3)
         with pdf.unbreakable() as block:
             block.set_font("Helvetica", "B", 13)
             block.set_text_color(20, 20, 20)
-            block.cell(0, 8, _latin(SCENARIO_LABELS.get(key, key)), new_x="LMARGIN", new_y="NEXT")
+            block.cell(0, 8, _latin(_result_label(result)), new_x="LMARGIN", new_y="NEXT")
             block.set_font("Helvetica", "", 9)
             block.set_text_color(80, 80, 80)
-            note = SCENARIO_NOTES.get(key, "")
+            note = _result_note(result)
             block.multi_cell(0, 5, _latin(note), new_x="LMARGIN", new_y="NEXT")
             block.ln(1)
             impact = result.get("portfolio_impact")
@@ -448,14 +448,18 @@ def _write_methodology(pdf: FPDF, scenarios: list[dict], distribution: dict) -> 
         ("Cash accrual", f"{float(first.get('cash_daily_return') or 0):.8f} per day"),
     ]
     for result in scenarios:
-        name = SCENARIO_LABELS.get(result["scenario"], result["scenario"])
+        name = _result_label(result)
         points = float(result.get("yield_shock") or 0)
         rows.append((f"Yield shock, {name}", f"{points * 100:+.0f} basis points ({points:+.1f} percentage points)"))
         growth = float(result.get("growth_shock") or 0)
-        if growth:
+        if growth and result["scenario"] == "Stagflation":
             rows.append(("Stagflation equity-window shock", f"{growth * 100:+.1f}% over 63 trading days, applied immediately"))
-        if result["scenario"] == "Soft_Landing":
-            rows.append(("Soft landing bonds", "Modified duration and convexity, applied once to price"))
+        elif growth:
+            rows.append((f"S&P shock, {name}", f"{growth * 100:+.1f}%, applied immediately"))
+        if result["scenario"] == "Soft_Landing" or (
+            result["scenario"] == "Custom" and points < 0 and not growth
+        ):
+            rows.append((f"{name} bonds", "Modified duration and convexity, applied once to price"))
         listed = result.get("fallback_holdings") or []
         if listed:
             text = ", ".join(f"{row['ticker']} ({row['method_label']})" for row in listed)
@@ -504,8 +508,7 @@ def _write_client_body(pdf: FPDF, scenarios: list[dict], baseline: float, cone: 
     hardest_name = ""
     hardest_impact = 0.0
     for result in scenarios:
-        key = result["scenario"]
-        label = SCENARIO_LABELS.get(key, key)
+        label = _result_label(result)
         impact = float(result.get("portfolio_impact", 0))
         if impact < hardest_impact:
             hardest_impact = impact
@@ -515,7 +518,11 @@ def _write_client_body(pdf: FPDF, scenarios: list[dict], baseline: float, cone: 
         pdf.cell(0, 7, _latin(f"Portfolio Impact under {label}: {impact:+.1f}%"), new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(50, 50, 50)
-        pdf.multi_cell(0, 5, _latin(_client_takeaway(key, impact, baseline)))
+        pdf.multi_cell(
+            0,
+            5,
+            _latin(_client_takeaway(result["scenario"], impact, baseline, str(result.get("client_note") or ""))),
+        )
         pdf.ln(1)
 
     if any(result.get("fallback_note") for result in scenarios):
@@ -572,9 +579,24 @@ def _write_client_body(pdf: FPDF, scenarios: list[dict], baseline: float, cone: 
     pdf.multi_cell(0, 5, _latin(closing))
 
 
-def _client_takeaway(scenario: str, impact: float, baseline: float) -> str:
+def _result_label(result: dict) -> str:
+    label = str(result.get("shock_label") or "").strip()
+    if label:
+        return label
+    key = result["scenario"]
+    return SCENARIO_LABELS.get(key, key)
+
+
+def _result_note(result: dict) -> str:
+    note = str(result.get("shock_note") or "").strip()
+    if note:
+        return note
+    return SCENARIO_NOTES.get(result["scenario"], "")
+
+
+def _client_takeaway(scenario: str, impact: float, baseline: float, client_note: str = "") -> str:
     dollars = abs(baseline * impact / 100.0)
-    setting = CLIENT_NOTES.get(scenario, "This economic setting")
+    setting = client_note.strip() or CLIENT_NOTES.get(scenario, "This economic setting")
     if impact < 0:
         return f"{setting} In that setting the account would be about {_money(dollars)} lower ({impact:+.1f}%)."
     if impact > 0:
