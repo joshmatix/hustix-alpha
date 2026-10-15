@@ -1,7 +1,10 @@
 """PDF macro stress-test report for the three preset scenarios."""
 
+import hashlib
 from datetime import datetime, timezone
+from io import BytesIO
 
+import requests
 from fpdf import FPDF
 
 from engine.distribution import CONE_MODEL, CONE_PATHS, CONE_YEARS, DISTRIBUTION_LABELS, DISTRIBUTION_PARAMETERS
@@ -23,10 +26,142 @@ CLIENT_NOTES = {
     "Stagflation": "Inflation stays high while markets fall.",
     "Soft_Landing": "Interest rates fall by 1 percentage point.",
 }
+HEADER_BRANDING = {
+    "backgroundColor": "#F1F5F9",
+    "textColor": "#323232",
+    "accentColor": "#3B82F6",
+    "fontFamily": "Helvetica, sans-serif",
+    "fontSize": "16px",
+    "logo": {
+        "url": "",
+        "position": "left",
+        "height": "32px",
+        "altText": "",
+    },
+}
+HEADER_OPTIONS = {
+    "showDate": False,
+    "showReportId": False,
+    "borderBottom": "",
+}
 
 
 def _latin(value: object) -> str:
     return str(value).encode("latin-1", "replace").decode("latin-1")
+
+
+def _hex_rgb(value: str) -> tuple[int, int, int]:
+    raw = str(value or "").strip().lstrip("#")
+    if len(raw) == 3:
+        raw = "".join(ch * 2 for ch in raw)
+    if len(raw) != 6:
+        return (30, 41, 59)
+    return (int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16))
+
+
+def _css_px_mm(value: str, default_px: float) -> float:
+    raw = str(value or "").strip().lower()
+    if raw.endswith("px"):
+        pixels = float(raw[:-2] or default_px)
+    elif raw.endswith("pt"):
+        return float(raw[:-2] or default_px) * 25.4 / 72
+    else:
+        try:
+            pixels = float(raw)
+        except ValueError:
+            pixels = default_px
+    return pixels * 25.4 / 96
+
+
+def _css_px_pt(value: str, default_px: float) -> float:
+    return _css_px_mm(value, default_px) * 72 / 25.4
+
+
+def _pdf_font(family: str) -> str:
+    name = str(family or "").split(",")[0].strip().strip("'\"").lower()
+    if name in {"times", "times new roman", "serif"}:
+        return "Times"
+    if name in {"courier", "monospace"}:
+        return "Courier"
+    return "Helvetica"
+
+
+def _parse_border(value: str) -> tuple[float, tuple[int, int, int]] | None:
+    parts = str(value or "").split()
+    if len(parts) < 3 or parts[1].lower() != "solid":
+        return None
+    return _css_px_mm(parts[0], 2), _hex_rgb(parts[-1])
+
+
+def _image_pixels(data: bytes) -> tuple[int, int] | None:
+    if data.startswith(b"\x89PNG") and len(data) >= 24:
+        return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    if data.startswith(b"\xff\xd8"):
+        index = 2
+        while index + 8 < len(data):
+            if data[index] != 0xFF:
+                break
+            marker = data[index + 1]
+            if marker in {0xC0, 0xC1, 0xC2}:
+                height = int.from_bytes(data[index + 5:index + 7], "big")
+                width = int.from_bytes(data[index + 7:index + 9], "big")
+                return width, height
+            length = int.from_bytes(data[index + 2:index + 4], "big")
+            index += 2 + length
+    return None
+
+
+def _load_logo(logo: dict) -> tuple[bytes, int, int] | None:
+    url = str((logo or {}).get("url") or "").strip()
+    if not url:
+        return None
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+    except requests.RequestException:
+        return None
+    data = response.content
+    pixels = _image_pixels(data)
+    if not pixels or pixels[0] <= 0 or pixels[1] <= 0:
+        return None
+    return data, pixels[0], pixels[1]
+
+
+def build_report_header(
+    *,
+    firm_name: str,
+    advisor_name: str,
+    report_title: str,
+    report_subtitle: str,
+    generated_at: datetime | None = None,
+    report_id: str = "",
+    firm_header: dict | None = None,
+) -> dict:
+    """Header document. Branding and options come from the firm's JSON."""
+    stamp = generated_at or datetime.now(timezone.utc)
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    if not report_id:
+        digest = hashlib.sha256(stamp.isoformat().encode()).hexdigest()
+        report_id = f"REP-{int(digest[:6], 16) % 100000:05d}"
+    stored = firm_header if isinstance(firm_header, dict) else {}
+    stored_branding = stored.get("branding") if isinstance(stored.get("branding"), dict) else {}
+    stored_logo = stored_branding.get("logo") if isinstance(stored_branding.get("logo"), dict) else {}
+    branding = {**HEADER_BRANDING, **stored_branding}
+    branding["logo"] = {**HEADER_BRANDING["logo"], **stored_logo}
+    stored_options = stored.get("options") if isinstance(stored.get("options"), dict) else {}
+    return {
+        "branding": branding,
+        "metadata": {
+            "reportTitle": report_title,
+            "reportSubtitle": report_subtitle,
+            "tenantName": firm_name or "Not on file",
+            "advisorName": advisor_name or "Not on file",
+            "generatedAt": stamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "reportId": report_id,
+        },
+        "options": {**HEADER_OPTIONS, **stored_options},
+    }
 
 
 def _money(value: float) -> str:
@@ -67,22 +202,61 @@ def _asset_table(pdf: FPDF, columns: list[tuple[str, str]]) -> None:
 
 
 class _Report(FPDF):
-    def __init__(self, firm_name: str, advisor_name: str):
+    def __init__(self, header: dict):
         super().__init__()
-        self.firm_name = firm_name or "Not on file"
-        self.advisor_name = advisor_name or "Not on file"
+        self.header_config = header
+        logo = (header.get("branding") or {}).get("logo") or {}
+        self._logo = _load_logo(logo)
 
     def header(self):
-        self.set_fill_color(241, 245, 249)
+        branding = self.header_config.get("branding") or {}
+        metadata = self.header_config.get("metadata") or {}
+        options = self.header_config.get("options") or {}
+        background = _hex_rgb(branding.get("backgroundColor"))
+        ink = _hex_rgb(branding.get("textColor") or "#FFFFFF")
+        font = _pdf_font(branding.get("fontFamily") or "")
+        size = _css_px_pt(str(branding.get("fontSize") or "14px"), 14)
+        self.set_fill_color(*background)
         self.rect(0, 0, self.w, self.t_margin, style="F")
-        self.set_y(5)
-        self.set_text_color(50, 50, 50)
-        width = (self.w - self.l_margin - self.r_margin) / 2
-        self.set_x(self.l_margin)
-        self.set_font("Helvetica", "", 12)
-        self.cell(width, 6, _latin(self.firm_name), align="L")
-        self.set_font("Helvetica", "", 9)
-        self.cell(width, 6, _latin(f"Advisor: {self.advisor_name}"), align="R", new_x="LMARGIN", new_y="NEXT")
+        border = _parse_border(str(options.get("borderBottom") or ""))
+        if border:
+            self.set_draw_color(*border[1])
+            self.set_line_width(max(border[0], 0.2))
+            self.line(0, self.t_margin, self.w, self.t_margin)
+
+        logo_cfg = branding.get("logo") or {}
+        logo_h = min(_css_px_mm(str(logo_cfg.get("height") or "32px"), 32), self.t_margin - 4)
+        text_x = self.l_margin
+        if self._logo and str(logo_cfg.get("position") or "left") == "left":
+            data, pixels_w, pixels_h = self._logo
+            logo_w = logo_h * pixels_w / pixels_h
+            self.image(BytesIO(data), x=self.l_margin, y=(self.t_margin - logo_h) / 2, h=logo_h)
+            text_x = self.l_margin + logo_w + 2
+
+        right_lines = []
+        advisor = str(metadata.get("advisorName") or "").strip()
+        if advisor:
+            right_lines.append(f"Advisor: {advisor}")
+        if options.get("showDate") and metadata.get("generatedAt"):
+            raw = str(metadata["generatedAt"]).replace("Z", "+00:00")
+            right_lines.append(datetime.fromisoformat(raw).strftime("%B %d, %Y"))
+        if options.get("showReportId") and metadata.get("reportId"):
+            right_lines.append(str(metadata["reportId"]))
+
+        self.set_text_color(*ink)
+        self.set_font(font, "", size)
+        name_h = max(size * 0.45, 5)
+        self.set_xy(text_x, (self.t_margin - name_h) / 2)
+        self.cell(self.w / 2 - text_x, name_h, _latin(metadata.get("tenantName") or ""), align="L")
+        if right_lines:
+            block_h = name_h * len(right_lines)
+            y = (self.t_margin - block_h) / 2
+            right_size = 9 if len(right_lines) == 1 else max(size - 2, 8)
+            self.set_font(font, "", right_size)
+            for line in right_lines:
+                self.set_xy(self.w / 2, y)
+                self.cell(self.w / 2 - self.r_margin, name_h, _latin(line), align="R")
+                y += name_h
         self.set_y(self.t_margin)
 
     def footer(self):
@@ -100,6 +274,8 @@ def build_stress_report(
     distribution: dict | None = None,
     firm_name: str = "",
     advisor_name: str = "",
+    header: dict | None = None,
+    firm_header: dict | None = None,
 ) -> bytes:
     if audience not in {"client", "advisor"}:
         raise ValueError("Report audience must be client or advisor.")
@@ -108,25 +284,32 @@ def build_stress_report(
 
     baseline = float(scenarios[0]["baseline_value"])
     history_days = int(scenarios[0]["history_days"])
-    generated = datetime.now(timezone.utc).strftime("%B %d, %Y")
+    generated_at = datetime.now(timezone.utc)
+    generated = generated_at.strftime("%B %d, %Y")
     holdings = scenarios[0].get("holding_rows") or []
     for_client = audience == "client"
-
-    pdf = _Report(firm_name, advisor_name)
-    pdf.set_top_margin(16)
+    if header is None:
+        header = build_report_header(
+            firm_name=firm_name,
+            advisor_name=advisor_name,
+            report_title="Client Report" if for_client else "Advisor Report",
+            report_subtitle=portfolio_name,
+            generated_at=generated_at,
+            firm_header=firm_header,
+        )
+    branding = header.get("branding") or {}
+    logo_h = _css_px_mm(str((branding.get("logo") or {}).get("height") or "0px"), 0) if (branding.get("logo") or {}).get("url") else 0
+    pdf = _Report(header)
+    pdf.set_top_margin(max(16, logo_h + 8))
     pdf.set_auto_page_break(auto=True, margin=16)
     pdf.add_page()
     pdf.set_text_color(20, 20, 20)
 
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(
-        0,
-        8,
-        "Client Report" if for_client else "Advisor Report",
-        align="C",
-        new_x="LMARGIN",
-        new_y="NEXT",
+    title = (header.get("metadata") or {}).get("reportTitle") or (
+        "Client Report" if for_client else "Advisor Report"
     )
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 8, _latin(title), align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 11)
     pdf.cell(0, 7, _latin(portfolio_name), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 9)
@@ -154,25 +337,6 @@ def build_stress_report(
     if not for_client:
         _write_methodology(pdf, scenarios, distribution or {})
         pdf.ln(2)
-
-    if not for_client:
-        pdf.set_text_color(20, 20, 20)
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 8, "Holdings", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Helvetica", "B", 9)
-        pdf.set_fill_color(235, 238, 245)
-        for label, width in (("Ticker", 35), ("Class", 45), ("Quantity", 35), ("Price", 35), ("Market value", 40)):
-            pdf.cell(width, 7, label, border=0, fill=True)
-        pdf.ln(7)
-        pdf.set_font("Helvetica", "", 9)
-        if not holdings:
-            pdf.cell(0, 7, "No holdings listed.", new_x="LMARGIN", new_y="NEXT")
-        for row in holdings:
-            pdf.cell(35, 7, _latin(row["ticker"]))
-            pdf.cell(45, 7, _latin(row["asset_class"]))
-            pdf.cell(35, 7, f"{float(row['quantity']):,.2f}")
-            pdf.cell(35, 7, f"${float(row['price']):,.2f}")
-            pdf.cell(40, 7, _money(float(row["market_value"])), new_x="LMARGIN", new_y="NEXT")
 
     for result in scenarios:
         key = result["scenario"]
@@ -223,6 +387,25 @@ def build_stress_report(
             block.set_text_color(20, 20, 20)
             block.set_font("Helvetica", "", 9)
             block.multi_cell(0, 5, _latin(narrative), new_x="LMARGIN", new_y="NEXT")
+
+    pdf.ln(4)
+    pdf.set_text_color(20, 20, 20)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, "Holdings", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_fill_color(235, 238, 245)
+    for label, width in (("Ticker", 35), ("Class", 45), ("Quantity", 35), ("Price", 35), ("Market value", 40)):
+        pdf.cell(width, 7, label, border=0, fill=True)
+    pdf.ln(7)
+    pdf.set_font("Helvetica", "", 9)
+    if not holdings:
+        pdf.cell(0, 7, "No holdings listed.", new_x="LMARGIN", new_y="NEXT")
+    for row in holdings:
+        pdf.cell(35, 7, _latin(row["ticker"]))
+        pdf.cell(45, 7, _latin(row["asset_class"]))
+        pdf.cell(35, 7, f"{float(row['quantity']):,.2f}")
+        pdf.cell(35, 7, f"${float(row['price']):,.2f}")
+        pdf.cell(40, 7, _money(float(row["market_value"])), new_x="LMARGIN", new_y="NEXT")
 
     return bytes(pdf.output())
 

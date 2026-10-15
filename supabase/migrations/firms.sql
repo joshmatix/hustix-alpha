@@ -5,6 +5,7 @@
 CREATE TABLE IF NOT EXISTS public.firms (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
+  report_header JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -156,9 +157,16 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
+DECLARE
+  chosen_plan TEXT;
 BEGIN
-  INSERT INTO public.profiles (id, full_name)
-  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'full_name', ''))
+  chosen_plan := lower(COALESCE(NEW.raw_user_meta_data->>'plan', 'free'));
+  IF chosen_plan <> 'pro' THEN
+    chosen_plan := 'free';
+  END IF;
+
+  INSERT INTO public.profiles (id, full_name, plan)
+  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'full_name', ''), chosen_plan)
   ON CONFLICT (id) DO NOTHING;
 
   PERFORM public.attach_shadow_firm(NEW.id);
@@ -304,3 +312,6 @@ GRANT SELECT ON public.firms TO authenticated;
 GRANT SELECT ON public.firm_members TO authenticated;
 GRANT ALL ON public.firms TO service_role;
 GRANT ALL ON public.firm_members TO service_role;
+
+ALTER TABLE public.firms
+  ADD COLUMN IF NOT EXISTS report_header JSONB NOT NULL DEFAULT '{}'::jsonb;

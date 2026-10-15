@@ -7,7 +7,7 @@ import io
 import pandas as pd
 
 from database import SUPABASE_UNREACHABLE, SUPABASE_URL, authorize_client, client_for_token
-from engine.equity_prices import fetch_equity_price, fetch_equity_prices, is_equity_class, yahoo_symbol
+from engine.equity_prices import fetch_closing_prices, fetch_equity_price, is_equity_class, yahoo_symbol
 
 router = APIRouter(prefix="/api/portfolios", tags=["Portfolios"])
 
@@ -104,6 +104,83 @@ def _require_user_id(authorization: Optional[str]):
                 ),
             ) from exc
         raise HTTPException(status_code=401, detail=f"Invalid session token: {message}") from exc
+
+
+def _worth(value: float) -> str:
+    if value >= 1_000_000:
+        scaled = value / 1_000_000
+        text = f"{scaled:.1f}".rstrip("0").rstrip(".")
+        return f"${text}M"
+    if value >= 1_000:
+        scaled = value / 1_000
+        text = f"{scaled:.1f}".rstrip("0").rstrip(".")
+        return f"${text}K"
+    return f"${value:,.0f}"
+
+
+def _parsed_portfolio_message(ticker_count: int, value: float) -> str:
+    return f"We successfully parsed your {ticker_count}-ticker portfolio worth {_worth(value)}."
+
+
+def _plan_code(db, firm_id: str | None) -> str:
+    if not firm_id:
+        return "free"
+    result = (
+        db.table("subscriptions")
+        .select("plan_code")
+        .eq("firm_id", firm_id)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return "free"
+    return result.data[0].get("plan_code") or "free"
+
+
+def _plan_cap(db, firm_id: str | None) -> dict:
+    result = db.rpc("plan_cap", {"target_code": _plan_code(db, firm_id)}).execute()
+    data = result.data or {}
+    return data if isinstance(data, dict) else {}
+
+
+def _limit_block(db, firm_id: str | None, kind: str, count: int) -> dict | None:
+    caps = _plan_cap(db, firm_id)
+    raw_limit = caps.get("portfolio_limit") if kind == "portfolios" else caps.get("ticker_limit")
+    if raw_limit is None or count <= int(raw_limit):
+        return None
+    message = db.rpc(
+        "portfolio_limit_message" if kind == "portfolios" else "ticker_limit_message",
+        {"target_code": caps.get("code") or "free"},
+    ).execute()
+    return {
+        "message": message.data,
+        "upgrade_code": caps.get("upgrade_code"),
+        "upgrade_name": caps.get("upgrade_name"),
+    }
+
+
+def _portfolio_firm_id(db, portfolio_id: str) -> str | None:
+    portfolio = (
+        db.table("portfolios")
+        .select("firm_id")
+        .eq("id", portfolio_id)
+        .limit(1)
+        .execute()
+    )
+    if not portfolio.data:
+        return None
+    firm_id = portfolio.data[0].get("firm_id")
+    return str(firm_id) if firm_id else None
+
+
+def _portfolio_symbols(db, portfolio_id: str) -> set[str]:
+    rows = (
+        db.table("portfolio_holdings")
+        .select("ticker")
+        .eq("portfolio_id", portfolio_id)
+        .execute()
+    )
+    return {yahoo_symbol(row["ticker"]) for row in (rows.data or []) if row.get("ticker")}
 
 
 def _firm_ids_for_user(user_id: str, db) -> List[str]:
@@ -295,6 +372,10 @@ async def create_portfolio(
     if not name:
         raise HTTPException(status_code=422, detail="Portfolio name is required.")
     firm_id = _firm_for_new_portfolio(firm_ids, portfolio_data.firm_id)
+    book_count = len(_assigned_portfolio_ids(user_id, db))
+    blocked = _limit_block(db, firm_id, "portfolios", book_count + 1)
+    if blocked:
+        raise HTTPException(status_code=422, detail=blocked)
 
     payload = {
         "firm_id": firm_id,
@@ -339,6 +420,12 @@ async def add_ticker(holding: HoldingCreate, authorization: Optional[str] = Head
         raise HTTPException(status_code=404, detail="Portfolio not found.")
     try:
         ticker = yahoo_symbol(holding.ticker)
+        portfolio_key = str(holding.portfolio_id)
+        symbols = _portfolio_symbols(db, portfolio_key)
+        if ticker not in symbols:
+            blocked = _limit_block(db, _portfolio_firm_id(db, portfolio_key), "tickers", len(symbols) + 1)
+            if blocked:
+                raise HTTPException(status_code=422, detail=blocked)
         price = holding.current_price
         if is_equity_class(holding.asset_class):
             live_price = fetch_equity_price(ticker)
@@ -437,7 +524,7 @@ async def upload_csv(
                 "equity": is_equity_class(asset_class),
             })
 
-        equity_prices = fetch_equity_prices(
+        equity_prices = fetch_closing_prices(
             [row["ticker"] for row in parsed_rows if row["equity"]]
         )
         missing = sorted({row["ticker"] for row in parsed_rows if row["equity"] and row["ticker"] not in equity_prices})
@@ -465,6 +552,27 @@ async def upload_csv(
                 "beta": row["beta"],
                 "updated_at": now_iso,
             })
+
+        ticker_count = len({row["ticker"] for row in parsed_rows if row["ticker"]})
+        portfolio_key = str(portfolio_id)
+        combined = _portfolio_symbols(db, portfolio_key) | {row["ticker"] for row in parsed_rows}
+        blocked = _limit_block(
+            db,
+            _portfolio_firm_id(db, portfolio_key),
+            "tickers",
+            max(ticker_count, len(combined)),
+        )
+        if blocked:
+            return {
+                "status": "upgrade_required",
+                "portfolio_id": portfolio_key,
+                "ticker_count": ticker_count,
+                "portfolio_value": total_value,
+                "message": _parsed_portfolio_message(ticker_count, total_value),
+                "detail": blocked["message"],
+                "upgrade_code": blocked["upgrade_code"],
+                "upgrade_name": blocked["upgrade_name"],
+            }
 
         response = db.table("portfolio_holdings").insert(records_to_insert).execute()
         if not response.data:

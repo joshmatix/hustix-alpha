@@ -6,6 +6,8 @@ import CreatePortfolioModal from '@/components/CreatePortfolioModal';
 import DeletePortfolioModal from '@/components/DeletePortfolioModal';
 import Button from '@/components/ui/Button';
 import { apiFetch, type Holding, type Portfolio } from '@/lib/api';
+import { portfolioLimitSentence } from '@/lib/planLimits';
+import { supabase } from '@/lib/supabaseClient';
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
@@ -20,6 +22,40 @@ export default function PortfoliosPage() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
   const [portfolioToDelete, setPortfolioToDelete] = useState<Portfolio | null>(null);
+  const [upgrading, setUpgrading] = useState(false);
+  const [planLimits, setPlanLimits] = useState<{
+    name: string;
+    portfolioLimit: number | null;
+    tickerLimit: number | null;
+  } | null>(null);
+  const [notice, setNotice] = useState<{
+    message: string;
+    detail: string;
+    offerUpgrade?: boolean;
+    upgradeTarget?: string;
+    upgradeName?: string;
+    file?: File;
+    portfolioId?: string;
+  } | null>(null);
+
+  const applyQuote = (data: {
+    plan_name?: string;
+    portfolio_limit?: number | null;
+    ticker_limit?: number | null;
+  } | null) => {
+    if (!data?.plan_name) return;
+    setPlanLimits({
+      name: data.plan_name,
+      portfolioLimit: data.portfolio_limit ?? null,
+      tickerLimit: data.ticker_limit ?? null,
+    });
+  };
+
+  useEffect(() => {
+    supabase.rpc('firm_subscription_quote').then(({ data }) => {
+      applyQuote(data);
+    });
+  }, []);
 
   const fetchPortfolios = async (quiet = false) => {
     try {
@@ -75,8 +111,20 @@ export default function PortfoliosPage() {
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.detail || 'Could not create portfolio.');
+      const detail = body.detail || 'Could not create portfolio.';
+      if (detail && typeof detail === 'object' && detail.upgrade_code) {
+        setNotice({
+          message: detail.message,
+          detail: '',
+          offerUpgrade: true,
+          upgradeTarget: detail.upgrade_code,
+          upgradeName: detail.upgrade_name,
+        });
+        return;
+      }
+      throw new Error(typeof detail === 'string' ? detail : detail.message || 'Could not create portfolio.');
     }
+    setNotice(null);
 
     await fetchPortfolios();
   };
@@ -106,16 +154,55 @@ export default function PortfoliosPage() {
         { method: 'POST', body: form },
         false
       );
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
         throw new Error(body.detail || 'CSV upload failed.');
       }
+      if (body.status === 'upgrade_required') {
+        setNotice({
+          message: body.message,
+          detail: body.detail || '',
+          offerUpgrade: Boolean(body.upgrade_code),
+          upgradeTarget: body.upgrade_code,
+          upgradeName: body.upgrade_name,
+          file,
+          portfolioId,
+        });
+        return;
+      }
+      setNotice(null);
       await fetchPortfolios(true);
       await loadHoldings(portfolioId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'CSV upload failed.');
     } finally {
       setUploadingId(null);
+    }
+  };
+
+  const upgradePlan = async () => {
+    const pending = notice;
+    const target = pending?.upgradeTarget || 'pro';
+    setUpgrading(true);
+    setError(null);
+    const { data, error: upgradeError } = await supabase.rpc('set_firm_plan', { target });
+    setUpgrading(false);
+    if (upgradeError) {
+      setNotice({
+        message: pending?.message || `Upgrade to ${pending?.upgradeName || 'the next plan'}`,
+        detail: upgradeError.message,
+        offerUpgrade: true,
+        upgradeTarget: target,
+        upgradeName: pending?.upgradeName,
+        file: pending?.file,
+        portfolioId: pending?.portfolioId,
+      });
+      return;
+    }
+    applyQuote(data);
+    setNotice(null);
+    if (pending?.file && pending.portfolioId) {
+      await handleCsvUpload(pending.portfolioId, pending.file);
     }
   };
 
@@ -126,6 +213,7 @@ export default function PortfoliosPage() {
           <h1 className="text-2xl font-bold text-white">Portfolios</h1>
           <p className="mt-1 text-xs text-slate-400">
             Manage client portfolios and upload holdings for macro risk analysis.
+            {planLimits ? ` ${portfolioLimitSentence(planLimits.name, planLimits.portfolioLimit, planLimits.tickerLimit)}` : ''}
           </p>
         </div>
         <Button onClick={() => setIsModalOpen(true)}>+ Create Portfolio</Button>
@@ -137,6 +225,20 @@ export default function PortfoliosPage() {
           Portfolio files are parsed in temporary memory during your session to generate analytical metrics and are immediately discarded upon request completion. Files are neither saved, stored, nor archived on our servers or databases.
         </p>
       </div>
+
+      {notice && (
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-4 py-4">
+          <div>
+            <p className="text-sm font-medium text-white">{notice.message}</p>
+            {notice.detail && <p className="mt-1 text-xs text-slate-300">{notice.detail}</p>}
+          </div>
+          {notice.offerUpgrade !== false && (
+            <Button isLoading={upgrading} onClick={() => void upgradePlan()}>
+              {notice.upgradeName ? `Upgrade to ${notice.upgradeName}` : 'Upgrade'}
+            </Button>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">

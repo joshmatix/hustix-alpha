@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MacroRisk Admin</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      background: #020617;
+      color: #e2e8f0;
+    }
+    main { max-width: 880px; margin: 0 auto; padding: 32px 20px 64px; }
+    h1 { margin: 0; font-size: 28px; }
+    h2 { margin: 0 0 8px; font-size: 18px; }
+    p { color: #94a3b8; line-height: 1.5; }
+    .card {
+      margin-top: 20px;
+      padding: 20px;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.7);
+    }
+    label { display: block; font-size: 12px; color: #cbd5e1; margin-bottom: 6px; }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #020617;
+      color: white;
+    }
+    button, .ghost {
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button { background: #4f46e5; color: white; }
+    button.secondary { background: transparent; color: #e2e8f0; border: 1px solid #475569; }
+    button.stop { background: #be123c; }
+    button:disabled { opacity: 0.55; cursor: default; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #1e293b; font-size: 14px; }
+    th { color: #94a3b8; font-size: 12px; font-weight: 600; }
+    td input { max-width: 140px; }
+    .row { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 14px 0; border-top: 1px solid #1e293b; }
+    .row:first-of-type { border-top: 0; }
+    .status { font-size: 13px; color: #cbd5e1; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 99px; margin-right: 6px; background: #64748b; }
+    .dot.on { background: #34d399; }
+    .actions { display: flex; gap: 8px; }
+    .banner { margin-top: 12px; font-size: 13px; }
+    .banner.error { color: #fda4af; }
+    .banner.ok { color: #6ee7b7; }
+    .login { max-width: 380px; }
+    .hidden { display: none; }
+    code { color: #c7d2fe; }
+  </style>
+</head>
+<body>
+  <main>
+    <section id="login" class="card login">
+      <h1>Admin</h1>
+      <p>This screen is port <code>3090</code>. It stays up when the frontend and backend are stopped.</p>
+      <form id="login-form">
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" required />
+        <p id="login-error" class="banner error"></p>
+        <button type="submit">Sign in</button>
+      </form>
+    </section>
+
+    <section id="app" class="hidden">
+      <div style="display:flex;justify-content:space-between;align-items:end;gap:16px;">
+        <div>
+          <h1>Admin</h1>
+          <p>Port <code>3090</code>. Frontend is <code>3000</code>. Backend is <code>8000</code>.</p>
+        </div>
+        <button id="sign-out" class="secondary" type="button">Sign out</button>
+      </div>
+
+      <section class="card">
+        <h2>Services</h2>
+        <div id="services"></div>
+        <p id="service-message" class="banner"></p>
+      </section>
+
+      <section class="card">
+        <h2>Signed-in accounts</h2>
+        <p>Advisors with an open session, and the firm account they are on.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Firm</th>
+              <th>Plan</th>
+              <th>Last active</th>
+            </tr>
+          </thead>
+          <tbody id="accounts"></tbody>
+        </table>
+        <p id="accounts-empty" class="banner hidden">No one is signed in.</p>
+      </section>
+
+      <section class="card">
+        <h2>Plan limits</h2>
+        <p>Empty means no cap. Books already over a new cap stay. The next one past the cap is refused.</p>
+        <form id="limits-form">
+          <table>
+            <thead>
+              <tr>
+                <th>Plan</th>
+                <th>Price</th>
+                <th>Portfolios</th>
+                <th>Tickers</th>
+              </tr>
+            </thead>
+            <tbody id="plans"></tbody>
+          </table>
+          <p id="limits-message" class="banner"></p>
+          <button type="submit">Save limits</button>
+        </form>
+      </section>
+    </section>
+  </main>
+  <script>
+    const login = document.querySelector('#login');
+    const app = document.querySelector('#app');
+    const loginError = document.querySelector('#login-error');
+    const services = document.querySelector('#services');
+    const accountsBody = document.querySelector('#accounts');
+    const accountsEmpty = document.querySelector('#accounts-empty');
+    const plansBody = document.querySelector('#plans');
+    const serviceMessage = document.querySelector('#service-message');
+    const limitsMessage = document.querySelector('#limits-message');
+
+    function money(cents) {
+      if (cents == null) return 'Not set';
+      return (cents / 100).toLocaleString('en-US', {
+        style: 'currency', currency: 'USD',
+        minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+        maximumFractionDigits: 2,
+      });
+    }
+
+    function show(signedIn) {
+      login.classList.toggle('hidden', signedIn);
+      app.classList.toggle('hidden', !signedIn);
+    }
+
+    async function request(url, options) {
+      const response = await fetch(url, { credentials: 'same-origin', ...options });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail || 'Request failed.');
+      return body;
+    }
+
+    function renderServices(rows) {
+      services.replaceChildren();
+      for (const service of rows) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const copy = document.createElement('div');
+        const title = document.createElement('strong');
+        title.textContent = `${service.label} · port ${service.port}`;
+        const status = document.createElement('div');
+        status.className = 'status';
+        const dot = document.createElement('span');
+        dot.className = service.running ? 'dot on' : 'dot';
+        status.append(dot, document.createTextNode(service.running ? `Running${service.pid ? ` · pid ${service.pid}` : ''}` : 'Stopped'));
+        copy.append(title, status);
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+        const start = document.createElement('button');
+        start.type = 'button';
+        start.textContent = 'Start';
+        start.disabled = service.running;
+        start.addEventListener('click', () => changeService(service.name, 'start', start));
+        const stop = document.createElement('button');
+        stop.type = 'button';
+        stop.className = 'stop';
+        stop.textContent = 'Stop';
+        stop.disabled = !service.running;
+        stop.addEventListener('click', () => changeService(service.name, 'stop', stop));
+        actions.append(start, stop);
+        row.append(copy, actions);
+        services.append(row);
+      }
+    }
+
+    function renderAccounts(rows) {
+      accountsBody.replaceChildren();
+      accountsEmpty.classList.toggle('hidden', rows.length > 0);
+      for (const account of rows) {
+        const tr = document.createElement('tr');
+        const lastSeen = account.last_seen ? new Date(account.last_seen) : null;
+        const cells = [
+          account.full_name || '—',
+          account.email || '—',
+          account.firm_name || '—',
+          account.plan_code || '—',
+          lastSeen && !Number.isNaN(lastSeen.getTime()) ? lastSeen.toLocaleString() : '—',
+        ];
+        for (const value of cells) {
+          const td = document.createElement('td');
+          td.textContent = value;
+          tr.append(td);
+        }
+        accountsBody.append(tr);
+      }
+    }
+
+    function renderPlans(rows) {
+      plansBody.replaceChildren();
+      for (const plan of rows) {
+        const tr = document.createElement('tr');
+        const name = document.createElement('td');
+        name.textContent = plan.name;
+        const price = document.createElement('td');
+        price.textContent = money(plan.monthly_cents);
+        tr.append(name, price);
+        for (const field of ['portfolio_limit', 'ticker_limit']) {
+          const td = document.createElement('td');
+          const input = document.createElement('input');
+          input.inputMode = 'numeric';
+          input.name = `${plan.code}:${field}`;
+          input.value = plan[field] == null ? '' : String(plan[field]);
+          input.placeholder = 'none';
+          input.dataset.code = plan.code;
+          input.dataset.field = field;
+          td.append(input);
+          tr.append(td);
+        }
+        plansBody.append(tr);
+      }
+    }
+
+    async function loadState() {
+      const state = await request('/api/state');
+      renderServices(state.services);
+      renderAccounts(state.accounts || []);
+      renderPlans(state.plans);
+    }
+
+    async function changeService(name, action, button) {
+      if (action === 'stop' && !window.confirm(`Stop the ${name}?`)) return;
+      button.disabled = true;
+      serviceMessage.className = 'banner';
+      serviceMessage.textContent = action === 'start' ? 'Starting…' : 'Stopping…';
+      try {
+        const result = await request('/api/service', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, action }),
+        });
+        serviceMessage.className = 'banner ok';
+        serviceMessage.textContent = result.detail;
+        renderServices(result.services);
+      } catch (error) {
+        serviceMessage.className = 'banner error';
+        serviceMessage.textContent = error.message;
+        await loadState().catch(() => undefined);
+      }
+    }
+
+    document.querySelector('#login-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      loginError.textContent = '';
+      try {
+        await request('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: document.querySelector('#password').value }),
+        });
+        show(true);
+        await loadState();
+      } catch (error) {
+        loginError.textContent = error.message;
+      }
+    });
+
+    document.querySelector('#sign-out').addEventListener('click', async () => {
+      await request('/api/logout', { method: 'POST' });
+      show(false);
+    });
+
+    document.querySelector('#limits-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      limitsMessage.className = 'banner';
+      limitsMessage.textContent = '';
+      const grouped = new Map();
+      for (const input of plansBody.querySelectorAll('input')) {
+        const code = input.dataset.code;
+        const row = grouped.get(code) || { code };
+        const text = input.value.trim();
+        if (text !== '' && !/^\d+$/.test(text)) {
+          limitsMessage.className = 'banner error';
+          limitsMessage.textContent = 'Use a whole number, or leave the field empty for no cap.';
+          return;
+        }
+        row[input.dataset.field] = text === '' ? null : Number(text);
+        grouped.set(code, row);
+      }
+      try {
+        const result = await request('/api/limits', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plans: [...grouped.values()] }),
+        });
+        renderPlans(result.plans);
+        limitsMessage.className = 'banner ok';
+        limitsMessage.textContent = 'Limits saved.';
+      } catch (error) {
+        limitsMessage.className = 'banner error';
+        limitsMessage.textContent = error.message;
+      }
+    });
+
+    request('/api/session').then((body) => {
+      show(body.signed_in);
+      if (body.signed_in) return loadState();
+    }).catch(() => show(false));
+  </script>
+</body>
+</html>

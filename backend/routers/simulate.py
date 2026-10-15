@@ -118,7 +118,7 @@ def run_distribution_simulation(
         raise HTTPException(status_code=502, detail=f"Live market data request failed: {exc}") from exc
 
 
-def _report_identity(user_id: str, firm_id, db) -> tuple[str, str]:
+def _report_identity(user_id: str, firm_id, db) -> tuple[str, str, dict]:
     profile = (
         db.table("profiles")
         .select("full_name,firm_name")
@@ -129,12 +129,23 @@ def _report_identity(user_id: str, firm_id, db) -> tuple[str, str]:
     row = (profile.data or [{}])[0]
     advisor_name = str(row.get("full_name") or "").strip()
     firm_name = str(row.get("firm_name") or "").strip()
+    firm_header: dict = {}
     if firm_id:
-        firm = db.table("firms").select("name").eq("id", str(firm_id)).limit(1).execute()
-        stored = str((firm.data or [{}])[0].get("name") or "").strip()
-        if stored:
-            firm_name = stored
-    return firm_name, advisor_name
+        firm = (
+            db.table("firms")
+            .select("name,report_header")
+            .eq("id", str(firm_id))
+            .limit(1)
+            .execute()
+        )
+        firm_row = (firm.data or [{}])[0]
+        stored_name = str(firm_row.get("name") or "").strip()
+        if stored_name:
+            firm_name = stored_name
+        stored_header = firm_row.get("report_header")
+        if isinstance(stored_header, dict):
+            firm_header = stored_header
+    return firm_name, advisor_name, firm_header
 
 
 @router.post("/report")
@@ -166,7 +177,7 @@ def download_stress_report(req: SimulationRequest, authorization: Optional[str] 
             raise HTTPException(status_code=400, detail="Unsupported distribution model.")
         scenarios = run_all_scenarios(holdings.data or [], _cash_daily_return())
         cone = longevity_cone(float(scenarios[0]["baseline_value"])) if audience == "client" else None
-        firm_name, advisor_name = _report_identity(user_id, owned.data[0].get("firm_id"), db)
+        firm_name, advisor_name, firm_header = _report_identity(user_id, owned.data[0].get("firm_id"), db)
         pdf_bytes = build_stress_report(
             owned.data[0].get("name") or "Portfolio",
             scenarios,
@@ -180,6 +191,7 @@ def download_stress_report(req: SimulationRequest, authorization: Optional[str] 
             },
             firm_name,
             advisor_name,
+            firm_header=firm_header,
         )
     except LiveRiskError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

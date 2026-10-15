@@ -1,0 +1,476 @@
+#!/usr/bin/env python3
+"""Operator console for MacroRisk Studio.
+
+The frontend listens on port 3000 and the API on port 8000. This process
+listens on port 3090 so it can start either of them after they have been
+stopped. Plan caps are the portfolio_limit and ticker_limit columns on
+public.plans. An empty value stores NULL, which means that plan is not capped.
+"""
+
+from __future__ import annotations
+
+import hmac
+import json
+import os
+import re
+import secrets
+import signal
+import socket
+import subprocess
+import time
+from http.cookies import SimpleCookie
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+ROOT = Path(__file__).resolve().parents[1]
+FRONTEND_DIR = ROOT / "frontend"
+BACKEND_DIR = ROOT / "backend"
+LOG_DIR = Path(__file__).resolve().parent / "logs"
+ENV_PATH = Path(__file__).resolve().parent / ".env"
+PAGE_PATH = Path(__file__).resolve().parent / "index.html"
+DB_CONTAINER = "supabase_db_my-macro-app"
+HOST = "0.0.0.0"
+PORT = 3090
+PLAN_CODES = ("free", "pro", "pro_plus", "enterprise")
+SERVICES = {
+    "frontend": {
+        "label": "Frontend",
+        "port": 3000,
+        "cwd": FRONTEND_DIR,
+    },
+    "backend": {
+        "label": "Backend",
+        "port": 8000,
+        "cwd": BACKEND_DIR,
+    },
+}
+
+_sessions: set[str] = set()
+_login_failures: list[float] = []
+
+
+def _load_password() -> str:
+    existing = ""
+    if ENV_PATH.exists():
+        for line in ENV_PATH.read_text().splitlines():
+            if line.startswith("ADMIN_PASSWORD="):
+                existing = line.split("=", 1)[1].strip().strip('"').strip("'")
+                break
+    if existing:
+        return existing
+    password = secrets.token_urlsafe(18)
+    ENV_PATH.write_text(f"ADMIN_PASSWORD={password}\n")
+    os.chmod(ENV_PATH, 0o600)
+    print(f"Wrote a new password to {ENV_PATH}")
+    return password
+
+
+PASSWORD = _load_password()
+
+
+def _client_ip(handler: BaseHTTPRequestHandler) -> str:
+    return handler.client_address[0]
+
+
+def _too_many_failures() -> bool:
+    cutoff = time.time() - 60
+    while _login_failures and _login_failures[0] < cutoff:
+        _login_failures.pop(0)
+    return len(_login_failures) >= 8
+
+
+def _cookie(handler: BaseHTTPRequestHandler) -> str:
+    raw = handler.headers.get("Cookie", "")
+    jar = SimpleCookie()
+    jar.load(raw)
+    morsel = jar.get("macrorisk_admin")
+    return morsel.value if morsel else ""
+
+
+def _signed_in(handler: BaseHTTPRequestHandler) -> bool:
+    token = _cookie(handler)
+    return bool(token) and token in _sessions
+
+
+def _same_origin(handler: BaseHTTPRequestHandler) -> bool:
+    origin = handler.headers.get("Origin", "")
+    if not origin:
+        return True
+    host = handler.headers.get("Host", "")
+    return origin in {f"http://{host}", f"https://{host}"}
+
+
+def _json_bytes(payload: object, status: int = 200) -> tuple[int, bytes]:
+    return status, json.dumps(payload).encode()
+
+
+def _listeners(port: int) -> list[int]:
+    try:
+        output = subprocess.check_output(
+            ["ss", "-ltnpH", f"sport = :{port}"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []
+    return [int(pid) for pid in re.findall(r"pid=(\d+)", output)]
+
+
+def _cwd(pid: int) -> Path | None:
+    try:
+        return Path(os.readlink(f"/proc/{pid}/cwd"))
+    except OSError:
+        return None
+
+
+def _pgid(pid: int) -> int | None:
+    try:
+        return os.getpgid(pid)
+    except OSError:
+        return None
+
+
+def _group_is_inside_repo(pgid: int) -> bool:
+    try:
+        output = subprocess.check_output(["ps", "-o", "pid=", "-g", str(pgid)], text=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+    pids = [int(item) for item in output.split() if item.isdigit()]
+    if not pids:
+        return False
+    for pid in pids:
+        cwd = _cwd(pid)
+        if cwd is None or ROOT not in cwd.parents and cwd != ROOT:
+            return False
+    return True
+
+
+def _service_pid(name: str) -> int | None:
+    service = SERVICES[name]
+    allowed = service["cwd"]
+    for pid in _listeners(service["port"]):
+        cwd = _cwd(pid)
+        if cwd is not None and (cwd == allowed or allowed in cwd.parents):
+            return pid
+    return None
+
+
+def _service_status() -> dict:
+    rows = []
+    for name, service in SERVICES.items():
+        pid = _service_pid(name)
+        rows.append({
+            "name": name,
+            "label": service["label"],
+            "port": service["port"],
+            "running": pid is not None,
+            "pid": pid,
+        })
+    return {"services": rows}
+
+
+def _stop_service(name: str) -> dict:
+    pid = _service_pid(name)
+    if pid is None:
+        return {"ok": True, "running": False, "detail": f"{SERVICES[name]['label']} is already stopped."}
+    pgid = _pgid(pid)
+    if pgid is None or not _group_is_inside_repo(pgid):
+        return {"ok": False, "running": True, "detail": "Refused to stop a process outside this project."}
+    os.killpg(pgid, signal.SIGTERM)
+    deadline = time.time() + 8
+    while time.time() < deadline:
+        if _service_pid(name) is None:
+            return {"ok": True, "running": False, "detail": f"{SERVICES[name]['label']} stopped."}
+        time.sleep(0.2)
+    os.killpg(pgid, signal.SIGKILL)
+    time.sleep(0.3)
+    running = _service_pid(name) is not None
+    return {
+        "ok": not running,
+        "running": running,
+        "detail": f"{SERVICES[name]['label']} stopped." if not running else "The process did not exit.",
+    }
+
+
+def _port_open(port: int) -> bool:
+    with socket.socket() as sock:
+        sock.settimeout(0.2)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _start_service(name: str) -> dict:
+    if _service_pid(name) is not None:
+        return {"ok": True, "running": True, "detail": f"{SERVICES[name]['label']} is already running."}
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = LOG_DIR / f"{name}.log"
+    if name == "frontend":
+        command = ["npm", "run", "dev", "--", "--port", "3000", "--hostname", "0.0.0.0"]
+        cwd = FRONTEND_DIR
+    else:
+        uvicorn = BACKEND_DIR / ".venv" / "bin" / "uvicorn"
+        if not uvicorn.exists():
+            return {"ok": False, "running": False, "detail": "backend/.venv is missing, so the API cannot start."}
+        command = [str(uvicorn), "main:app", "--reload", "--host", "127.0.0.1", "--port", "8000"]
+        cwd = BACKEND_DIR
+    with log_path.open("ab") as log:
+        subprocess.Popen(
+            command,
+            cwd=cwd,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        if _service_pid(name) is not None or _port_open(SERVICES[name]["port"]):
+            return {"ok": True, "running": True, "detail": f"{SERVICES[name]['label']} started."}
+        time.sleep(0.4)
+    return {
+        "ok": False,
+        "running": _service_pid(name) is not None,
+        "detail": f"{SERVICES[name]['label']} did not open port {SERVICES[name]['port']}. See admin/logs/{name}.log.",
+    }
+
+
+def _psql(sql: str) -> str:
+    completed = subprocess.run(
+        [
+            "docker", "exec", "-i", DB_CONTAINER,
+            "psql", "-U", "postgres", "-d", "postgres",
+            "-v", "ON_ERROR_STOP=1", "-t", "-A",
+        ],
+        input=sql,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "Database update failed.").strip()
+        raise RuntimeError(detail.splitlines()[-1])
+    return completed.stdout.strip()
+
+
+def _sql_limit(value: object) -> str:
+    if value is None or value == "":
+        return "NULL"
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("A limit must be a whole number, or empty for no cap.")
+    if value < 0 or value > 1_000_000:
+        raise ValueError("A limit must be between 0 and 1000000, or empty for no cap.")
+    return str(value)
+
+
+def _read_accounts() -> list[dict]:
+    raw = _psql(
+        """
+        SELECT COALESCE(json_agg(row ORDER BY row.last_seen DESC), '[]'::json)::text
+        FROM (
+          SELECT
+            account_user.email,
+            COALESCE(profile.full_name, '') AS full_name,
+            COALESCE(account.firm_name, '') AS firm_name,
+            COALESCE(account.role, '') AS role,
+            COALESCE(account.plan_code, profile.plan, 'free') AS plan_code,
+            to_char(open_session.last_seen AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS last_seen
+          FROM (
+            SELECT
+              session.user_id,
+              max(GREATEST(
+                COALESCE(session.updated_at, session.created_at),
+                COALESCE(session.refreshed_at AT TIME ZONE 'UTC', session.created_at)
+              )) AS last_seen
+            FROM auth.sessions AS session
+            WHERE session.not_after IS NULL OR session.not_after > timezone('utc', now())
+            GROUP BY session.user_id
+          ) AS open_session
+          JOIN auth.users AS account_user ON account_user.id = open_session.user_id
+          LEFT JOIN public.profiles AS profile ON profile.id = account_user.id
+          LEFT JOIN LATERAL (
+            SELECT
+              string_agg(firm.name, ', ' ORDER BY (member.role = 'owner') DESC, firm.name) AS firm_name,
+              (array_agg(member.role ORDER BY (member.role = 'owner') DESC, member.created_at))[1] AS role,
+              (array_agg(subscription.plan_code ORDER BY (member.role = 'owner') DESC, member.created_at))[1] AS plan_code
+            FROM public.firm_members AS member
+            JOIN public.firms AS firm ON firm.id = member.firm_id
+            LEFT JOIN public.subscriptions AS subscription ON subscription.firm_id = firm.id
+            WHERE member.user_id = account_user.id
+          ) AS account ON true
+          WHERE account_user.deleted_at IS NULL
+        ) AS row;
+        """
+    )
+    return json.loads(raw or "[]")
+
+
+def _read_plans() -> list[dict]:
+    raw = _psql(
+        """
+        SELECT COALESCE(json_agg(row ORDER BY row.monthly_cents NULLS LAST, row.code), '[]'::json)::text
+        FROM (
+          SELECT code, name, monthly_cents, portfolio_limit, ticker_limit
+          FROM public.plans
+        ) AS row;
+        """
+    )
+    return json.loads(raw or "[]")
+
+
+def _write_limits(plans: object) -> list[dict]:
+    if not isinstance(plans, list) or not plans:
+        raise ValueError("Send one row per plan.")
+    seen: set[str] = set()
+    statements = ["BEGIN;"]
+    for row in plans:
+        if not isinstance(row, dict):
+            raise ValueError("Each plan row must be an object.")
+        code = row.get("code")
+        if code not in PLAN_CODES or code in seen:
+            raise ValueError("Unknown plan.")
+        seen.add(code)
+        portfolio = _sql_limit(row.get("portfolio_limit"))
+        ticker = _sql_limit(row.get("ticker_limit"))
+        statements.append(
+            "UPDATE public.plans "
+            f"SET portfolio_limit = {portfolio}, ticker_limit = {ticker} "
+            f"WHERE code = '{code}';"
+        )
+    if seen != set(PLAN_CODES):
+        raise ValueError("Save every plan together.")
+    statements.append("COMMIT;")
+    _psql("\n".join(statements))
+    return _read_plans()
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "MacroRiskAdmin/1.0"
+
+    def log_message(self, fmt: str, *args) -> None:
+        print(f"[admin] {self.address_string()} {fmt % args}")
+
+    def _send(self, status: int, body: bytes, content_type: str, extra: dict[str, str] | None = None) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        for key, value in (extra or {}).items():
+            self.send_header(key, value)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_json(self) -> object:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length > 100_000:
+            raise ValueError("Request is too large.")
+        raw = self.rfile.read(length) if length else b""
+        if not raw:
+            return {}
+        return json.loads(raw.decode())
+
+    def _require_auth(self) -> bool:
+        if _signed_in(self):
+            return True
+        body = json.dumps({"detail": "Sign in required."}).encode()
+        self._send(401, body, "application/json")
+        return False
+
+    def do_GET(self) -> None:
+        path = urlparse(self.path).path
+        if path == "/":
+            page = PAGE_PATH.read_bytes()
+            self._send(200, page, "text/html; charset=utf-8")
+            return
+        if path == "/api/session":
+            self._send(*_json_bytes({"signed_in": _signed_in(self)}), "application/json")
+            return
+        if path == "/api/state":
+            if not self._require_auth():
+                return
+            try:
+                payload = {"plans": _read_plans(), "accounts": _read_accounts(), **_service_status()}
+                self._send(*_json_bytes(payload), "application/json")
+            except RuntimeError as exc:
+                self._send(*_json_bytes({"detail": str(exc)}, 503), "application/json")
+            return
+        self._send(404, b"Not found", "text/plain; charset=utf-8")
+
+    def do_POST(self) -> None:
+        path = urlparse(self.path).path
+        if path == "/api/login":
+            self._login()
+            return
+        if not _same_origin(self):
+            self._send(*_json_bytes({"detail": "Origin was rejected."}, 403), "application/json")
+            return
+        if path == "/api/logout":
+            token = _cookie(self)
+            _sessions.discard(token)
+            self._send(*_json_bytes({"ok": True}), "application/json", {"Set-Cookie": "macrorisk_admin=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0"})
+            return
+        if not self._require_auth():
+            return
+        try:
+            payload = self._read_json()
+        except (json.JSONDecodeError, ValueError) as exc:
+            self._send(*_json_bytes({"detail": str(exc) or "Invalid request."}, 400), "application/json")
+            return
+        try:
+            if path == "/api/limits":
+                plans = _write_limits(payload.get("plans") if isinstance(payload, dict) else None)
+                self._send(*_json_bytes({"plans": plans}), "application/json")
+                return
+            if path == "/api/service":
+                if not isinstance(payload, dict):
+                    raise ValueError("Invalid request.")
+                name = payload.get("name")
+                action = payload.get("action")
+                if name not in SERVICES or action not in {"start", "stop"}:
+                    raise ValueError("Unknown service or action.")
+                result = _start_service(name) if action == "start" else _stop_service(name)
+                status = 200 if result["ok"] else 500
+                self._send(*_json_bytes({**result, **_service_status()}, status), "application/json")
+                return
+        except ValueError as exc:
+            self._send(*_json_bytes({"detail": str(exc)}, 422), "application/json")
+            return
+        except RuntimeError as exc:
+            self._send(*_json_bytes({"detail": str(exc)}, 503), "application/json")
+            return
+        self._send(404, b"Not found", "text/plain; charset=utf-8")
+
+    def _login(self) -> None:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        raw = self.rfile.read(length).decode() if length else ""
+        supplied = ""
+        content_type = self.headers.get("Content-Type", "")
+        if "application/json" in content_type:
+            try:
+                supplied = str(json.loads(raw or "{}").get("password", ""))
+            except json.JSONDecodeError:
+                supplied = ""
+        else:
+            supplied = parse_qs(raw).get("password", [""])[0]
+        if _too_many_failures():
+            self._send(*_json_bytes({"detail": "Too many attempts. Wait a minute."}, 429), "application/json")
+            return
+        if not hmac.compare_digest(supplied, PASSWORD):
+            _login_failures.append(time.time())
+            self._send(*_json_bytes({"detail": "Wrong password."}, 401), "application/json")
+            return
+        token = secrets.token_urlsafe(32)
+        _sessions.add(token)
+        cookie = f"macrorisk_admin={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=43200"
+        self._send(*_json_bytes({"ok": True}), "application/json", {"Set-Cookie": cookie})
+
+
+def main() -> None:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    print(f"Admin console on http://{HOST}:{PORT}")
+    print("Frontend port 3000. Backend port 8000.")
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

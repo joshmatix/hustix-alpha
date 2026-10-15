@@ -9,7 +9,7 @@ const navItems = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
   { name: 'Portfolios', href: '/dashboard/portfolios', icon: '💼' },
   { name: 'Macro Risk Models', href: '/dashboard/risk-models', icon: '📈' },
-  { name: 'Settings', href: '/dashboard/settings', icon: '⚙️' },
+  { name: 'Profile', href: '/dashboard/settings', icon: '⚙️' },
 ];
 
 export default function Sidebar() {

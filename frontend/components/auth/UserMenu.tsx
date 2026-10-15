@@ -65,7 +65,7 @@ export default function UserMenu() {
             onClick={() => setOpen(false)}
             className="block px-4 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition"
           >
-            ⚙️ Profile & Settings
+            ⚙️ Profile
           </Link>
 
           <button
