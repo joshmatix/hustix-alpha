@@ -1,4 +1,4 @@
--- Base schema for MacroRisk Studio (profiles, portfolios, holdings).
+-- Base schema for Hustix Macro (profiles, portfolios, holdings).
 -- Firm tenancy is applied by firms.sql: portfolios belong to a firm, not a user.
 
 CREATE TABLE IF NOT EXISTS public.profiles (

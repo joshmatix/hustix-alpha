@@ -109,7 +109,7 @@ port = 54324
 # smtp_port = 54325
 # pop3_port = 54326
 admin_email = "noreply@localhost"
-sender_name = "MacroRisk Studio"
+sender_name = "Hustix Macro"
 
 [storage]
 enabled = true
@@ -243,7 +243,7 @@ otp_expiry = 3600
 # sender_name = "Admin"
 
 [auth.email.template.confirmation]
-subject = "Confirm your email for MacroRisk Studio"
+subject = "Confirm your email for Hustix Macro"
 content_path = "./supabase/templates/confirmation.html"
 
 # Uncomment to customize email template

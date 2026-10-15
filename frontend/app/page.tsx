@@ -10,7 +10,7 @@ export default function HomePage() {
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full bg-indigo-500 animate-pulse" />
           <h1 className="text-xl font-bold tracking-tight text-white">
-            MacroRisk <span className="text-indigo-400">Studio</span>
+            Hustix <span className="text-indigo-400">Macro</span>
           </h1>
         </div>
 
@@ -66,7 +66,7 @@ export default function HomePage() {
 
         {/* New Users / Register Card */}
         <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-xl space-y-3 hover:border-slate-700 transition">
-          <h3 className="text-lg font-semibold text-white">New to MacroRisk Studio?</h3>
+          <h3 className="text-lg font-semibold text-white">New to Hustix Macro?</h3>
           <p className="text-sm text-slate-400">
             Register for a new account to create advisor profiles and run macro scenario analytics.
           </p>
@@ -83,7 +83,7 @@ export default function HomePage() {
 
       {/* Footer */}
       <footer className="w-full max-w-6xl mx-auto text-center border-t border-slate-900 pt-6 text-xs text-slate-500">
-        MacroRisk Studio &copy; {new Date().getFullYear()} — Quantitative Portfolio Simulation
+        Hustix Macro &copy; {new Date().getFullYear()} — Quantitative Portfolio Simulation
       </footer>
     </main>
   );

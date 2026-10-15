@@ -1,7 +1,7 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'MacroRisk Studio',
+  title: 'Hustix Macro',
   description: 'Stress-test client portfolios against macroeconomic shocks.',
 };
 

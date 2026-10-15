@@ -35,10 +35,10 @@ export default function Sidebar() {
       <div>
         <div className="flex items-center gap-3 px-3 py-4 border-b border-slate-800 mb-6">
           <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-white text-lg">
-            M
+            H
           </div>
           <div>
-            <h1 className="font-bold text-white text-base leading-none">MacroRisk AI</h1>
+            <h1 className="font-bold text-white text-base leading-none">Hustix Macro</h1>
             <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
               Advisor Suite
             </span>

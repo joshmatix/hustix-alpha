@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Operator console for MacroRisk Studio.
+"""Operator console for Hustix Macro.
 
 The frontend listens on port 3000 and the API on port 8000. This process
 listens on port 3090 so it can start either of them after they have been
@@ -343,7 +343,7 @@ def _write_limits(plans: object) -> list[dict]:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "MacroRiskAdmin/1.0"
+    server_version = "HustixMacro/1.0"
 
     def log_message(self, fmt: str, *args) -> None:
         print(f"[admin] {self.address_string()} {fmt % args}")

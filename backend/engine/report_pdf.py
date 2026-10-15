@@ -263,7 +263,7 @@ class _Report(FPDF):
         self.set_y(-12)
         self.set_font("Helvetica", "", 8)
         self.set_text_color(100, 100, 100)
-        self.cell(0, 8, f"MacroRisk Studio  |  Page {self.page_no()}", align="C")
+        self.cell(0, 8, f"Hustix Macro  |  Page {self.page_no()}", align="C")
 
 
 def build_stress_report(
