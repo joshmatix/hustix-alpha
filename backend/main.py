@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import admin, portfolios, simulate, macro
+from routers import admin, portfolios, simulate, macro, stripe_webhook
 
 app = FastAPI(
     title="Macro & Risk Stress-Testing API",
@@ -31,6 +31,7 @@ app.include_router(admin.router)
 app.include_router(portfolios.router)
 app.include_router(simulate.router)
 app.include_router(macro.router)
+app.include_router(stripe_webhook.router)
 
 
 @app.get("/", tags=["Health"])
