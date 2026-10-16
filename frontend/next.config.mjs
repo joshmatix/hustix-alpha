@@ -23,6 +23,7 @@ const nextConfig = {
       { source: '/api/portfolios/:path*', destination: `${apiOrigin}/api/portfolios/:path*` },
       { source: '/api/v1/:path*', destination: `${apiOrigin}/api/v1/:path*` },
       { source: '/api/macro/:path*', destination: `${apiOrigin}/api/macro/:path*` },
+      { source: '/api/admin/:path*', destination: `${apiOrigin}/api/admin/:path*` },
       { source: '/health', destination: `${apiOrigin}/health` },
     ];
   },

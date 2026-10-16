@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import portfolios, simulate, macro
+from routers import admin, portfolios, simulate, macro
 
 app = FastAPI(
     title="Macro & Risk Stress-Testing API",
@@ -27,6 +27,7 @@ app.add_middleware(
     allow_private_network=True,
 )
 
+app.include_router(admin.router)
 app.include_router(portfolios.router)
 app.include_router(simulate.router)
 app.include_router(macro.router)
