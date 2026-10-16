@@ -557,7 +557,7 @@ def _custom_copy(yield_shock: float, growth_shock: float, use_worst_equity_windo
         note = (
             f"Yields move {bps:+.0f} basis points, and the worst three-month S&P move "
             f"in the price history ({growth_shock * 100:+.1f}%) is applied through each holding's "
-            "partial betas to yields and the market. Both shocks reprice the book immediately. "
+            "partial betas to yields and the market. Both shocks reprice the portfolio immediately. "
             "The following year resamples historical variation around that new value."
         )
         client = "Yields move and markets follow the worst three-month stretch in this history."
@@ -581,13 +581,13 @@ def _custom_copy(yield_shock: float, growth_shock: float, use_worst_equity_windo
     label = f"Custom shock ({bps:+.0f} bp)"
     if yield_shock < 0:
         note = (
-            f"Yields move {bps:+.0f} basis points and reprice the book immediately. "
+            f"Yields move {bps:+.0f} basis points and reprice the portfolio immediately. "
             "Bonds use modified duration and convexity. Equities use a market-controlled yield beta. "
             "Cash is not repriced. The following year resamples historical variation around that new value."
         )
     else:
         note = (
-            f"Yields move {bps:+.0f} basis points and reprice the book immediately. "
+            f"Yields move {bps:+.0f} basis points and reprice the portfolio immediately. "
             "Equity sensitivity is the partial beta to the 10-year after controlling for the S&P. "
             "The following year resamples historical variation around that new value."
         )
@@ -690,7 +690,7 @@ def _apply_scenario(
     cash_note = ""
     if cash_weight >= 0.005:
         cash_note = (
-            f"Cash is {cash_weight * 100:.1f}% of the book and is not repriced, "
+            f"Cash is {cash_weight * 100:.1f}% of the portfolio and is not repriced, "
             "so it damps the portfolio impact."
         )
 
@@ -699,7 +699,7 @@ def _apply_scenario(
     fallback_note = ""
     if fallback_weight >= FALLBACK_NOTE_WEIGHT:
         fallback_note = (
-            f"{fallback_weight * 100:.0f}% of the book is priced from a class fallback "
+            f"{fallback_weight * 100:.0f}% of the portfolio is priced from a class fallback "
             "because its own price history does not explain moves in yields and the S&P."
         )
 
@@ -780,7 +780,7 @@ def run_all_scenarios(
 
 
 def live_starting_value(holdings: list[dict]) -> float:
-    """Mark the book at the latest Yahoo close. Cash keeps its stored price."""
+    """Mark the portfolio at the latest Yahoo close. Cash keeps its stored price."""
     if not holdings:
         raise LiveRiskError("This portfolio has no holdings. Upload a CSV first.")
 

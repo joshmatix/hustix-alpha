@@ -259,11 +259,15 @@ export default function PortfoliosPage() {
           </div>
         </div>
       ) : (
+        <>
+        <p id="csv-format-help" className="sr-only">
+          Column order is not significant. Required columns: ticker, asset_class, quantity, and current_price. Optional columns: asset_name, duration_years, and beta. Only bonds with stock-exchange tickers are supported. Uploading replaces the holdings already in this portfolio.
+        </p>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {portfolios.map((portfolio) => (
             <div
               key={portfolio.id}
-              className="rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-sm"
+              className="relative rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-sm hover:z-20 focus-within:z-20"
             >
               <h3 className="text-lg font-semibold text-white">{portfolio.name}</h3>
               <p className="mt-2 text-sm text-slate-400">
@@ -282,21 +286,42 @@ export default function PortfoliosPage() {
                 >
                   Analyze Risk
                 </Button>
-                <label className="inline-flex">
-                  <input
-                    type="file"
-                    accept=".csv"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleCsvUpload(portfolio.id, file);
-                      e.target.value = '';
-                    }}
-                  />
-                  <span className="inline-flex items-center justify-center px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer">
-                    {uploadingId === portfolio.id ? 'Uploading...' : 'Upload CSV'}
-                  </span>
-                </label>
+                <div className="group relative inline-flex">
+                  <label className="relative inline-flex rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 focus-within:ring-offset-2 focus-within:ring-offset-slate-950">
+                    <span className="inline-flex items-center justify-center px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-700 text-slate-300 group-hover:bg-slate-800 cursor-pointer">
+                      {uploadingId === portfolio.id ? 'Uploading...' : 'Upload CSV'}
+                    </span>
+                    <input
+                      type="file"
+                      accept=".csv,.CSV,text/csv"
+                      aria-describedby="csv-format-help"
+                      disabled={uploadingId === portfolio.id}
+                      className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed focus:outline-none"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleCsvUpload(portfolio.id, file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  <div
+                    role="tooltip"
+                    aria-hidden="true"
+                    className="absolute bottom-full left-0 z-30 w-64 pb-2 invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+                  >
+                    <div className="rounded-lg border border-slate-700 bg-slate-950 p-3 text-left text-xs font-normal leading-relaxed text-slate-300 shadow-xl">
+                      <p className="font-semibold text-slate-100">CSV columns</p>
+                      <p className="mt-1">Column order is not significant.</p>
+                      <p className="mt-2 text-slate-400">Required</p>
+                      <p>ticker, asset_class, quantity, current_price</p>
+                      <p className="mt-2 text-slate-400">Optional</p>
+                      <p>asset_name, duration_years, beta</p>
+                      <p className="mt-2 text-slate-400">
+                        Only bonds with stock-exchange tickers are supported. Uploading replaces the holdings already in this portfolio.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="mt-4 border-t border-slate-800 pt-3">
                 <button
@@ -310,6 +335,7 @@ export default function PortfoliosPage() {
             </div>
           ))}
         </div>
+        </>
       )}
 
       {selectedId && (

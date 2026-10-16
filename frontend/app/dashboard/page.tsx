@@ -54,7 +54,7 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold text-white">Portfolio Macro Risk Overview</h1>
         <p className="text-xs text-slate-400 mt-1">
-          Review client books, allocation mix, and jump into scenario stress tests.
+          Review client portfolios, allocation mix, and jump into scenario stress tests.
         </p>
       </div>
 
@@ -65,7 +65,7 @@ export default function DashboardPage() {
       )}
 
       {loading ? (
-        <p className="text-sm text-slate-400">Loading book of business...</p>
+        <p className="text-sm text-slate-400">Loading portfolios...</p>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
@@ -80,7 +80,7 @@ export default function DashboardPage() {
           <div className="space-y-4">
             <RiskGauge
               score={selected ? Math.min(100, Math.round(Number(selected.portfolio_value) / 25000)) : 0}
-              label="Book Concentration Proxy"
+              label="Portfolio Concentration Proxy"
               projectedLoss={selected ? Math.round(Number(selected.portfolio_value) * 0.08) : 0}
             />
             <AssetAllocationChart allocation={selected?.asset_allocation || emptyAllocation} />

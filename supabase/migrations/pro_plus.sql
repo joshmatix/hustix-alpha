@@ -131,7 +131,7 @@ AS $$
 DECLARE
   target_firm UUID;
   current_plan TEXT;
-  book_count INTEGER;
+  portfolio_count INTEGER;
 BEGIN
   SELECT portfolio.firm_id INTO target_firm
   FROM public.portfolios AS portfolio
@@ -145,14 +145,14 @@ BEGIN
     RETURN NULL;
   END IF;
 
-  SELECT count(*) INTO book_count
+  SELECT count(*) INTO portfolio_count
   FROM public.portfolio_advisors AS assignment
   WHERE assignment.user_id = NEW.user_id;
 
-  IF (current_plan IS NULL OR current_plan = 'free') AND book_count > 3 THEN
+  IF (current_plan IS NULL OR current_plan = 'free') AND portfolio_count > 3 THEN
     RAISE EXCEPTION 'Free accounts can hold 3 portfolios. Upgrade to Pro to add another.';
   END IF;
-  IF current_plan = 'pro' AND book_count > 100 THEN
+  IF current_plan = 'pro' AND portfolio_count > 100 THEN
     RAISE EXCEPTION 'This advisor can hold 100 portfolios. Upgrade to Pro+ to add another.';
   END IF;
   RETURN NULL;

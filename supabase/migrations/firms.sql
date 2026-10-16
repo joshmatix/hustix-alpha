@@ -1,6 +1,6 @@
 -- Portfolios belong to a firm. firm_members is many-to-many: a firm can
 -- have many advisors, and an advisor can belong to many firms. Signup
--- still creates one firm so a solo advisor has a place to put books.
+-- still creates one firm so a solo advisor has a place to put portfolios.
 
 CREATE TABLE IF NOT EXISTS public.firms (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

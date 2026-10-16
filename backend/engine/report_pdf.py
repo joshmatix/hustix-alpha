@@ -6,6 +6,7 @@ from io import BytesIO
 
 import requests
 from fpdf import FPDF
+from fpdf.fonts import FontFace
 
 from engine.distribution import CONE_MODEL, CONE_PATHS, CONE_YEARS, DISTRIBUTION_LABELS, DISTRIBUTION_PARAMETERS
 from engine.live_risk import HORIZON_DAYS, LOOKBACK, N_PATHS
@@ -17,9 +18,9 @@ SCENARIO_LABELS = {
     "Soft_Landing": "Soft Landing Cut",
 }
 SCENARIO_NOTES = {
-    "Rate_Shock": "Yields rise 200 basis points and reprice the book immediately. Equity sensitivity is the partial beta to the 10-year after controlling for the S&P, estimated on weekly returns when 30 weeks are available. The following year resamples historical variation around that new value.",
-    "Stagflation": "Yields rise 100 basis points, and the worst three-month S&P move in the price history is applied through each holding's partial betas to yields and the market. Both shocks reprice the book immediately. The following year resamples historical variation around that new value.",
-    "Soft_Landing": "Yields fall 100 basis points and reprice the book immediately. Bonds use modified duration and convexity. Equity sensitivity is the partial beta to the 10-year after controlling for the S&P, estimated on weekly returns when 30 weeks are available. Cash is not repriced, so its weight damps the portfolio impact. The following year resamples historical variation around that new value.",
+    "Rate_Shock": "Yields rise 200 basis points and reprice the portfolio immediately. Equity sensitivity is the partial beta to the 10-year after controlling for the S&P, estimated on weekly returns when 30 weeks are available. The following year resamples historical variation around that new value.",
+    "Stagflation": "Yields rise 100 basis points, and the worst three-month S&P move in the price history is applied through each holding's partial betas to yields and the market. Both shocks reprice the portfolio immediately. The following year resamples historical variation around that new value.",
+    "Soft_Landing": "Yields fall 100 basis points and reprice the portfolio immediately. Bonds use modified duration and convexity. Equity sensitivity is the partial beta to the 10-year after controlling for the S&P, estimated on weekly returns when 30 weeks are available. Cash is not repriced, so its weight damps the portfolio impact. The following year resamples historical variation around that new value.",
 }
 CLIENT_NOTES = {
     "Rate_Shock": "Interest rates rise by 2 percentage points.",
@@ -324,19 +325,20 @@ def build_stress_report(
         pdf.ln(4)
         _write_client_body(pdf, scenarios, baseline, cone or [])
         return bytes(pdf.output())
-    else:
-        pdf.cell(
-            0,
-            6,
-            f"Priced from {history_days} Yahoo Finance trading days. The shock reprices the account once, then the year resamples those days.",
-            new_x="LMARGIN",
-            new_y="NEXT",
-        )
     pdf.ln(4)
-
-    if not for_client:
-        _write_methodology(pdf, scenarios, distribution or {})
-        pdf.ln(2)
+    _section_heading(pdf, "Market history")
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(80, 80, 80)
+    pdf.cell(
+        0,
+        6,
+        f"Priced from {history_days} Yahoo Finance trading days. The shock reprices the account once, then the year resamples those days.",
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
+    pdf.ln(2)
+    _write_setting_table(pdf, _market_history_groups(scenarios))
+    pdf.ln(2)
 
     for result in scenarios:
         key = result["scenario"]
@@ -365,14 +367,25 @@ def build_stress_report(
             block.multi_cell(0, 5, _latin(note), new_x="LMARGIN", new_y="NEXT")
             block.ln(1)
             impact = result.get("portfolio_impact")
+            score = int(result["overall_score"])
             _scenario_table(
                 block,
                 [
-                    ("Portfolio impact", _pct(float(impact)) if impact is not None else "—"),
-                    ("Vulnerability score", f"{int(result['overall_score'])} / 100"),
+                    ("Immediate portfolio impact", _pct(float(impact)) if impact is not None else "—"),
                     ("95% one-year loss", f"{_money(loss)} ({loss_pct:.1f}% of the account)"),
+                    ("Vulnerability score", f"{score} / 100"),
                     ("Average shocked value", _money(float(result["mean_shocked_value"]))),
                 ],
+            )
+            block.ln(1)
+            block.set_font("Helvetica", "", 8)
+            block.set_text_color(80, 80, 80)
+            block.multi_cell(
+                0,
+                4,
+                "The vulnerability score is four times the 95% one-year loss, and it reaches 100 at a 25% loss. It is not the immediate portfolio impact. A gain on the reprice can still sit next to a high score when the following year has a large tail loss.",
+                new_x="LMARGIN",
+                new_y="NEXT",
             )
             block.ln(2)
             asset_rows = [
@@ -391,7 +404,16 @@ def build_stress_report(
                 listed = ", ".join(f"{row['ticker']} ({row['method_label']})" for row in fallback_rows)
                 block.set_text_color(80, 80, 80)
                 block.set_font("Helvetica", "", 9)
-                block.multi_cell(0, 5, _latin(f"Class fallback: {listed}."), new_x="LMARGIN", new_y="NEXT")
+                block.multi_cell(
+                    0,
+                    5,
+                    _latin(
+                        "Priced from a class stand-in because their own history did not clear the regression gate: "
+                        f"{listed}."
+                    ),
+                    new_x="LMARGIN",
+                    new_y="NEXT",
+                )
             if result.get("fallback_note"):
                 block.set_text_color(80, 80, 80)
                 block.set_font("Helvetica", "", 9)
@@ -400,6 +422,12 @@ def build_stress_report(
             block.set_text_color(20, 20, 20)
             block.set_font("Helvetica", "", 9)
             block.multi_cell(0, 5, _latin(narrative), new_x="LMARGIN", new_y="NEXT")
+
+    pdf.ln(6)
+    _section_heading(pdf, "Distribution")
+    _write_setting_table(pdf, _distribution_groups(distribution or {}))
+    pdf.ln(4)
+    _write_setting_table(pdf, _longevity_groups())
 
     pdf.ln(4)
     pdf.set_text_color(20, 20, 20)
@@ -423,68 +451,106 @@ def build_stress_report(
     return bytes(pdf.output())
 
 
-def _write_methodology(pdf: FPDF, scenarios: list[dict], distribution: dict) -> None:
+def _section_heading(pdf: FPDF, title: str) -> None:
+    pdf.set_text_color(20, 20, 20)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
+
+
+def _market_history_groups(scenarios: list[dict]) -> list[tuple[str, list[tuple[str, str]]]]:
     first = scenarios[0]
+    groups: list[tuple[str, list[tuple[str, str]]]] = [
+        (
+            "Method",
+            [
+                ("Historical source", "Yahoo Finance daily prices"),
+                ("Requested range", LOOKBACK),
+                ("Period used", f"{first.get('history_start')} through {first.get('history_end')}"),
+                ("Overlapping trading days", f"{int(first['history_days']):,} (holdings, SPY, and the 10-year yield)"),
+                ("Stress test paths", f"{int(first.get('paths') or N_PATHS):,}"),
+                ("Stress test horizon", f"{int(first.get('horizon_days') or HORIZON_DAYS)} trading days"),
+                ("Shock application", "Each shock reprices the starting value once. The paths then resample demeaned historical returns."),
+                ("Regression gate", "A holding's own regression is used when R-squared is at least 5% on 60 or more days. Otherwise the report uses a class fallback."),
+                ("Equity yield beta", "Partial beta on the 10-year after controlling for the S&P. Weekly returns when at least 30 weeks are available; otherwise daily."),
+                ("Cash price shock", "Zero. Cash weight damps the portfolio impact and is stated when it is at least 0.5% of the portfolio."),
+                ("Stagflation factors", "Partial betas from one regression on the 10-year yield change and the S&P return."),
+                ("Cash accrual", f"{float(first.get('cash_daily_return') or 0):.8f} per day"),
+            ],
+        )
+    ]
+    for result in scenarios:
+        points = float(result.get("yield_shock") or 0)
+        items = [
+            ("Yield shock", f"{points * 100:+.0f} basis points ({points:+.1f} percentage points)"),
+        ]
+        growth = float(result.get("growth_shock") or 0)
+        if growth and result["scenario"] == "Stagflation":
+            items.append(("Equity-window shock", f"{growth * 100:+.1f}% over 63 trading days, applied immediately"))
+        elif growth:
+            items.append(("S&P shock", f"{growth * 100:+.1f}%, applied immediately"))
+        if result["scenario"] == "Soft_Landing" or (
+            result["scenario"] == "Custom" and points < 0 and not growth
+        ):
+            items.append(("Bonds", "Modified duration and convexity, applied once to price"))
+        listed = result.get("fallback_holdings") or []
+        if listed:
+            text = ", ".join(f"{row['ticker']} ({row['method_label']})" for row in listed)
+            items.append(("Class fallback", text))
+        if result.get("fallback_note"):
+            items.append(("Fallback share", result["fallback_note"]))
+        groups.append((_result_label(result), items))
+    return groups
+
+
+def _distribution_groups(distribution: dict) -> list[tuple[str, list[tuple[str, str]]]]:
     model_key = str(distribution.get("distribution_model") or "student_t")
     label = DISTRIBUTION_LABELS.get(model_key, model_key)
     params = DISTRIBUTION_PARAMETERS.get(model_key, {})
     shock_bps = float(distribution.get("macro_shock_bps") or 0)
     paths = int(distribution.get("simulations") or 0)
     years = int(distribution.get("time_horizon_years") or 0)
-    cone_params = DISTRIBUTION_PARAMETERS[CONE_MODEL]
-
-    rows = [
-        ("Historical source", "Yahoo Finance daily prices"),
-        ("Requested range", LOOKBACK),
-        ("Period used", f"{first.get('history_start')} through {first.get('history_end')}"),
-        ("Overlapping trading days", f"{int(first['history_days']):,} (holdings, SPY, and the 10-year yield)"),
-        ("Stress test paths", f"{int(first.get('paths') or N_PATHS):,}"),
-        ("Stress test horizon", f"{int(first.get('horizon_days') or HORIZON_DAYS)} trading days"),
-        ("Shock application", "Each shock reprices the starting value once. The paths then resample demeaned historical returns."),
-        ("Regression gate", "A holding's own regression is used when R-squared is at least 5% on 60 or more days. Otherwise the report uses a class fallback."),
-        ("Equity yield beta", "Partial beta on the 10-year after controlling for the S&P. Weekly returns when at least 30 weeks are available; otherwise daily."),
-        ("Cash price shock", "Zero. Cash weight damps the portfolio impact and is stated when it is at least 0.5% of the book."),
-        ("Stagflation factors", "Partial betas from one regression on the 10-year yield change and the S&P return."),
-        ("Cash accrual", f"{float(first.get('cash_daily_return') or 0):.8f} per day"),
+    return [
+        (
+            "Distribution model",
+            [
+                (
+                    "Distribution",
+                    {
+                        "normal": "Normal",
+                        "student_t": "Student's t (fat tails)",
+                        "bootstrap": "Bootstrap",
+                    }.get(model_key, label),
+                ),
+                ("Parameters", ", ".join(f"{name}={value:g}" for name, value in params.items())),
+                ("Yield shock", f"{shock_bps:+.1f} basis points"),
+                ("Daily multiplier", f"{1.0 - shock_bps / 10000.0:.6f}"),
+                ("Monte Carlo paths", f"{paths:,}"),
+                ("Horizon", f"{years} years ({years * 252:,} trading days)"),
+            ],
+        )
     ]
-    for result in scenarios:
-        name = _result_label(result)
-        points = float(result.get("yield_shock") or 0)
-        rows.append((f"Yield shock, {name}", f"{points * 100:+.0f} basis points ({points:+.1f} percentage points)"))
-        growth = float(result.get("growth_shock") or 0)
-        if growth and result["scenario"] == "Stagflation":
-            rows.append(("Stagflation equity-window shock", f"{growth * 100:+.1f}% over 63 trading days, applied immediately"))
-        elif growth:
-            rows.append((f"S&P shock, {name}", f"{growth * 100:+.1f}%, applied immediately"))
-        if result["scenario"] == "Soft_Landing" or (
-            result["scenario"] == "Custom" and points < 0 and not growth
-        ):
-            rows.append((f"{name} bonds", "Modified duration and convexity, applied once to price"))
-        listed = result.get("fallback_holdings") or []
-        if listed:
-            text = ", ".join(f"{row['ticker']} ({row['method_label']})" for row in listed)
-            rows.append((f"Class fallback, {name}", text))
-        if result.get("fallback_note"):
-            rows.append((f"Fallback share, {name}", result["fallback_note"]))
-    rows.extend([
-        ("Distribution model", f"{label} ({model_key})"),
-        ("Distribution parameters", ", ".join(f"{name}={value:g}" for name, value in params.items())),
-        ("Distribution yield shock", f"{shock_bps:+.1f} basis points"),
-        ("Distribution daily multiplier", f"{1.0 - shock_bps / 10000.0:.6f}"),
-        ("Distribution Monte Carlo paths", f"{paths:,}"),
-        ("Distribution horizon", f"{years} years ({years * 252:,} trading days)"),
-        ("Client longevity model", f"{DISTRIBUTION_LABELS[CONE_MODEL]} ({CONE_MODEL})"),
-        ("Client longevity parameters", ", ".join(f"{name}={value:g}" for name, value in cone_params.items())),
-        ("Client longevity paths", f"{CONE_PATHS:,}"),
-        ("Client longevity horizon", f"{CONE_YEARS} years"),
-        ("Client longevity yield shock", "0 basis points"),
-    ])
 
-    pdf.set_text_color(20, 20, 20)
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "Methodology record", new_x="LMARGIN", new_y="NEXT")
+
+def _longevity_groups() -> list[tuple[str, list[tuple[str, str]]]]:
+    cone_params = DISTRIBUTION_PARAMETERS[CONE_MODEL]
+    return [
+        (
+            "Client longevity",
+            [
+                ("Model", f"{DISTRIBUTION_LABELS[CONE_MODEL]} ({CONE_MODEL})"),
+                ("Parameters", ", ".join(f"{name}={value:g}" for name, value in cone_params.items())),
+                ("Paths", f"{CONE_PATHS:,}"),
+                ("Horizon", f"{CONE_YEARS} years"),
+                ("Yield shock", "0 basis points"),
+            ],
+        )
+    ]
+
+
+def _write_setting_table(pdf: FPDF, groups: list[tuple[str, list[tuple[str, str]]]]) -> None:
     pdf.set_font("Helvetica", "", 8)
     width = pdf.w - pdf.l_margin - pdf.r_margin
+    group_style = FontFace(emphasis="B", fill_color=(226, 232, 240), color=(30, 41, 59))
     with pdf.table(
         width=width,
         col_widths=(68, width - 68),
@@ -495,24 +561,44 @@ def _write_methodology(pdf: FPDF, scenarios: list[dict], distribution: dict) -> 
         heading = table.row()
         heading.cell("Item")
         heading.cell("Setting")
-        for item, setting in rows:
-            row = table.row()
-            row.cell(_latin(item))
-            row.cell(_latin(setting))
+        for title, items in groups:
+            band = table.row(style=group_style)
+            band.cell(_latin(title), colspan=2)
+            for item, setting in items:
+                row = table.row()
+                row.cell(_latin(item))
+                row.cell(_latin(setting))
 
 
 def _write_client_body(pdf: FPDF, scenarios: list[dict], baseline: float, cone: list[dict]) -> None:
     pdf.set_text_color(20, 20, 20)
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(0, 8, "Stress test outcomes", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(50, 50, 50)
+    pdf.multi_cell(
+        0,
+        5,
+        "Each setting below is an example of how this account could respond. It is not a forecast, and the report does not say which setting is more likely.",
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
+    pdf.ln(1)
     hardest_name = ""
     hardest_impact = 0.0
+    mildest_name = ""
+    mildest_impact = 0.0
+    seen_impact = False
     for result in scenarios:
         label = _result_label(result)
         impact = float(result.get("portfolio_impact", 0))
-        if impact < hardest_impact:
+        if not seen_impact or impact < hardest_impact:
             hardest_impact = impact
             hardest_name = label
+        if not seen_impact or impact > mildest_impact:
+            mildest_impact = impact
+            mildest_name = label
+        seen_impact = True
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_text_color(20, 20, 20)
         pdf.cell(0, 7, _latin(f"Portfolio Impact under {label}: {impact:+.1f}%"), new_x="LMARGIN", new_y="NEXT")
@@ -542,7 +628,7 @@ def _write_client_body(pdf: FPDF, scenarios: list[dict], baseline: float, cone: 
     pdf.multi_cell(
         0,
         5,
-        "All three lines start at today's account value. The top line is if things go well, the middle line is a typical path, and the bottom line is if things go badly. The shaded area is that range. It is not a promise.",
+        "All three lines start at today's account value. The middle line is a typical path: half of the simulated paths finish above it and half below. The top line is a strong path, about 1 in 20. The bottom line is a difficult path, about 1 in 20. They are not equally likely. The shaded area is that range. It is not a promise.",
         new_x="LMARGIN",
         new_y="NEXT",
     )
@@ -565,17 +651,35 @@ def _write_client_body(pdf: FPDF, scenarios: list[dict], baseline: float, cone: 
 
     pdf.ln(2)
     pdf.set_font("Helvetica", "B", 12)
+    pdf.set_text_color(20, 20, 20)
     pdf.cell(0, 8, "What this means", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 10)
-    if hardest_name:
+    range_sentence = ""
+    if cone:
+        last_cone = cone[-1]
+        range_sentence = (
+            f" Over 10 years, a strong path is about {_money(float(last_cone['high']))}, "
+            f"a typical path is about {_money(float(last_cone['mid']))}, "
+            f"and a difficult path is about {_money(float(last_cone['low']))}."
+        )
+    if hardest_name and mildest_name and hardest_name != mildest_name:
         closing = (
-            f"The harder economic setting for this account is {hardest_name}, "
-            f"with a portfolio impact of {hardest_impact:+.1f}%. "
-            "The 10-year range shows how far the account could fall in a difficult stretch "
-            "and how far it could rise if conditions are favorable."
+            f"Of the examples above, {hardest_name} is the harder move for this account ({hardest_impact:+.1f}%), "
+            f"and {mildest_name} is the milder one ({mildest_impact:+.1f}%). "
+            "Neither figure is a forecast of which economy is more likely."
+            f"{range_sentence}"
+        )
+    elif hardest_name:
+        closing = (
+            f"The setting shown is {hardest_name}, with a portfolio impact of {hardest_impact:+.1f}%. "
+            "It is an example, not a forecast of how likely that economy is."
+            f"{range_sentence}"
         )
     else:
-        closing = "The scenarios above are the economic settings that would move this account the most."
+        closing = (
+            "The settings above are examples of how this account could respond. They are not a forecast."
+            f"{range_sentence}"
+        )
     pdf.multi_cell(0, 5, _latin(closing))
 
 
@@ -683,4 +787,17 @@ def _draw_cone(pdf: FPDF, cone: list[dict]) -> None:
         pdf.text(label_x, label_y, title)
         pdf.text(label_x, label_y + 3.5, _latin(_money(value)))
 
-    pdf.set_y(top + height + 12)
+    legend = (
+        ((22, 101, 52), "Strong path. 95th percentile: about 1 in 20 paths finish higher."),
+        ((30, 64, 175), "Typical path. 50th percentile: the middle of the paths."),
+        ((185, 28, 28), "Difficult path. 5th percentile: about 1 in 20 paths finish lower."),
+    )
+    legend_top = top + height + 12
+    pdf.set_font("Helvetica", "", 8)
+    for index, (color, text) in enumerate(legend):
+        y = legend_top + index * 5
+        pdf.set_fill_color(*color)
+        pdf.rect(left, y - 2.2, 3.2, 2.4, style="F")
+        pdf.set_text_color(50, 50, 50)
+        pdf.text(left + 5, y, _latin(text))
+    pdf.set_y(legend_top + len(legend) * 5 + 1)

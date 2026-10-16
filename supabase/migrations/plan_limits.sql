@@ -196,7 +196,7 @@ DECLARE
   current_plan TEXT;
   caps JSONB;
   portfolio_cap INTEGER;
-  book_count INTEGER;
+  portfolio_count INTEGER;
 BEGIN
   SELECT portfolio.firm_id INTO target_firm
   FROM public.portfolios AS portfolio
@@ -212,11 +212,11 @@ BEGIN
   END IF;
   portfolio_cap := (caps->>'portfolio_limit')::INTEGER;
 
-  SELECT count(*) INTO book_count
+  SELECT count(*) INTO portfolio_count
   FROM public.portfolio_advisors AS assignment
   WHERE assignment.user_id = NEW.user_id;
 
-  IF book_count > portfolio_cap THEN
+  IF portfolio_count > portfolio_cap THEN
     RAISE EXCEPTION '%', public.portfolio_limit_message(COALESCE(current_plan, 'free'));
   END IF;
   RETURN NULL;

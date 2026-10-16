@@ -372,8 +372,8 @@ async def create_portfolio(
     if not name:
         raise HTTPException(status_code=422, detail="Portfolio name is required.")
     firm_id = _firm_for_new_portfolio(firm_ids, portfolio_data.firm_id)
-    book_count = len(_assigned_portfolio_ids(user_id, db))
-    blocked = _limit_block(db, firm_id, "portfolios", book_count + 1)
+    portfolio_count = len(_assigned_portfolio_ids(user_id, db))
+    blocked = _limit_block(db, firm_id, "portfolios", portfolio_count + 1)
     if blocked:
         raise HTTPException(status_code=422, detail=blocked)
 
@@ -553,14 +553,16 @@ async def upload_csv(
                 "updated_at": now_iso,
             })
 
+        if not records_to_insert:
+            raise HTTPException(status_code=422, detail="CSV has no holdings.")
+
         ticker_count = len({row["ticker"] for row in parsed_rows if row["ticker"]})
         portfolio_key = str(portfolio_id)
-        combined = _portfolio_symbols(db, portfolio_key) | {row["ticker"] for row in parsed_rows}
         blocked = _limit_block(
             db,
             _portfolio_firm_id(db, portfolio_key),
             "tickers",
-            max(ticker_count, len(combined)),
+            ticker_count,
         )
         if blocked:
             return {
@@ -574,8 +576,29 @@ async def upload_csv(
                 "upgrade_name": blocked["upgrade_name"],
             }
 
-        response = db.table("portfolio_holdings").insert(records_to_insert).execute()
+        previous = (
+            db.table("portfolio_holdings")
+            .select(
+                "holding_id,portfolio_id,ticker,asset_name,asset_class,"
+                "quantity,current_price,duration_years,beta,updated_at"
+            )
+            .eq("portfolio_id", portfolio_key)
+            .execute()
+        )
+        previous_rows = previous.data or []
+        db.table("portfolio_holdings").delete().eq("portfolio_id", portfolio_key).execute()
+        try:
+            response = db.table("portfolio_holdings").insert(records_to_insert).execute()
+        except Exception as insert_error:
+            if previous_rows:
+                db.table("portfolio_holdings").insert(previous_rows).execute()
+            raise HTTPException(
+                status_code=500,
+                detail=f"CSV upload failed: {insert_error}",
+            ) from insert_error
         if not response.data:
+            if previous_rows:
+                db.table("portfolio_holdings").insert(previous_rows).execute()
             raise HTTPException(status_code=400, detail="Database rejected bulk CSV records insert.")
 
         allocation = DEFAULT_ALLOCATION

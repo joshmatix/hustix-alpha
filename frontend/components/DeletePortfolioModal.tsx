@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Button from "@/components/ui/Button";
 
 interface DeletePortfolioModalProps {
@@ -17,10 +17,55 @@ export default function DeletePortfolioModal({
   const [typedName, setTypedName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(Boolean(portfolioName));
+  onCloseRef.current = onClose;
+  if (typeof document !== "undefined" && portfolioName && !wasOpen.current) {
+    previouslyFocused.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
+  wasOpen.current = Boolean(portfolioName);
 
   useEffect(() => {
     setTypedName("");
     setError(null);
+  }, [portfolioName]);
+
+  useEffect(() => {
+    if (!portfolioName) return;
+    const root = dialogRef.current;
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !root) return;
+      const nodes = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])'
+        )
+      );
+      if (nodes.length === 0) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !root.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      previouslyFocused.current?.focus?.();
+    };
   }, [portfolioName]);
 
   if (!portfolioName) return null;
@@ -45,9 +90,15 @@ export default function DeletePortfolioModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="relative w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-xl">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-portfolio-title"
+        className="relative w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-xl"
+      >
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h2 className="text-xl font-semibold text-white">Delete portfolio</h2>
+          <h2 id="delete-portfolio-title" className="text-xl font-semibold text-white">Delete portfolio</h2>
           <button
             type="button"
             onClick={onClose}

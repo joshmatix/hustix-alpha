@@ -17,7 +17,7 @@ const presets: Array<AdvisorShock & { id: string; name: string; description: str
     id: 'rate_shock',
     name: '+200bps Rate Hike',
     description:
-      'Yields rise 200 basis points and reprice the book once. Equity sensitivity is the partial beta to the 10-year after controlling for the S&P.',
+      'Yields rise 200 basis points and reprice the portfolio once. Equity sensitivity is the partial beta to the 10-year after controlling for the S&P.',
     yieldBps: 200,
     equityPct: 0,
     useWorstEquityWindow: false,
@@ -35,7 +35,7 @@ const presets: Array<AdvisorShock & { id: string; name: string; description: str
     id: 'soft_landing',
     name: 'Soft Landing Cut',
     description:
-      'Yields fall 100 basis points and reprice the book once. Bonds use duration and convexity. Equities use a market-controlled yield beta. Cash is not repriced.',
+      'Yields fall 100 basis points and reprice the portfolio once. Bonds use duration and convexity. Equities use a market-controlled yield beta. Cash is not repriced.',
     yieldBps: -100,
     equityPct: 0,
     useWorstEquityWindow: false,
@@ -174,7 +174,7 @@ export default function MacroScenarioPicker({
           onChange={(event) => update({ useWorstEquityWindow: event.target.checked, equityPct: 0 })}
           className="mt-0.5"
         />
-        <span>Use the worst three-month S&P move in this book&apos;s price history.</span>
+        <span>Use the worst three-month S&P move in this portfolio&apos;s price history.</span>
       </label>
 
       {selectedId === 'custom' && (
