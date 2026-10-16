@@ -49,6 +49,7 @@ export default function CloudAdminPage() {
   const [signedIn, setSignedIn] = useState(false);
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [stateError, setStateError] = useState('');
   const [state, setState] = useState<AdminState | null>(null);
   const [drafts, setDrafts] = useState<Record<string, { portfolio_limit: string; ticker_limit: string }>>({});
   const [limitsMessage, setLimitsMessage] = useState('');
@@ -56,15 +57,18 @@ export default function CloudAdminPage() {
   const [saving, setSaving] = useState(false);
 
   function applyState(next: AdminState) {
-    setState(next);
+    const plans = Array.isArray(next.plans) ? next.plans : [];
+    const accounts = Array.isArray(next.accounts) ? next.accounts : [];
+    setState({ plans, accounts, accounts_error: next.accounts_error ?? null });
     const fields: Record<string, { portfolio_limit: string; ticker_limit: string }> = {};
-    for (const plan of next.plans) {
+    for (const plan of plans) {
       fields[plan.code] = {
         portfolio_limit: plan.portfolio_limit == null ? '' : String(plan.portfolio_limit),
         ticker_limit: plan.ticker_limit == null ? '' : String(plan.ticker_limit),
       };
     }
     setDrafts(fields);
+    setStateError('');
   }
 
   async function loadState() {
@@ -74,8 +78,16 @@ export default function CloudAdminPage() {
   useEffect(() => {
     request('/api/admin/session')
       .then(async (body) => {
-        setSignedIn(Boolean(body.signed_in));
-        if (body.signed_in) await loadState();
+        if (!body.signed_in) {
+          setSignedIn(false);
+          return;
+        }
+        setSignedIn(true);
+        try {
+          await loadState();
+        } catch (error) {
+          setStateError(error instanceof Error ? error.message : 'Could not load the database.');
+        }
       })
       .catch(() => setSignedIn(false))
       .finally(() => setReady(true));
@@ -90,11 +102,18 @@ export default function CloudAdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
       });
-      setPassword('');
-      setSignedIn(true);
-      await loadState();
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : 'Could not sign in.');
+      return;
+    }
+    setPassword('');
+    setSignedIn(true);
+    setState(null);
+    setStateError('');
+    try {
+      await loadState();
+    } catch (error) {
+      setStateError(error instanceof Error ? error.message : 'Could not load the database.');
     }
   }
 
@@ -102,6 +121,7 @@ export default function CloudAdminPage() {
     await request('/api/admin/logout', { method: 'POST' }).catch(() => undefined);
     setSignedIn(false);
     setState(null);
+    setStateError('');
   }
 
   async function onSave(event: FormEvent) {
@@ -180,6 +200,24 @@ export default function CloudAdminPage() {
                 Sign in
               </button>
             </form>
+          </section>
+        ) : null}
+
+        {ready && signedIn && !state ? (
+          <section className="max-w-lg rounded-xl border border-slate-800 bg-slate-900/70 p-5">
+            <h1 className="text-2xl font-semibold">Admin</h1>
+            {stateError ? (
+              <p className="mt-3 text-sm text-rose-300">{stateError}</p>
+            ) : (
+              <p className="mt-3 text-sm text-slate-400">Loading the database...</p>
+            )}
+            <button
+              type="button"
+              onClick={onLogout}
+              className="mt-4 rounded-lg border border-slate-600 px-3 py-2 text-sm"
+            >
+              Sign out
+            </button>
           </section>
         ) : null}
 

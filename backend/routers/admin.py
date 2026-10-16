@@ -120,6 +120,15 @@ def _parse_limit(value: int | None) -> int | None:
     return value
 
 
+def _plan_read_error(exc: Exception) -> str:
+    text = str(exc).lower()
+    if "does not exist" in text or "42p01" in text or "pgrst205" in text:
+        return "The plans table is not on this database. Run the subscription SQL first."
+    if "permission" in text or "42501" in text or "pgrst301" in text:
+        return "The API cannot read plans. Set SUPABASE_SERVICE_ROLE_KEY for this project."
+    return "Could not read plans."
+
+
 def _read_plans() -> list[dict]:
     result = supabase.table("plans").select("code,name,monthly_cents,portfolio_limit,ticker_limit").execute()
     rows = result.data or []
@@ -194,7 +203,7 @@ def state(request: Request):
         plans = _read_plans()
     except Exception as exc:
         print(f"[admin] plan list failed: {exc}")
-        raise HTTPException(status_code=503, detail="Could not read plans.") from exc
+        raise HTTPException(status_code=503, detail=_plan_read_error(exc)) from exc
     accounts, accounts_error = _read_accounts()
     return {"plans": plans, "accounts": accounts, "accounts_error": accounts_error}
 
