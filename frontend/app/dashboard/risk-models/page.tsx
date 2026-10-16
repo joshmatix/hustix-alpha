@@ -364,6 +364,28 @@ function RiskModelsPage() {
               </div>
             </Card>
           )}
+          {engine === 'distribution' && (
+            <Card title="Ending-value percentiles" subtitle="Expected shortfall is the average loss in the worst 5%">
+              <div className="grid grid-cols-1 gap-4 mt-2">
+                {(
+                  [
+                    ['P5', distributionResults?.p5],
+                    ['P25', distributionResults?.p25],
+                    ['P75', distributionResults?.p75],
+                    ['P95', distributionResults?.p95],
+                    ['Shortfall', distributionResults?.expectedShortfall],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div key={label} className="bg-slate-950 p-4 rounded-lg border border-slate-800">
+                    <span className="text-xs uppercase font-semibold text-slate-400">{label}</span>
+                    <p className="text-lg font-bold mt-2 text-white">
+                      {value === undefined ? '—' : money.format(value)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
           <AllocationPie allocation={portfolio?.asset_allocation ?? null} />
         </div>
 
@@ -484,26 +506,6 @@ function RiskModelsPage() {
                   </span>
                 </Card>
               </div>
-              <Card title="Ending-value percentiles" subtitle="Expected shortfall is the average loss in the worst 5%">
-                <div className="grid grid-cols-1 gap-4 mt-2">
-                  {(
-                    [
-                      ['P5', distributionResults?.p5],
-                      ['P25', distributionResults?.p25],
-                      ['P75', distributionResults?.p75],
-                      ['P95', distributionResults?.p95],
-                      ['Shortfall', distributionResults?.expectedShortfall],
-                    ] as const
-                  ).map(([label, value]) => (
-                    <div key={label} className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                      <span className="text-xs uppercase font-semibold text-slate-400">{label}</span>
-                      <p className="text-lg font-bold mt-2 text-white">
-                        {value === undefined ? '—' : money.format(value)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </Card>
             </>
           )}
         </div>
