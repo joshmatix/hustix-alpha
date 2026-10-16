@@ -90,36 +90,45 @@ export default function MacroScenarioPicker({
     onShock({ ...shock, ...next });
   };
 
-  const selected = presets.find((preset) => preset.id === selectedId);
-
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex w-full basis-full gap-2">
           {presets.map((preset) => {
             const isSelected = preset.id === selectedId;
+            const noteId = `scenario-note-${preset.id}`;
             return (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() =>
-                  onShock({
-                    yieldBps: preset.yieldBps,
-                    equityPct: preset.equityPct,
-                    useWorstEquityWindow: preset.useWorstEquityWindow,
-                  })
-                }
-                className={`flex flex-1 items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-xs transition ${
-                  isSelected
-                    ? 'bg-indigo-950/40 border-indigo-500 text-white'
-                    : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                }`}
-              >
-                <span className="whitespace-nowrap font-bold text-sm text-white">{preset.name}</span>
-                <span className="shrink-0 font-mono text-[10px] text-indigo-300">
-                  {preset.yieldBps > 0 ? `+${preset.yieldBps}` : preset.yieldBps}bp
-                </span>
-              </button>
+              <div key={preset.id} className="relative flex-1">
+                <button
+                  type="button"
+                  aria-describedby={noteId}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() =>
+                    onShock({
+                      yieldBps: preset.yieldBps,
+                      equityPct: preset.equityPct,
+                      useWorstEquityWindow: preset.useWorstEquityWindow,
+                    })
+                  }
+                  className={`peer flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-xs transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 ${
+                    isSelected
+                      ? 'bg-indigo-950/40 border-indigo-500 text-white'
+                      : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  <span className="whitespace-nowrap font-bold text-sm text-white">{preset.name}</span>
+                  <span className="shrink-0 font-mono text-[10px] text-indigo-300">
+                    {preset.yieldBps > 0 ? `+${preset.yieldBps}` : preset.yieldBps}bp
+                  </span>
+                </button>
+                <p
+                  id={noteId}
+                  role="tooltip"
+                  className="invisible absolute left-0 top-full z-30 mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-[11px] leading-snug text-slate-200 shadow-lg peer-hover:visible peer-focus-visible:visible"
+                >
+                  {preset.description}
+                </p>
+              </div>
             );
           })}
         </div>
@@ -156,6 +165,14 @@ export default function MacroScenarioPicker({
               className="mt-1 block w-28 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none disabled:text-slate-500"
             />
           </label>
+          <label className="flex items-center gap-2 whitespace-nowrap pb-2.5 text-[11px] text-slate-400">
+            <input
+              type="checkbox"
+              checked={shock.useWorstEquityWindow}
+              onChange={(event) => update({ useWorstEquityWindow: event.target.checked, equityPct: 0 })}
+            />
+            <span>Use the worst three-month S&P move</span>
+          </label>
         </div>
 
         <button
@@ -175,21 +192,9 @@ export default function MacroScenarioPicker({
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <p className="text-[11px] text-slate-400 leading-snug min-w-[16rem] flex-1">
-          {selected
-            ? selected.description
-            : 'A cut with no S&P move prices bonds from duration and convexity. An S&P move prices each holding from its betas to yields and the market.'}
-        </p>
-        <label className="flex items-center gap-2 text-[11px] text-slate-400">
-          <input
-            type="checkbox"
-            checked={shock.useWorstEquityWindow}
-            onChange={(event) => update({ useWorstEquityWindow: event.target.checked, equityPct: 0 })}
-          />
-          <span>Use the worst three-month S&P move</span>
-        </label>
-      </div>
+      <p className="text-[11px] leading-snug text-slate-400">
+        The test instantly reprices the portfolio for rate and market shifts—bonds by duration and convexity, stocks by yield and market sensitivity, and cash unchanged—then uses that new starting value and the historical price volatility to project your 1-Year Value at Risk.
+      </p>
 
       {(yieldError || equityError) && (
         <p className="text-[11px] text-rose-300">

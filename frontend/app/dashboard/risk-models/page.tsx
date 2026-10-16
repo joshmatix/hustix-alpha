@@ -390,62 +390,7 @@ function RiskModelsPage() {
           <AllocationPie allocation={portfolio?.asset_allocation ?? null} />
         </div>
 
-        <div className="space-y-6">
-          {engine === 'history' ? (
-            <>
-              <div className="grid grid-cols-1 gap-4">
-                {historyResults ? (
-                  <RiskGauge
-                    score={historyResults.overallScore}
-                    label="Portfolio Vulnerability Index"
-                    projectedLoss={historyResults.var95}
-                  />
-                ) : (
-                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                    <span className="text-xs font-semibold uppercase text-slate-400 tracking-wider">
-                      Portfolio Vulnerability Index
-                    </span>
-                    <p className="mt-3 text-sm text-slate-400">
-                      Run a stress test to price this account.
-                    </p>
-                  </div>
-                )}
-
-                <Card title="Value at Risk (VaR)" subtitle="95% one-year loss from resampled market days">
-                  <div className="mt-2">
-                    <span className="text-3xl font-extrabold text-rose-400">
-                      {historyResults ? `$${historyResults.var95.toLocaleString()}` : '—'}
-                    </span>
-                    <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                      {historyResults?.narrative ||
-                        'Results use Yahoo Finance prices for the tickers in this portfolio, not a fixed shock.'}
-                    </p>
-                  </div>
-                </Card>
-              </div>
-            </>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              <Card title="Starting value" subtitle="Latest Yahoo close for each traded holding">
-                <span className="text-2xl font-extrabold text-white">
-                  {distributionResults ? money.format(distributionResults.startingValue) : '—'}
-                </span>
-              </Card>
-              <Card title="Median outcome (P50)" subtitle="Middle ending value of the paths">
-                <span className="text-2xl font-extrabold text-emerald-400">
-                  {distributionResults ? money.format(distributionResults.p50) : '—'}
-                </span>
-              </Card>
-              <Card title="Value at Risk (VaR)" subtitle="95% loss from the live starting value">
-                <span className="text-2xl font-extrabold text-rose-400">
-                  {distributionResults ? money.format(distributionResults.var95) : '—'}
-                </span>
-              </Card>
-            </div>
-          )}
-        </div>
-
-        {engine === 'history' && (
+        {engine === 'history' ? (
           <div className="space-y-6">
             <Card
               title="Asset Class Impact Analysis"
@@ -509,6 +454,57 @@ function RiskModelsPage() {
                 {historyResults?.fallbackNote && (
                   <p className="text-xs text-amber-200/90 mt-2 leading-relaxed">{historyResults.fallbackNote}</p>
                 )}
+            </Card>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
+            <Card title="Starting value" subtitle="Latest Yahoo close for each traded holding">
+              <span className="text-2xl font-extrabold text-white">
+                {distributionResults ? money.format(distributionResults.startingValue) : '—'}
+              </span>
+            </Card>
+            <Card title="Median outcome (P50)" subtitle="Middle ending value of the paths">
+              <span className="text-2xl font-extrabold text-emerald-400">
+                {distributionResults ? money.format(distributionResults.p50) : '—'}
+              </span>
+            </Card>
+            <Card title="Value at Risk (VaR)" subtitle="95% loss from the live starting value">
+              <span className="text-2xl font-extrabold text-rose-400">
+                {distributionResults ? money.format(distributionResults.var95) : '—'}
+              </span>
+            </Card>
+          </div>
+        )}
+
+        {engine === 'history' && (
+          <div className="space-y-6">
+            {historyResults ? (
+              <RiskGauge
+                score={historyResults.overallScore}
+                label="Portfolio Vulnerability Index"
+                projectedLoss={historyResults.var95}
+              />
+            ) : (
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                <span className="text-xs font-semibold uppercase text-slate-400 tracking-wider">
+                  Portfolio Vulnerability Index
+                </span>
+                <p className="mt-3 text-sm text-slate-400">
+                  Run a stress test to price this account.
+                </p>
+              </div>
+            )}
+
+            <Card title="Value at Risk (VaR)" subtitle="95% one-year loss from resampled market days">
+              <div className="mt-2">
+                <span className="text-3xl font-extrabold text-rose-400">
+                  {historyResults ? `$${historyResults.var95.toLocaleString()}` : '—'}
+                </span>
+                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                  {historyResults?.narrative ||
+                    'Results use Yahoo Finance prices for the tickers in this portfolio, not a fixed shock.'}
+                </p>
+              </div>
             </Card>
           </div>
         )}
