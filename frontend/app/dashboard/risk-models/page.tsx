@@ -323,31 +323,12 @@ function RiskModelsPage() {
           </div>
 
           {engine === 'history' ? (
-            <>
-              <MacroScenarioPicker
-                shock={shock}
-                onShock={setShock}
-                onRunSimulation={handleRunSimulation}
-                isCalculating={isCalculating}
-              />
-
-              <Card title="Model Parameters" subtitle="Yahoo Finance daily prices, resampled">
-                <div className="space-y-3 text-xs">
-                  <div className="flex justify-between py-1.5 border-b border-slate-800">
-                    <span className="text-slate-400">Confidence Interval</span>
-                    <span className="text-white font-mono font-semibold">95.0%</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-800">
-                    <span className="text-slate-400">Time Horizon</span>
-                    <span className="text-white font-mono font-semibold">12 Months</span>
-                  </div>
-                  <div className="flex justify-between py-1.5">
-                    <span className="text-slate-400">Paths</span>
-                    <Badge variant="emerald">1,000</Badge>
-                  </div>
-                </div>
-              </Card>
-            </>
+            <MacroScenarioPicker
+              shock={shock}
+              onShock={setShock}
+              onRunSimulation={handleRunSimulation}
+              isCalculating={isCalculating}
+            />
           ) : (
             <DistributionPanel
               distribution={distribution}
@@ -362,14 +343,34 @@ function RiskModelsPage() {
               isCalculating={isCalculating}
             />
           )}
+        </div>
 
+        <div className="space-y-6">
+          {engine === 'history' && (
+            <Card title="Model Parameters" subtitle="Yahoo Finance daily prices, resampled">
+              <div className="space-y-3 text-xs">
+                <div className="flex justify-between py-1.5 border-b border-slate-800">
+                  <span className="text-slate-400">Confidence Interval</span>
+                  <span className="text-white font-mono font-semibold">95.0%</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-slate-800">
+                  <span className="text-slate-400">Time Horizon</span>
+                  <span className="text-white font-mono font-semibold">12 Months</span>
+                </div>
+                <div className="flex justify-between py-1.5">
+                  <span className="text-slate-400">Paths</span>
+                  <Badge variant="emerald">1,000</Badge>
+                </div>
+              </div>
+            </Card>
+          )}
           <AllocationPie allocation={portfolio?.asset_allocation ?? null} />
         </div>
 
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
           {engine === 'history' ? (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 {historyResults ? (
                   <RiskGauge
                     score={historyResults.overallScore}
@@ -405,9 +406,7 @@ function RiskModelsPage() {
                 subtitle="Immediate price impact of this scenario"
               >
                 <div
-                  className={`grid grid-cols-1 gap-4 mt-2 ${
-                    historyResults?.unclassifiedImpact != null ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3'
-                  }`}
+                  className="grid grid-cols-1 gap-4 mt-2"
                 >
                   <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
                     <span className="text-xs uppercase font-semibold text-slate-400">Equities</span>
@@ -468,7 +467,7 @@ function RiskModelsPage() {
             </>
           ) : (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <Card title="Starting value" subtitle="Latest Yahoo close for each traded holding">
                   <span className="text-2xl font-extrabold text-white">
                     {distributionResults ? money.format(distributionResults.startingValue) : '—'}
@@ -486,7 +485,7 @@ function RiskModelsPage() {
                 </Card>
               </div>
               <Card title="Ending-value percentiles" subtitle="Expected shortfall is the average loss in the worst 5%">
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-2">
+                <div className="grid grid-cols-1 gap-4 mt-2">
                   {(
                     [
                       ['P5', distributionResults?.p5],
