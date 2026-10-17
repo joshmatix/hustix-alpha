@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { SupportLine } from '@/components/layout/SiteFooter';
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-6 md:p-12">
+    <main className="flex flex-1 flex-col justify-between bg-slate-950 p-6 text-slate-100 md:p-12">
       {/* Header Bar */}
       <header className="w-full max-w-6xl mx-auto flex justify-between items-center py-4 border-b border-slate-800">
         <div className="flex items-center gap-2">
@@ -26,7 +27,7 @@ export default function HomePage() {
             href="/signup"
             className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-md shadow-indigo-500/10 transition-all"
           >
-            Register
+            Get Started Free
           </Link>
         </div>
       </header>
@@ -75,15 +76,16 @@ export default function HomePage() {
               href="/signup"
               className="inline-flex items-center text-sm font-semibold text-indigo-400 hover:text-indigo-300"
             >
-              Create New Account &rarr;
+              Explore Scenarios Free &rarr;
             </Link>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="w-full max-w-6xl mx-auto text-center border-t border-slate-900 pt-6 text-xs text-slate-500">
-        Hustix Macro &copy; {new Date().getFullYear()} — Quantitative Portfolio Simulation
+      <footer className="mx-auto w-full max-w-6xl space-y-2 border-t border-slate-900 pt-6 text-center text-xs text-slate-500">
+        <p>Hustix Macro &copy; {new Date().getFullYear()} — Quantitative Portfolio Simulation</p>
+        <SupportLine />
       </footer>
     </main>
   );

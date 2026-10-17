@@ -84,7 +84,7 @@ export default function SignupPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-6">
+    <main className="flex flex-1 flex-col items-center justify-center bg-slate-950 p-6 text-slate-100">
       {/* Back to Home Link */}
       <div className="w-full max-w-3xl mb-6">
         <Link 
