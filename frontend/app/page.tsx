@@ -44,6 +44,12 @@ export default function HomePage() {
         <p className="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto font-normal">
           Stress-test client portfolios against stagflation, rate shocks, and recession scenarios using institutional-grade Monte Carlo simulations.
         </p>
+        <Link
+          href="/signup"
+          className="inline-flex rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-indigo-500/10 transition-all hover:bg-indigo-500"
+        >
+          Get Started Free
+        </Link>
         <p className="mx-auto max-w-2xl text-sm font-normal text-slate-500 md:text-base">
           Built for modern ticker-based allocations. Instantly model portfolios composed of Bond ETFs, Mutual Funds, and Equities without manual spreadsheet mapping.
         </p>
