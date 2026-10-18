@@ -21,9 +21,9 @@ export type AuthenticatorSetup = {
 };
 
 export type EnrollmentResult =
-  | { ok: true; setup: AuthenticatorSetup }
-  | { ok: false; alreadyVerified: true }
-  | { ok: false; alreadyVerified?: false; message: string };
+  | { status: 'ready'; setup: AuthenticatorSetup }
+  | { status: 'verified' }
+  | { status: 'error'; message: string };
 
 let enrollmentInFlight: Promise<EnrollmentResult> | null = null;
 
@@ -40,10 +40,10 @@ export function beginAuthenticatorEnrollment() {
 async function enrollAuthenticator(): Promise<EnrollmentResult> {
   const { data: existing, error: listError } = await supabase.auth.mfa.listFactors();
   if (listError || !existing) {
-    return { ok: false, message: listError?.message || 'Could not read authenticator setup.' };
+    return { status: 'error', message: listError?.message || 'Could not read authenticator setup.' };
   }
   if (existing.totp.length > 0) {
-    return { ok: false, alreadyVerified: true };
+    return { status: 'verified' };
   }
 
   for (const factor of existing.all) {
@@ -57,10 +57,10 @@ async function enrollAuthenticator(): Promise<EnrollmentResult> {
     friendlyName: 'Authenticator app',
   });
   if (error || !data || data.type !== 'totp') {
-    return { ok: false, message: error?.message || 'Could not start authenticator setup.' };
+    return { status: 'error', message: error?.message || 'Could not start authenticator setup.' };
   }
   return {
-    ok: true,
+    status: 'ready',
     setup: { factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret },
   };
 }

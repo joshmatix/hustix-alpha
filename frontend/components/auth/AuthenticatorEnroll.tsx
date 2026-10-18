@@ -18,11 +18,11 @@ export default function AuthenticatorEnroll({ onVerified }: { onVerified: () => 
       const result = await beginAuthenticatorEnrollment();
       if (cancelled) return;
       setBusy(false);
-      if (result.ok) {
+      if (result.status === 'ready') {
         setSetup(result.setup);
         return;
       }
-      if (result.alreadyVerified) {
+      if (result.status === 'verified') {
         onVerified();
         return;
       }

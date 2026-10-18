@@ -43,11 +43,11 @@ export default function AuthenticatorCard() {
     setStatus(null);
     const result = await beginAuthenticatorEnrollment();
     setBusy(false);
-    if (result.ok) {
+    if (result.status === 'ready') {
       setSetup(result.setup);
       return;
     }
-    if (result.alreadyVerified) {
+    if (result.status === 'verified') {
       setStatus({ text: 'An authenticator app is already on for this account.', type: 'success' });
       void load();
       return;
