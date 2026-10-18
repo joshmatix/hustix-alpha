@@ -1,0 +1,82 @@
+export const AGREEMENT_VERSION = '2026-10-17';
+
+export const AGREEMENT_TITLE = 'Hustix Macro Customer Agreement';
+
+export type AgreementSection = {
+  heading: string;
+  paragraphs: string[];
+};
+
+export const agreementSections: AgreementSection[] = [
+  {
+    heading: '1. This agreement',
+    paragraphs: [
+      'This is the agreement between you and Hustix for the Hustix Macro service at hustix.com. The version date is October 17, 2026.',
+      'By clicking to create an account, you agree to this text. If you accept for a firm, you confirm that you are allowed to bind that firm.',
+    ],
+  },
+  {
+    heading: '2. The service',
+    paragraphs: [
+      'Hustix Macro lets a wealth advisor build portfolios and run scenario stress tests. A result is a calculation from the information you enter and from the market data the service uses. It is an illustration. It is not a prediction, a recommendation, or a promise of how a portfolio will perform.',
+    ],
+  },
+  {
+    heading: '3. Not investment advice',
+    paragraphs: [
+      'Hustix does not provide investment, tax, or legal advice, and Hustix is not an adviser to your clients. You decide what to show a client and what to recommend. You are responsible for deciding whether a result is fit for the way you use it.',
+    ],
+  },
+  {
+    heading: '4. Your account',
+    paragraphs: [
+      'You need an account to use the service. Keep the sign-in to yourself. You are responsible for activity under your account.',
+    ],
+  },
+  {
+    heading: '5. Information you upload',
+    paragraphs: [
+      'You may store client and portfolio information in the service. You confirm that you have the right to upload that information and to let Hustix store and process it in order to run the service.',
+      'Hustix uses that information to provide the service, to keep the service working, and to meet law. Hustix does not sell it.',
+    ],
+  },
+  {
+    heading: '6. Plans and fees',
+    paragraphs: [
+      'The plan you select is the one described on the account screen, including any limit on portfolios or tickers. A free plan has no monthly charge. A paid plan is billed monthly at the price shown when you start that plan. Choosing a plan on the account screen does not, by itself, charge a card.',
+      'Fees already paid for the current month are not refunded, except where the law requires a refund. Taxes may be added where they apply.',
+    ],
+  },
+  {
+    heading: '7. Acceptable use',
+    paragraphs: [
+      'Do not misuse the service, attempt to break into it, interfere with other accounts, or use it to break the law. Do not upload information you are not allowed to share.',
+    ],
+  },
+  {
+    heading: '8. Limits',
+    paragraphs: [
+      'The service can change, pause, or stop. A calculation can be wrong or incomplete, and market data can be delayed or missing.',
+      'To the extent the law allows, Hustix is not liable for lost profits, lost client relationships, or other indirect damages. Hustix’s total liability for a claim is limited to the fees you paid for the service during the three months before the claim.',
+    ],
+  },
+  {
+    heading: '9. Ending the agreement',
+    paragraphs: [
+      'You may stop using the service and ask Hustix to close the account by writing to support@hustix.com. Hustix may suspend or close an account that breaks this agreement or that puts the service or other people at risk. The sections on advice, your information, and limits stay in effect after the account ends.',
+    ],
+  },
+  {
+    heading: '10. Later versions',
+    paragraphs: [
+      'If this agreement changes, Hustix will post the new version and ask you to click to accept it. A newer version applies to you when you accept it. Until then, the version you already accepted stays on record.',
+    ],
+  },
+  {
+    heading: '11. Law and contact',
+    paragraphs: [
+      'This agreement is governed by the laws of the state where Hustix has its principal place of business, without regard to conflict-of-law rules.',
+      'Questions about this agreement go to support@hustix.com.',
+    ],
+  },
+];

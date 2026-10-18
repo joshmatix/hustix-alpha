@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { ensureProfile } from '@/lib/ensureProfile';
+import { AGREEMENT_TITLE, AGREEMENT_VERSION } from '@/lib/agreement';
 import { signupPlanDetail } from '@/lib/planLimits';
+import AgreementBody from '@/components/auth/AgreementBody';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -32,6 +34,7 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [plansLoading, setPlansLoading] = useState(true);
+  const [agreed, setAgreed] = useState(false);
   const router = useRouter();
   const selected = plans.find((option) => option.code === plan) || plans[0];
 
@@ -56,10 +59,23 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
 
+    if (!agreed) {
+      setError('Check the box to accept the customer agreement.');
+      setLoading(false);
+      return;
+    }
+
+    const acceptedAt = new Date().toISOString();
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { plan } },
+      options: {
+        data: {
+          plan,
+          agreement_version: AGREEMENT_VERSION,
+          agreement_accepted_at: acceptedAt,
+        },
+      },
     });
 
     if (error) {
@@ -78,6 +94,13 @@ export default function SignupPage() {
         setLoading(false);
         return;
       }
+      await supabase
+        .from('profiles')
+        .update({
+          agreement_version: AGREEMENT_VERSION,
+          agreement_accepted_at: acceptedAt,
+        })
+        .eq('id', data.user.id);
     }
 
     router.push('/dashboard');
@@ -186,16 +209,34 @@ export default function SignupPage() {
             />
           </div>
 
+          <div className="rounded-lg border border-slate-800 bg-slate-950/70">
+            <div className="max-h-56 overflow-y-auto px-4 py-3">
+              <AgreementBody />
+            </div>
+          </div>
+
+          <label className="flex items-start gap-3 text-xs leading-relaxed text-slate-300">
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(event) => setAgreed(event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-950 text-indigo-600"
+              required
+            />
+            <span>
+              I have read and agree to the {AGREEMENT_TITLE} (version {AGREEMENT_VERSION}).{' '}
+              <Link href="/agreement" className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline">
+                Open the agreement
+              </Link>
+            </span>
+          </label>
+
           <button
             type="submit"
-            disabled={loading || plansLoading || !selected}
+            disabled={loading || plansLoading || !selected || !agreed}
             className="w-full py-3 mt-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white font-semibold rounded-lg text-sm transition shadow-lg shadow-indigo-600/20"
           >
-            {loading
-              ? 'Creating Account...'
-              : selected
-                ? `Create ${selected.name === 'Free' ? 'free' : selected.name} account`
-                : 'Create account'}
+            {loading ? 'Creating Account...' : 'I agree and create account'}
           </button>
         </form>
 
