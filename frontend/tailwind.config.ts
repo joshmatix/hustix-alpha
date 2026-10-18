@@ -7,7 +7,21 @@ const config: Config = {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      keyframes: {
+        'hero-reel': {
+          '0%, 14%': { transform: 'translateX(0%)' },
+          '18%, 32%': { transform: 'translateX(-16.666%)' },
+          '36%, 50%': { transform: 'translateX(-33.333%)' },
+          '54%, 68%': { transform: 'translateX(-50%)' },
+          '72%, 86%': { transform: 'translateX(-66.666%)' },
+          '90%, 100%': { transform: 'translateX(-83.333%)' },
+        },
+      },
+      animation: {
+        'hero-reel': 'hero-reel 48s ease-in-out infinite',
+      },
+    },
   },
   plugins: [],
 };
