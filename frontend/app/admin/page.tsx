@@ -172,7 +172,7 @@ export default function CloudAdminPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
+    <main className="flex-1 bg-slate-950 text-slate-100">
       <div className="mx-auto max-w-3xl px-5 py-8">
         {!ready ? <p className="text-sm text-slate-400">Loading admin...</p> : null}
 

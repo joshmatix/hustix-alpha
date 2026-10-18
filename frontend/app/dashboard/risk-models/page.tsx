@@ -143,7 +143,7 @@ function RiskModelsPage() {
 
   const handleRunDistribution = async () => {
     if (!portfolioId) {
-      setError('Choose a portfolio before running a distribution.');
+      setError('Choose a portfolio before running a Monte Carlo.');
       return;
     }
     setIsCalculating(true);
@@ -161,7 +161,7 @@ function RiskModelsPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        throw new Error(body.detail || 'Distribution run failed.');
+        throw new Error(body.detail || 'Monte Carlo run failed.');
       }
       const metrics = body.metrics || {};
       setSimulationResults({
@@ -271,26 +271,50 @@ function RiskModelsPage() {
             ? `Stress testing ${portfolio.name} ($${Number(portfolio.portfolio_value).toLocaleString()}).`
             : 'Choose a portfolio, then price a shock from its live holdings.'}
         </p>
-        <label className="mt-4 block text-xs font-medium text-slate-400" htmlFor="risk-portfolio">
-          Portfolio
-        </label>
-        <select
-          id="risk-portfolio"
-          value={portfolioId || ''}
-          onChange={(event) => {
-            const nextId = event.target.value;
-            setError(null);
-            router.push(nextId ? `/dashboard/risk-models?portfolio=${nextId}` : '/dashboard/risk-models');
-          }}
-          className="mt-1 w-full max-w-md rounded-md border border-slate-700 bg-slate-950 p-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
-        >
-          <option value="">Select a portfolio</option>
-          {portfolios.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </select>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div className="min-w-[16rem] flex-1 max-w-md">
+            <label className="block text-xs font-medium text-slate-400" htmlFor="risk-portfolio">
+              Portfolio
+            </label>
+            <select
+              id="risk-portfolio"
+              value={portfolioId || ''}
+              onChange={(event) => {
+                const nextId = event.target.value;
+                setError(null);
+                router.push(nextId ? `/dashboard/risk-models?portfolio=${nextId}` : '/dashboard/risk-models');
+              }}
+              className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="">Select a portfolio</option>
+              {portfolios.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex shrink-0 rounded-lg border border-slate-800 bg-slate-950 p-1">
+            <button
+              type="button"
+              onClick={() => selectEngine('history')}
+              className={`rounded-md px-3 py-2 text-xs font-semibold ${
+                engine === 'history' ? 'bg-indigo-600 text-white' : 'text-slate-400'
+              }`}
+            >
+              Stress test
+            </button>
+            <button
+              type="button"
+              onClick={() => selectEngine('distribution')}
+              className={`rounded-md px-3 py-2 text-xs font-semibold ${
+                engine === 'distribution' ? 'bg-indigo-600 text-white' : 'text-slate-400'
+              }`}
+            >
+              Monte Carlo
+            </button>
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -299,52 +323,29 @@ function RiskModelsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="space-y-6">
-          <div className="flex rounded-lg border border-slate-800 bg-slate-950 p-1">
-            <button
-              type="button"
-              onClick={() => selectEngine('history')}
-              className={`flex-1 rounded-md px-3 py-2 text-xs font-semibold ${
-                engine === 'history' ? 'bg-indigo-600 text-white' : 'text-slate-400'
-              }`}
-            >
-              Market history
-            </button>
-            <button
-              type="button"
-              onClick={() => selectEngine('distribution')}
-              className={`flex-1 rounded-md px-3 py-2 text-xs font-semibold ${
-                engine === 'distribution' ? 'bg-indigo-600 text-white' : 'text-slate-400'
-              }`}
-            >
-              Distribution
-            </button>
-          </div>
+      {engine === 'history' ? (
+        <MacroScenarioPicker
+          shock={shock}
+          onShock={setShock}
+          onRunSimulation={handleRunSimulation}
+          isCalculating={isCalculating}
+        />
+      ) : (
+        <DistributionPanel
+          distribution={distribution}
+          onDistribution={setDistribution}
+          macroShockBps={macroShockBps}
+          onMacroShockBps={setMacroShockBps}
+          simulations={simulations}
+          onSimulations={setSimulations}
+          timeHorizonYears={timeHorizonYears}
+          onTimeHorizonYears={setTimeHorizonYears}
+          onRun={handleRunDistribution}
+          isCalculating={isCalculating}
+        />
+      )}
 
-          {engine === 'history' ? (
-            <MacroScenarioPicker
-              shock={shock}
-              onShock={setShock}
-              onRunSimulation={handleRunSimulation}
-              isCalculating={isCalculating}
-            />
-          ) : (
-            <DistributionPanel
-              distribution={distribution}
-              onDistribution={setDistribution}
-              macroShockBps={macroShockBps}
-              onMacroShockBps={setMacroShockBps}
-              simulations={simulations}
-              onSimulations={setSimulations}
-              timeHorizonYears={timeHorizonYears}
-              onTimeHorizonYears={setTimeHorizonYears}
-              onRun={handleRunDistribution}
-              isCalculating={isCalculating}
-            />
-          )}
-        </div>
-
+      <div className={`grid grid-cols-1 gap-6 ${engine === 'history' ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
         <div className="space-y-6">
           {engine === 'history' && (
             <Card title="Model Parameters" subtitle="Yahoo Finance daily prices, resampled">
@@ -389,44 +390,12 @@ function RiskModelsPage() {
           <AllocationPie allocation={portfolio?.asset_allocation ?? null} />
         </div>
 
-        <div className="space-y-6">
-          {engine === 'history' ? (
-            <>
-              <div className="grid grid-cols-1 gap-4">
-                {historyResults ? (
-                  <RiskGauge
-                    score={historyResults.overallScore}
-                    label="Portfolio Vulnerability Index"
-                    projectedLoss={historyResults.var95}
-                  />
-                ) : (
-                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                    <span className="text-xs font-semibold uppercase text-slate-400 tracking-wider">
-                      Portfolio Vulnerability Index
-                    </span>
-                    <p className="mt-3 text-sm text-slate-400">
-                      Run a live stress test to price this account.
-                    </p>
-                  </div>
-                )}
-
-                <Card title="Value at Risk (VaR)" subtitle="95% one-year loss from resampled market days">
-                  <div className="mt-2">
-                    <span className="text-3xl font-extrabold text-rose-400">
-                      {historyResults ? `$${historyResults.var95.toLocaleString()}` : '—'}
-                    </span>
-                    <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                      {historyResults?.narrative ||
-                        'Results use Yahoo Finance prices for the tickers in this portfolio, not a fixed shock.'}
-                    </p>
-                  </div>
-                </Card>
-              </div>
-
-              <Card
-                title="Asset Class Impact Analysis"
-                subtitle="Immediate price impact of this scenario"
-              >
+        {engine === 'history' ? (
+          <div className="space-y-6">
+            <Card
+              title="Asset Class Impact Analysis"
+              subtitle="Immediate price impact of this scenario"
+            >
                 <div
                   className="grid grid-cols-1 gap-4 mt-2"
                 >
@@ -485,30 +454,60 @@ function RiskModelsPage() {
                 {historyResults?.fallbackNote && (
                   <p className="text-xs text-amber-200/90 mt-2 leading-relaxed">{historyResults.fallbackNote}</p>
                 )}
-              </Card>
-            </>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 gap-4">
-                <Card title="Starting value" subtitle="Latest Yahoo close for each traded holding">
-                  <span className="text-2xl font-extrabold text-white">
-                    {distributionResults ? money.format(distributionResults.startingValue) : '—'}
-                  </span>
-                </Card>
-                <Card title="Median outcome (P50)" subtitle="Middle ending value of the paths">
-                  <span className="text-2xl font-extrabold text-emerald-400">
-                    {distributionResults ? money.format(distributionResults.p50) : '—'}
-                  </span>
-                </Card>
-                <Card title="Value at Risk (VaR)" subtitle="95% loss from the live starting value">
-                  <span className="text-2xl font-extrabold text-rose-400">
-                    {distributionResults ? money.format(distributionResults.var95) : '—'}
-                  </span>
-                </Card>
+            </Card>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
+            <Card title="Starting value" subtitle="Latest Yahoo close for each traded holding">
+              <span className="text-2xl font-extrabold text-white">
+                {distributionResults ? money.format(distributionResults.startingValue) : '—'}
+              </span>
+            </Card>
+            <Card title="Median outcome (P50)" subtitle="Middle ending value of the paths">
+              <span className="text-2xl font-extrabold text-emerald-400">
+                {distributionResults ? money.format(distributionResults.p50) : '—'}
+              </span>
+            </Card>
+            <Card title="Value at Risk (VaR)" subtitle="95% loss from the live starting value">
+              <span className="text-2xl font-extrabold text-rose-400">
+                {distributionResults ? money.format(distributionResults.var95) : '—'}
+              </span>
+            </Card>
+          </div>
+        )}
+
+        {engine === 'history' && (
+          <div className="space-y-6">
+            {historyResults ? (
+              <RiskGauge
+                score={historyResults.overallScore}
+                label="Portfolio Vulnerability Index"
+                projectedLoss={historyResults.var95}
+              />
+            ) : (
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                <span className="text-xs font-semibold uppercase text-slate-400 tracking-wider">
+                  Portfolio Vulnerability Index
+                </span>
+                <p className="mt-3 text-sm text-slate-400">
+                  Run a stress test to price this account.
+                </p>
               </div>
-            </>
-          )}
-        </div>
+            )}
+
+            <Card title="Value at Risk (VaR)" subtitle="95% one-year loss from resampled market days">
+              <div className="mt-2">
+                <span className="text-3xl font-extrabold text-rose-400">
+                  {historyResults ? `$${historyResults.var95.toLocaleString()}` : '—'}
+                </span>
+                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                  {historyResults?.narrative ||
+                    'Results use Yahoo Finance prices for the tickers in this portfolio, not a fixed shock.'}
+                </p>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

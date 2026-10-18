@@ -1,4 +1,5 @@
 import './globals.css';
+import SiteFooter from '@/components/layout/SiteFooter';
 
 export const metadata = {
   title: 'Hustix Macro',
@@ -12,7 +13,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
+        <div className="flex flex-1 flex-col">{children}</div>
+        <SiteFooter />
+      </body>
     </html>
   );
 }

@@ -281,7 +281,17 @@ def _read_accounts() -> list[dict]:
                 COALESCE(session.refreshed_at AT TIME ZONE 'UTC', session.created_at)
               )) AS last_seen
             FROM auth.sessions AS session
-            WHERE session.not_after IS NULL OR session.not_after > timezone('utc', now())
+            WHERE (session.not_after IS NULL OR session.not_after > timezone('utc', now()))
+              AND GREATEST(
+                COALESCE(session.updated_at, session.created_at),
+                COALESCE(session.refreshed_at AT TIME ZONE 'UTC', session.created_at)
+              ) > timezone('utc', now()) - interval '8 hours'
+              AND EXISTS (
+                SELECT 1
+                FROM auth.refresh_tokens AS token
+                WHERE token.session_id = session.id
+                  AND token.revoked IS NOT TRUE
+              )
             GROUP BY session.user_id
           ) AS open_session
           JOIN auth.users AS account_user ON account_user.id = open_session.user_id

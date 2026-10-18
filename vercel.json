@@ -11,6 +11,20 @@
       "framework": "nextjs"
     }
   },
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www\\.hustix\\.com" }],
+      "destination": "https://hustix.com/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "hustix-alpha\\.vercel\\.app" }],
+      "destination": "https://hustix.com/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/health",

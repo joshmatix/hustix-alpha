@@ -8,6 +8,7 @@ import Button from '@/components/ui/Button';
 import { apiFetch, type Holding, type Portfolio } from '@/lib/api';
 import { portfolioLimitSentence } from '@/lib/planLimits';
 import { supabase } from '@/lib/supabaseClient';
+import { createCheckoutSession } from '@/lib/stripeCheckout';
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
@@ -185,6 +186,32 @@ export default function PortfoliosPage() {
     const target = pending?.upgradeTarget || 'pro';
     setUpgrading(true);
     setError(null);
+    if (target === 'pro' || target === 'pro_plus') {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        setUpgrading(false);
+        setError('Sign in again before changing the plan.');
+        return;
+      }
+      const result = await createCheckoutSession(target, session.access_token);
+      if ('error' in result) {
+        setUpgrading(false);
+        setNotice({
+          message: pending?.message || `Upgrade to ${pending?.upgradeName || 'the next plan'}`,
+          detail: result.error,
+          offerUpgrade: true,
+          upgradeTarget: target,
+          upgradeName: pending?.upgradeName,
+          file: pending?.file,
+          portfolioId: pending?.portfolioId,
+        });
+        return;
+      }
+      window.location.assign(result.url);
+      return;
+    }
     const { data, error: upgradeError } = await supabase.rpc('set_firm_plan', { target });
     setUpgrading(false);
     if (upgradeError) {
