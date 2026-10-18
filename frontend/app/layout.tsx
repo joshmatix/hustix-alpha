@@ -3,6 +3,10 @@ import './globals.css';
 export const metadata = {
   title: 'Hustix Macro',
   description: 'Stress-test client portfolios against macroeconomic shocks.',
+  icons: {
+    icon: '/logo.png',
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export default function RootLayout({
