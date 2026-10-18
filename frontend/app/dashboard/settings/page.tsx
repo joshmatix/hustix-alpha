@@ -7,6 +7,7 @@ import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { portfolioLimitSentence } from '@/lib/planLimits';
 import { createCheckoutSession } from '@/lib/stripeCheckout';
+import AuthenticatorCard from '@/components/auth/AuthenticatorCard';
 
 type Status = { text: string; type: 'success' | 'error' } | null;
 type PlanCode = 'free' | 'pro' | 'pro_plus' | 'enterprise';
@@ -430,6 +431,8 @@ export default function ProfilePage() {
           </div>
         </form>
       </Card>
+
+      <AuthenticatorCard />
 
       <Card
         title="Report header"

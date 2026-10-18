@@ -75,7 +75,7 @@ export const agreementSections: AgreementSection[] = [
   {
     heading: '10. Ending the agreement',
     paragraphs: [
-      'You may stop using the service and close your account by writing to support@hustix.com[cite: 1]. Hustix may suspend or terminate any account that violates this agreement or poses security risks.',
+      'You may stop using the service and close your account through the support contact shown after you sign in. Hustix may suspend or terminate any account that violates this agreement or poses security risks.',
       'Provisions concerning disclaimers, liability limitations, and indemnification survive the termination of your account.',
     ],
   },
@@ -89,7 +89,7 @@ export const agreementSections: AgreementSection[] = [
     heading: '12. Governing law and contact',
     paragraphs: [
       'This agreement is governed by the laws of the State of Delaware, without regard to conflict-of-law rules.',
-      'Questions regarding this agreement must be sent to support@hustix.com[cite: 1].',
+      'Questions regarding this agreement must be sent to the support contact shown in your account after you sign in.',
     ],
   },
 ];

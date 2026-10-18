@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { SupportLine } from '@/components/layout/SiteFooter';
 
 export default function HomePage() {
   return (
@@ -43,7 +42,7 @@ export default function HomePage() {
         </h2>
         
         <p className="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto font-normal">
-          Stress-test client portfolios against stagflation, rate shocks, and recession scenarios using real-time Monte Carlo simulations.
+          Stress-test client portfolios against stagflation, rate shocks, and recession scenarios using institutional-grade Monte Carlo simulations.
         </p>
       </section>
 
@@ -85,7 +84,11 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="mx-auto w-full max-w-6xl space-y-2 border-t border-slate-900 pt-6 text-center text-xs text-slate-500">
         <p>Hustix Macro &copy; {new Date().getFullYear()} — Quantitative Portfolio Simulation</p>
-        <SupportLine />
+        <p>
+          <Link href="/agreement" className="text-indigo-300 hover:text-indigo-200">
+            Customer Agreement
+          </Link>
+        </p>
       </footer>
     </main>
   );

@@ -25,6 +25,7 @@ const nextConfig = {
       { source: '/api/macro/:path*', destination: `${apiOrigin}/api/macro/:path*` },
       { source: '/api/admin/:path*', destination: `${apiOrigin}/api/admin/:path*` },
       { source: '/api/stripe/:path*', destination: `${apiOrigin}/api/stripe/:path*` },
+      { source: '/api/support/:path*', destination: `${apiOrigin}/api/support/:path*` },
       { source: '/health', destination: `${apiOrigin}/health` },
     ];
   },
