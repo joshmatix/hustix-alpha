@@ -44,41 +44,53 @@ export default function HomePage() {
         <p className="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto font-normal">
           Stress-test client portfolios against stagflation, rate shocks, and recession scenarios using institutional-grade Monte Carlo simulations.
         </p>
+        <p className="mx-auto max-w-2xl text-sm font-normal text-slate-500 md:text-base">
+          Built for modern ticker-based allocations. Instantly model portfolios composed of Bond ETFs, Mutual Funds, and Equities without manual spreadsheet mapping.
+        </p>
       </section>
 
-      {/* Navigation Purpose Cards */}
-      <section className="w-full max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-        {/* Existing Users / Sign In Card */}
-        <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-xl space-y-3 hover:border-slate-700 transition">
-          <h3 className="text-lg font-semibold text-white">Already have an account?</h3>
-          <p className="text-sm text-slate-400">
-            Sign in if you are already registered to access your saved portfolio stress tests and dashboard.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/login"
-              className="inline-flex items-center text-sm font-semibold text-indigo-400 hover:text-indigo-300"
-            >
-              Sign In to Dashboard &rarr;
-            </Link>
-          </div>
+      <section className="mx-auto mb-12 grid w-full max-w-4xl grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-6 transition hover:border-slate-700">
+          <h3 className="text-lg font-semibold text-white">Enterprise Security, Built for Compliance</h3>
+          <ul className="list-disc space-y-3 pl-5 text-sm text-slate-400">
+            <li>
+              <span className="font-medium text-slate-200">Mandatory Multi-Factor Authentication:</span> Every account is protected by strict 2FA via Twilio Authy, Google Authenticator, or Microsoft Authenticator to safeguard advisor pipelines.
+            </li>
+            <li>
+              <span className="font-medium text-slate-200">Institutional Encryption:</span> Your data is fully encrypted using AES-256 at rest and TLS 1.3 in transit.
+            </li>
+            <li>
+              <span className="font-medium text-slate-200">Vendor Due Diligence Ready:</span> Designed from the ground up to satisfy SEC cybersecurity compliance standards for RIA software vendors.
+            </li>
+          </ul>
         </div>
 
-        {/* New Users / Register Card */}
-        <div className="p-6 bg-slate-900/60 border border-slate-800 rounded-xl space-y-3 hover:border-slate-700 transition">
-          <h3 className="text-lg font-semibold text-white">New to Hustix Macro?</h3>
-          <p className="text-sm text-slate-400">
-            Register for a new account to create advisor profiles and run macro scenario analytics.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/signup"
-              className="inline-flex items-center text-sm font-semibold text-indigo-400 hover:text-indigo-300"
-            >
-              Explore Scenarios Free &rarr;
-            </Link>
-          </div>
+        <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-6 transition hover:border-slate-700">
+          <h3 className="text-lg font-semibold text-white">Run Sophisticated Economic Scenarios In Seconds</h3>
+          <ul className="list-disc space-y-3 pl-5 text-sm text-slate-400">
+            <li>
+              <span className="font-medium text-slate-200">Monetary Policy Shocks:</span> Model sudden, aggressive Federal Reserve rate hikes or unexpected quantitative tightening regimes.
+            </li>
+            <li>
+              <span className="font-medium text-slate-200">Inflation & Stagflation Regimes:</span> Test portfolio resilience against persistent sticky inflation and contracting GDP growth.
+            </li>
+            <li>
+              <span className="font-medium text-slate-200">Systemic Recessions:</span> Simulate historical market drawdowns (like 1970s stagflation or the 2008 financial crisis) mapped against your modern asset mix.
+            </li>
+          </ul>
         </div>
+      </section>
+
+      <section className="mx-auto mb-10 w-full max-w-2xl space-y-4 text-center">
+        <Link
+          href="/signup"
+          className="inline-flex rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-indigo-500/10 transition-all hover:bg-indigo-500"
+        >
+          Get Started Free
+        </Link>
+        <p className="text-sm text-slate-400">
+          Create your advisor profile, build up to 3 custom ticker-based portfolios, and run unlimited baseline recession stress-tests. No credit card required.
+        </p>
       </section>
 
       {/* Footer */}
