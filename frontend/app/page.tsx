@@ -9,7 +9,7 @@ export default function HomePage() {
       {/* Header Bar */}
       <header className="w-full max-w-6xl mx-auto flex justify-between items-center py-4 border-b border-slate-800">
         <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-indigo-500 animate-pulse" />
+          <img src="/favicon.png" alt="" className="h-8 w-8 rounded-lg" />
           <h1 className="text-xl font-bold tracking-tight text-white">
             Hustix <span className="text-indigo-400">Macro</span>
           </h1>
