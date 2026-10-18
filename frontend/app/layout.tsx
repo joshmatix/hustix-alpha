@@ -4,6 +4,13 @@ import SiteFooter from '@/components/layout/SiteFooter';
 export const metadata = {
   title: 'Hustix Macro',
   description: 'Stress-test client portfolios against macroeconomic shocks.',
+  icons: {
+    icon: {
+      url: '/favicon.png',
+      type: 'image/png',
+      sizes: '48x48',
+    },
+  },
 };
 
 export default function RootLayout({
