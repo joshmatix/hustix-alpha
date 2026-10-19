@@ -123,6 +123,10 @@ export default function HomePage() {
           <Link href="/agreement" className="text-indigo-300 hover:text-indigo-200">
             Customer Agreement
           </Link>
+          <span className="px-2">·</span>
+          <Link href="/contact" className="text-indigo-300 hover:text-indigo-200">
+            Any questions?
+          </Link>
         </p>
       </footer>
     </main>
