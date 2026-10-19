@@ -45,7 +45,7 @@ export default function SiteFooter() {
     };
   }, []);
 
-  if (pathname === '/login' || pathname === '/') return null;
+  if (pathname === '/login' || pathname === '/' || pathname === '/auth/callback') return null;
 
   return (
     <footer className="border-t border-slate-900 px-6 py-4 text-center">

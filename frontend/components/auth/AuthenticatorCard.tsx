@@ -1,8 +1,8 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { beginAuthenticatorEnrollment, qrCodeSrc } from '@/lib/mfa';
+import { authenticatorDigits, beginAuthenticatorEnrollment, qrCodeSrc } from '@/lib/mfa';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -22,6 +22,7 @@ export default function AuthenticatorCard() {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [code, setCode] = useState('');
   const [status, setStatus] = useState<Status>(null);
+  const codeLock = useRef(false);
 
   async function load() {
     const { data, error } = await supabase.auth.mfa.listFactors();
@@ -55,24 +56,34 @@ export default function AuthenticatorCard() {
     setStatus({ text: result.message, type: 'error' });
   }
 
-  async function confirmSetup(event: FormEvent) {
-    event.preventDefault();
-    if (!setup) return;
+  async function verifyCode(raw: string) {
+    const next = authenticatorDigits(raw);
+    if (!setup || next.length !== 6 || codeLock.current) return;
+    codeLock.current = true;
     setBusy(true);
     setStatus(null);
     const { error } = await supabase.auth.mfa.challengeAndVerify({
       factorId: setup.factorId,
-      code: code.trim(),
+      code: next,
     });
-    setBusy(false);
     if (error) {
       setStatus({ text: error.message, type: 'error' });
+      setCode('');
+      setBusy(false);
+      codeLock.current = false;
       return;
     }
     setSetup(null);
     setCode('');
     setFactorId(setup.factorId);
+    setBusy(false);
+    codeLock.current = false;
     setStatus({ text: 'Authenticator app is on. Sign-in will ask for a code.', type: 'success' });
+  }
+
+  function confirmSetup(event: FormEvent) {
+    event.preventDefault();
+    void verifyCode(code);
   }
 
   async function cancelSetup() {
@@ -91,7 +102,7 @@ export default function AuthenticatorCard() {
       ) : setup ? (
         <form onSubmit={confirmSetup} className="space-y-4">
           <p className="text-sm text-slate-300">
-            Scan this code with an authenticator app, then enter the 6-digit code it shows.
+            Scan this code with an authenticator app, then enter the 6-digit code it shows. A valid code continues on its own.
           </p>
           <img
             src={qrCodeSrc(setup.qrCode)}
@@ -107,8 +118,13 @@ export default function AuthenticatorCard() {
             inputMode="numeric"
             autoComplete="one-time-code"
             autoFocus
+            maxLength={6}
             value={code}
-            onChange={(event) => setCode(event.target.value)}
+            onChange={(event) => {
+              const next = authenticatorDigits(event.target.value);
+              setCode(next);
+              if (next.length === 6) void verifyCode(next);
+            }}
             placeholder="123456"
           />
           <div className="flex items-center gap-3">

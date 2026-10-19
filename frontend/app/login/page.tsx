@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { authenticatorStillRequired, hasVerifiedAuthenticator } from '@/lib/mfa';
+import { authenticatorDigits, authenticatorStillRequired, hasVerifiedAuthenticator } from '@/lib/mfa';
+import { oauthErrorMessage, startOAuth, type OAuthProvider } from '@/lib/oauth';
+import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -15,6 +17,7 @@ export default function LoginPage() {
   const [step, setStep] = useState<'password' | 'code'>('password');
   const [factorId, setFactorId] = useState('');
   const [code, setCode] = useState('');
+  const codeLock = useRef(false);
   const router = useRouter();
 
   async function beginAuthenticator() {
@@ -41,6 +44,16 @@ export default function LoginPage() {
       if (needsCode) void beginAuthenticator();
     });
   }, []);
+
+  const handleOAuth = async (provider: OAuthProvider) => {
+    setLoading(true);
+    setError(null);
+    const oauthError = await startOAuth(provider);
+    if (oauthError) {
+      setError(oauthErrorMessage(oauthError.message, provider));
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,20 +84,29 @@ export default function LoginPage() {
     router.push('/dashboard');
   };
 
-  const handleCode = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const verifyCode = async (raw: string) => {
+    const next = authenticatorDigits(raw);
+    if (next.length !== 6 || !factorId || codeLock.current) return;
+    codeLock.current = true;
     setLoading(true);
     setError(null);
     const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
       factorId,
-      code: code.trim(),
+      code: next,
     });
     if (verifyError) {
       setError(verifyError.message);
+      setCode('');
       setLoading(false);
+      codeLock.current = false;
       return;
     }
     router.push('/dashboard');
+  };
+
+  const handleCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    void verifyCode(code);
   };
 
   return (
@@ -112,7 +134,7 @@ export default function LoginPage() {
           </h2>
           <p className="text-xs text-slate-400">
             {step === 'code'
-              ? 'Enter the 6-digit code from your authenticator app.'
+              ? 'Enter the 6-digit code from your authenticator app. A valid code continues on its own.'
               : 'Enter your credentials to access your macro-risk workspace.'}
           </p>
         </div>
@@ -144,8 +166,13 @@ export default function LoginPage() {
                 autoComplete="one-time-code"
                 autoFocus
                 required
+                maxLength={6}
                 value={code}
-                onChange={(event) => setCode(event.target.value)}
+                onChange={(event) => {
+                  const next = authenticatorDigits(event.target.value);
+                  setCode(next);
+                  if (next.length === 6) void verifyCode(next);
+                }}
                 className="w-full rounded-lg border border-slate-800 bg-slate-950/70 px-4 py-3 text-sm text-white placeholder-slate-500 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                 placeholder="123456"
               />
@@ -173,6 +200,8 @@ export default function LoginPage() {
             </button>
           </form>
         ) : (
+        <>
+        <OAuthButtons disabled={loading} onProvider={(provider) => void handleOAuth(provider)} />
         <form onSubmit={handleLogin} className="space-y-5">
           <div className="flex flex-col">
             <label className="block text-xs font-medium text-slate-300 mb-2 leading-none">
@@ -223,6 +252,7 @@ export default function LoginPage() {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
+        </>
         )}
 
         {/* Card Footer */}
@@ -238,3 +268,4 @@ export default function LoginPage() {
     </main>
   );
 }
+
