@@ -10,3 +10,7 @@ CREATE TABLE IF NOT EXISTS public.contact_inquiries (
 );
 
 ALTER TABLE public.contact_inquiries ENABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON public.contact_inquiries TO service_role;
+
+NOTIFY pgrst, 'reload schema';

@@ -6,6 +6,7 @@ for scrapers. Questions from the homepage form are stored for the team.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import time
@@ -16,9 +17,11 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from database import supabase
+from mailer import send_inquiry_email
 from routers.portfolios import _require_user_id
 
 router = APIRouter(prefix="/api/support", tags=["Support"])
+log = logging.getLogger(__name__)
 
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _HITS: dict[str, list[float]] = defaultdict(list)
@@ -71,14 +74,18 @@ def create_inquiry(body: Inquiry, request: Request):
     if not _allow(ip):
         raise HTTPException(status_code=429, detail="Please wait before sending another question.")
 
-    if supabase is None:
-        raise HTTPException(status_code=503, detail="Questions cannot be sent right now.")
-
     name, email, message = cleaned
+    if supabase is not None:
+        try:
+            supabase.table("contact_inquiries").insert(
+                {"name": name, "email": email, "message": message}
+            ).execute()
+        except Exception:
+            log.exception("contact inquiry was not stored")
+
     try:
-        supabase.table("contact_inquiries").insert(
-            {"name": name, "email": email, "message": message}
-        ).execute()
+        send_inquiry_email(name, email, message)
     except Exception:
+        log.exception("contact inquiry email was not sent")
         raise HTTPException(status_code=503, detail="Questions cannot be sent right now.")
     return {"ok": True}
