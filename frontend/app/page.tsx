@@ -5,7 +5,7 @@ import HeroReel from '@/components/home/HeroReel';
 
 export default function HomePage() {
   return (
-    <main className="flex flex-1 flex-col justify-between bg-slate-950 p-6 text-slate-100 md:p-12">
+    <main className="flex flex-1 flex-col bg-slate-950 p-6 text-slate-100 md:p-12">
       {/* Header Bar */}
       <header className="w-full max-w-6xl mx-auto flex justify-between items-center py-4 border-b border-slate-800">
         <div className="flex items-center gap-2">
@@ -32,14 +32,14 @@ export default function HomePage() {
         </div>
       </header>
 
-      <section className="mx-auto my-12 w-full max-w-6xl lg:my-16">
+      <section className="mx-auto mb-12 mt-4 w-full max-w-6xl lg:mb-16 lg:mt-6">
         <div className="grid grid-cols-1 items-start sm:grid-cols-12 sm:gap-6 lg:gap-12">
           <div className="mb-8 space-y-4 text-left sm:col-span-5 sm:mb-0 lg:space-y-6">
             <div className="inline-block rounded-full border border-indigo-800/50 bg-indigo-950/80 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-300">
               B2B Macro-Risk Engine
             </div>
 
-            <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-white sm:text-3xl lg:text-5xl">
+            <h2 className="text-xl font-bold leading-snug tracking-tight text-white sm:text-2xl lg:text-4xl">
               Quantify Macroeconomic Risk for Wealth Advisors
             </h2>
 
@@ -117,7 +117,7 @@ export default function HomePage() {
       </section>
 
       {/* Footer */}
-      <footer className="mx-auto w-full max-w-6xl space-y-2 border-t border-slate-900 pt-6 text-center text-xs text-slate-500">
+      <footer className="mx-auto mt-auto w-full max-w-6xl space-y-2 border-t border-slate-900 pt-6 text-center text-xs text-slate-500">
         <p>Hustix Macro &copy; {new Date().getFullYear()} — Quantitative Portfolio Simulation</p>
         <p>
           <Link href="/agreement" className="text-indigo-300 hover:text-indigo-200">
