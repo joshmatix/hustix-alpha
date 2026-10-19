@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabaseClient';
 import { ensureProfile } from '@/lib/ensureProfile';
 import { AGREEMENT_TITLE, AGREEMENT_VERSION } from '@/lib/agreement';
 import { hasVerifiedAuthenticator } from '@/lib/mfa';
+import { oauthErrorMessage, startOAuth, type OAuthProvider } from '@/lib/oauth';
+import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import AuthenticatorEnroll from '@/components/auth/AuthenticatorEnroll';
 import { signupPlanDetail } from '@/lib/planLimits';
 import AgreementBody from '@/components/auth/AgreementBody';
@@ -35,10 +37,13 @@ export default function SignupPage() {
   const [plans, setPlans] = useState<CatalogPlan[]>([]);
   const [plan, setPlan] = useState('free');
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [plansLoading, setPlansLoading] = useState(true);
   const [agreed, setAgreed] = useState(false);
   const [step, setStep] = useState<'account' | 'authenticator'>('account');
+  const [oauthUserId, setOauthUserId] = useState<string | null>(null);
+  const [activeEmail, setActiveEmail] = useState<string | null>(null);
   const router = useRouter();
   const selected = plans.find((option) => option.code === plan) || plans[0];
 
@@ -58,19 +63,59 @@ export default function SignupPage() {
     });
 
     void supabase.auth.getSession().then(async ({ data }) => {
-      if (!data.session) return;
-      if (await hasVerifiedAuthenticator()) {
-        router.replace('/dashboard');
+      const session = data.session;
+      if (!session) return;
+      const signedInEmail = session.user.email ?? null;
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('agreement_version, firm_name')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      if (!profile?.agreement_version) {
+        setOauthUserId(session.user.id);
+        if (signedInEmail) setEmail(signedInEmail);
+        if (profile?.firm_name) setFirmName(profile.firm_name);
         return;
       }
-      setStep('authenticator');
+      setActiveEmail(signedInEmail);
+      if (!(await hasVerifiedAuthenticator())) {
+        setStep('authenticator');
+      }
     });
   }, [router]);
+
+  const startFreshAccount = async () => {
+    setLoading(true);
+    setError(null);
+    setNotice(null);
+    await supabase.auth.signOut();
+    setOauthUserId(null);
+    setActiveEmail(null);
+    setEmail('');
+    setFirmName('');
+    setPassword('');
+    setAgreed(false);
+    setStep('account');
+    setLoading(false);
+  };
+
+  const handleOAuth = async (provider: OAuthProvider) => {
+    setLoading(true);
+    setError(null);
+    setNotice(null);
+    if (activeEmail) await supabase.auth.signOut();
+    const oauthError = await startOAuth(provider);
+    if (oauthError) {
+      setError(oauthErrorMessage(oauthError.message, provider));
+      setLoading(false);
+    }
+  };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setNotice(null);
 
     if (!agreed) {
       setError('Check the box to accept the customer agreement.');
@@ -86,6 +131,33 @@ export default function SignupPage() {
     }
 
     const acceptedAt = new Date().toISOString();
+    if (oauthUserId) {
+      const profileError = await ensureProfile(oauthUserId);
+      if (profileError) {
+        setError(profileError.message);
+        setLoading(false);
+        return;
+      }
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          firm_name: firm,
+          agreement_version: AGREEMENT_VERSION,
+          agreement_accepted_at: acceptedAt,
+        })
+        .eq('id', oauthUserId);
+      if (updateError) {
+        setError(updateError.message);
+        setLoading(false);
+        return;
+      }
+      setLoading(false);
+      setStep('authenticator');
+      return;
+    }
+
+    if (activeEmail) await supabase.auth.signOut();
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -138,7 +210,7 @@ export default function SignupPage() {
       return;
     }
 
-    setError('Confirm the email, then sign in. The authenticator app is required before the dashboard opens.');
+    setNotice('You are not signed in. Sign in if this address already has an account. A new address gets a confirmation message before sign-in. The authenticator app is required before the dashboard opens.');
     setLoading(false);
   };
 
@@ -159,7 +231,7 @@ export default function SignupPage() {
         {/* Card Header */}
         <div className="space-y-2 text-center">
           <div className="inline-flex items-center gap-2 mb-2">
-            <div className="h-2.5 w-2.5 rounded-full bg-indigo-500 animate-pulse" />
+            <img src="/favicon.png" alt="" className="h-6 w-6 rounded-md" />
             <span className="text-xs font-bold tracking-wider text-slate-400 uppercase">Hustix Macro</span>
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-white">
@@ -168,11 +240,22 @@ export default function SignupPage() {
           <p className="text-xs text-slate-400">
             {step === 'authenticator'
               ? 'Add an authenticator app to finish this account.'
-              : 'Register as a wealth advisor to start running scenario analytics.'}
+              : oauthUserId
+                ? 'Confirm your firm and accept the agreement to finish this sign-in.'
+                : 'Register as a wealth advisor to start running scenario analytics.'}
           </p>
         </div>
 
         {/* Error Banner */}
+        {notice && (
+          <div className="p-3 bg-slate-800/80 border border-slate-700 text-slate-200 text-xs rounded-lg">
+            {notice}{' '}
+            <Link href="/login" className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline">
+              Sign in
+            </Link>
+          </div>
+        )}
+
         {error && (
           <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-lg flex items-center gap-2">
             <span>&bull;</span>
@@ -181,10 +264,30 @@ export default function SignupPage() {
         )}
 
         {/* Form with Aligned Spacing */}
+        {activeEmail && step === 'account' && oauthUserId === null && (
+          <div className="p-3 bg-slate-800/80 border border-slate-700 text-slate-200 text-xs rounded-lg">
+            This browser is signed in as {activeEmail}. Enter another email to create a separate account. Submitting signs that session out.
+          </div>
+        )}
+
         {step === 'authenticator' ? (
-          <AuthenticatorEnroll onVerified={() => router.push('/dashboard')} />
+          <>
+            <AuthenticatorEnroll onVerified={() => router.push('/dashboard')} />
+            <button
+              type="button"
+              onClick={() => void startFreshAccount()}
+              className="w-full text-center text-xs font-medium text-slate-400 hover:text-slate-200"
+            >
+              Create an account with another email
+            </button>
+          </>
         ) : (
+        <>
+        {oauthUserId === null && (
+          <OAuthButtons disabled={loading} onProvider={(provider) => void handleOAuth(provider)} />
+        )}
         <form onSubmit={handleSignup} className="space-y-5">
+          {oauthUserId === null && (
           <fieldset className="space-y-2">
             <legend className="block text-xs font-medium text-slate-300 mb-2 leading-none">
               Account
@@ -225,6 +328,7 @@ export default function SignupPage() {
               Choosing a paid plan records that monthly price. This screen does not charge a card.
             </p>
           </fieldset>
+          )}
 
           <div className="flex flex-col">
             <label className="block text-xs font-medium text-slate-300 mb-2 leading-none" htmlFor="firm-name">
@@ -249,13 +353,15 @@ export default function SignupPage() {
             <input
               type="email"
               required
+              readOnly={oauthUserId !== null}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition"
+              className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition read-only:text-slate-400"
               placeholder="advisor@example.com"
             />
           </div>
 
+          {oauthUserId === null && (
           <div className="flex flex-col">
             <label className="block text-xs font-medium text-slate-300 mb-2 leading-none">
               Password
@@ -269,6 +375,7 @@ export default function SignupPage() {
               placeholder="Create a strong password"
             />
           </div>
+          )}
 
           <div className="rounded-lg border border-slate-800 bg-slate-950/70">
             <div className="max-h-56 overflow-y-auto px-4 py-3">
@@ -294,12 +401,22 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={loading || email.trim() === '' || password === ''}
+            disabled={loading || email.trim() === '' || (oauthUserId === null && password === '')}
             className="w-full py-3 mt-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white font-semibold rounded-lg text-sm transition shadow-lg shadow-indigo-600/20"
           >
-            {loading ? 'Creating Account...' : 'I agree and create account'}
+            {loading ? 'Creating Account...' : oauthUserId ? 'I agree and continue' : 'I agree and create account'}
           </button>
+          {oauthUserId && (
+            <button
+              type="button"
+              onClick={() => void startFreshAccount()}
+              className="w-full text-center text-xs font-medium text-slate-400 hover:text-slate-200"
+            >
+              Create an account with another email
+            </button>
+          )}
         </form>
+        </>
         )}
 
         {/* Card Footer */}

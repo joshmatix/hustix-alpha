@@ -1,14 +1,15 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { beginAuthenticatorEnrollment, qrCodeSrc, type AuthenticatorSetup } from '@/lib/mfa';
+import { authenticatorDigits, beginAuthenticatorEnrollment, qrCodeSrc, type AuthenticatorSetup } from '@/lib/mfa';
 
 export default function AuthenticatorEnroll({ onVerified }: { onVerified: () => void }) {
   const [setup, setSetup] = useState<AuthenticatorSetup | null>(null);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const codeLock = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,27 +36,35 @@ export default function AuthenticatorEnroll({ onVerified }: { onVerified: () => 
     };
   }, []);
 
-  async function confirm(event: FormEvent) {
-    event.preventDefault();
-    if (!setup) return;
+  async function verifyCode(raw: string) {
+    const next = authenticatorDigits(raw);
+    if (!setup || next.length !== 6 || codeLock.current) return;
+    codeLock.current = true;
     setBusy(true);
     setError(null);
     const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
       factorId: setup.factorId,
-      code: code.trim(),
+      code: next,
     });
-    setBusy(false);
     if (verifyError) {
       setError(verifyError.message);
+      setCode('');
+      setBusy(false);
+      codeLock.current = false;
       return;
     }
     onVerified();
   }
 
+  function confirm(event: FormEvent) {
+    event.preventDefault();
+    void verifyCode(code);
+  }
+
   return (
     <form onSubmit={confirm} className="space-y-4">
       <p className="text-sm text-slate-300">
-        Scan this code with an authenticator app, then enter the 6-digit code it shows. This step is required to finish creating the account.
+        Scan this code with an authenticator app, then enter the 6-digit code it shows. A valid code continues on its own. This step is required to finish creating the account.
       </p>
       {setup ? (
         <>
@@ -82,8 +91,13 @@ export default function AuthenticatorEnroll({ onVerified }: { onVerified: () => 
           autoComplete="one-time-code"
           autoFocus
           required
+          maxLength={6}
           value={code}
-          onChange={(event) => setCode(event.target.value)}
+          onChange={(event) => {
+            const next = authenticatorDigits(event.target.value);
+            setCode(next);
+            if (next.length === 6) void verifyCode(next);
+          }}
           className="w-full rounded-lg border border-slate-800 bg-slate-950/70 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
           placeholder="123456"
         />

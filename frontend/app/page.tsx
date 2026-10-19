@@ -1,14 +1,34 @@
 'use client';
 
+import { useLayoutEffect, useRef } from 'react';
 import Link from 'next/link';
+import HeroReel from '@/components/home/HeroReel';
 
 export default function HomePage() {
+  const heroRef = useRef<HTMLElement>(null);
+  const headlineRef = useRef<HTMLHeadingElement>(null);
+
+  useLayoutEffect(() => {
+    const headline = headlineRef.current;
+    const hero = heroRef.current;
+    if (!headline || !hero) return;
+
+    const alignWindow = () => {
+      hero.style.setProperty('--window-pull', `${headline.getBoundingClientRect().height / 2}px`);
+    };
+
+    alignWindow();
+    const observer = new ResizeObserver(alignWindow);
+    observer.observe(headline);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <main className="flex flex-1 flex-col justify-between bg-slate-950 p-6 text-slate-100 md:p-12">
+    <main className="flex flex-1 flex-col bg-slate-950 px-6 pb-6 pt-4 text-slate-100 md:px-12 md:pb-12 md:pt-8">
       {/* Header Bar */}
       <header className="w-full max-w-6xl mx-auto flex justify-between items-center py-4 border-b border-slate-800">
         <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-indigo-500 animate-pulse" />
+          <img src="/favicon.png" alt="" className="h-8 w-8 rounded-lg" />
           <h1 className="text-xl font-bold tracking-tight text-white">
             Hustix <span className="text-indigo-400">Macro</span>
           </h1>
@@ -31,28 +51,44 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Hero Content Section */}
-      <section className="w-full max-w-4xl mx-auto text-center my-16 space-y-6">
-        <div className="inline-block px-3 py-1 rounded-full bg-indigo-950/80 border border-indigo-800/50 text-indigo-300 text-xs font-semibold uppercase tracking-wider">
-          B2B Macro-Risk Engine
+      <section
+        ref={heroRef}
+        className="mx-auto mb-8 mt-4 w-full max-w-6xl lg:mb-12 lg:mt-6"
+        style={{ '--window-pull': '0px' } as React.CSSProperties}
+      >
+        <div className="grid grid-cols-1 items-start sm:grid-cols-12 sm:items-stretch sm:gap-x-6 md:grid-cols-[minmax(0,calc(50%-0.75rem))_minmax(0,1fr)]">
+          <div className="space-y-4 text-left sm:col-span-5 sm:col-start-1 sm:row-start-1 md:col-span-1 md:col-start-1 lg:space-y-6">
+            <div className="inline-block rounded-full border border-indigo-800/50 bg-indigo-950/80 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-300">
+              B2B Macro-Risk Engine
+            </div>
+
+            <h2
+              ref={headlineRef}
+              className="text-xl font-bold leading-snug tracking-tight text-white sm:text-2xl lg:text-4xl"
+            >
+              Quantify Macroeconomic Risk for Wealth Advisors
+            </h2>
+          </div>
+
+          <div className="mb-8 space-y-4 pt-4 text-left sm:col-span-5 sm:col-start-1 sm:row-start-2 sm:mb-0 md:col-span-1 md:col-start-1 lg:space-y-6 lg:pt-6">
+            <p className="text-sm font-normal text-slate-400 sm:text-base lg:text-lg">
+              Stress-test client portfolios against stagflation, rate shocks, and recession scenarios using institutional-grade Monte Carlo simulations.
+            </p>
+            <Link
+              href="/signup"
+              className="inline-flex rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-indigo-500/10 transition-all hover:bg-indigo-500"
+            >
+              Get Started Free
+            </Link>
+            <p className="text-sm font-normal text-slate-500 md:text-base">
+              Built for modern ticker-based allocations. Instantly model multi-asset portfolios across traditional equities, fixed income, and spot Bitcoin—no manual mapping required.
+            </p>
+          </div>
+
+          <div className="sm:col-span-7 sm:col-start-6 sm:row-start-2 sm:min-h-0 md:col-span-1 md:col-start-2">
+            <HeroReel />
+          </div>
         </div>
-        
-        <h2 className="text-4xl md:text-6xl font-extrabold text-white tracking-tight leading-tight">
-          Quantify Macroeconomic Risk for Wealth Advisors
-        </h2>
-        
-        <p className="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto font-normal">
-          Stress-test client portfolios against stagflation, rate shocks, and recession scenarios using institutional-grade Monte Carlo simulations.
-        </p>
-        <Link
-          href="/signup"
-          className="inline-flex rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-indigo-500/10 transition-all hover:bg-indigo-500"
-        >
-          Get Started Free
-        </Link>
-        <p className="mx-auto max-w-2xl text-sm font-normal text-slate-500 md:text-base">
-          Built for modern ticker-based allocations. Instantly model portfolios composed of Bond ETFs, Mutual Funds, and Equities without manual spreadsheet mapping.
-        </p>
       </section>
 
       <section className="mx-auto mb-12 grid w-full max-w-4xl grid-cols-1 gap-6 md:grid-cols-2">
@@ -100,11 +136,23 @@ export default function HomePage() {
       </section>
 
       {/* Footer */}
-      <footer className="mx-auto w-full max-w-6xl space-y-2 border-t border-slate-900 pt-6 text-center text-xs text-slate-500">
+      <footer className="mx-auto mt-auto w-full max-w-6xl space-y-2 border-t border-slate-900 pt-6 text-center text-xs text-slate-500">
         <p>Hustix Macro &copy; {new Date().getFullYear()} — Quantitative Portfolio Simulation</p>
         <p>
           <Link href="/agreement" className="text-indigo-300 hover:text-indigo-200">
             Customer Agreement
+          </Link>
+          <span className="px-2">·</span>
+          <Link href="/privacy" className="text-indigo-300 hover:text-indigo-200">
+            Privacy Policy
+          </Link>
+          <span className="px-2">·</span>
+          <Link href="/terms" className="text-indigo-300 hover:text-indigo-200">
+            Terms of Service
+          </Link>
+          <span className="px-2">·</span>
+          <Link href="/contact" className="text-indigo-300 hover:text-indigo-200">
+            Any questions?
           </Link>
         </p>
       </footer>

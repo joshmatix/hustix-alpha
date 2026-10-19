@@ -43,7 +43,7 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-md bg-slate-900/80 border border-slate-800 rounded-2xl p-8 shadow-xl backdrop-blur-sm space-y-6">
         <div className="space-y-2 text-center">
           <div className="inline-flex items-center gap-2 mb-2">
-            <div className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
+            <img src="/favicon.png" alt="" className="h-6 w-6 rounded-md" />
             <span className="text-xs font-bold tracking-wider text-slate-400 uppercase">Hustix Macro</span>
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-white">Reset your password</h2>

@@ -2,8 +2,6 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { API_BASE } from '@/lib/api';
 
 const navItems = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
@@ -14,21 +12,6 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [engineOnline, setEngineOnline] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`${API_BASE}/health`)
-      .then((res) => {
-        if (!cancelled) setEngineOnline(res.ok);
-      })
-      .catch(() => {
-        if (!cancelled) setEngineOnline(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   return (
     <aside className="flex min-h-screen w-64 flex-col justify-between border-r border-slate-800 bg-slate-900 p-4">
@@ -70,22 +53,10 @@ export default function Sidebar() {
       </div>
 
       <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl text-xs text-slate-400">
-        <p className="font-semibold text-slate-300">FastAPI Status</p>
-        <p
-          className={`flex items-center gap-1.5 text-[11px] mt-1 ${
-            engineOnline === false ? 'text-rose-400' : 'text-emerald-400'
-          }`}
-        >
-          <span
-            className={`w-2 h-2 rounded-full ${
-              engineOnline === false ? 'bg-rose-500' : 'bg-emerald-500 animate-pulse'
-            }`}
-          />
-          {engineOnline === null
-            ? 'Checking engine...'
-            : engineOnline
-              ? 'Engine Connected'
-              : 'Engine Offline'}
+        <p className="font-semibold text-slate-300">Advisor Suite</p>
+        <p className="flex items-center gap-1.5 text-[11px] mt-1 text-emerald-400">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          Session Secure
         </p>
       </div>
     </aside>

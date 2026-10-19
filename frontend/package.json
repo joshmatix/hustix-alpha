@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "local-login-bypass:enable": "node scripts/local-login-bypass.mjs enable",
+    "local-login-bypass:disable": "node scripts/local-login-bypass.mjs disable"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.45.4",

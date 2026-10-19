@@ -5,7 +5,11 @@ export const metadata = {
   title: 'Hustix Macro',
   description: 'Stress-test client portfolios against macroeconomic shocks.',
   icons: {
-    icon: '/logo.png',
+    icon: {
+      url: '/favicon.png',
+      type: 'image/png',
+      sizes: '48x48',
+    },
     apple: '/apple-touch-icon.png',
   },
 };

@@ -1,5 +1,10 @@
 import { supabase } from '@/lib/supabaseClient';
 
+/** Keep an authenticator entry to the six digits the app shows. */
+export function authenticatorDigits(value: string) {
+  return value.replace(/\D/g, '').slice(0, 6);
+}
+
 /** True when this account already has an authenticator app. */
 export async function hasVerifiedAuthenticator() {
   const { data, error } = await supabase.auth.mfa.listFactors();

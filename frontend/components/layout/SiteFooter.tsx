@@ -37,7 +37,9 @@ export default function SiteFooter() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(() => {
-      void load();
+      window.setTimeout(() => {
+        void load();
+      }, 0);
     });
     return () => {
       cancelled = true;
@@ -45,13 +47,21 @@ export default function SiteFooter() {
     };
   }, []);
 
-  if (pathname === '/login' || pathname === '/') return null;
+  if (pathname === '/login' || pathname === '/' || pathname === '/auth/callback') return null;
 
   return (
     <footer className="border-t border-slate-900 px-6 py-4 text-center">
       <p className="text-xs text-slate-500">
         <Link href="/agreement" className="text-indigo-300 hover:text-indigo-200">
           Customer Agreement
+        </Link>
+        <span className="px-2">·</span>
+        <Link href="/privacy" className="text-indigo-300 hover:text-indigo-200">
+          Privacy Policy
+        </Link>
+        <span className="px-2">·</span>
+        <Link href="/terms" className="text-indigo-300 hover:text-indigo-200">
+          Terms of Service
         </Link>
         {email ? (
           <>
