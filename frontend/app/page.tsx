@@ -33,7 +33,7 @@ export default function HomePage() {
       </header>
 
       <section className="mx-auto mb-12 mt-4 w-full max-w-6xl lg:mb-16 lg:mt-6">
-        <div className="grid grid-cols-1 items-start sm:grid-cols-12 sm:gap-6 lg:gap-12">
+        <div className="grid grid-cols-1 items-start sm:grid-cols-12 sm:items-stretch sm:gap-6 lg:gap-12">
           <div className="mb-8 space-y-4 text-left sm:col-span-5 sm:mb-0 lg:space-y-6">
             <div className="inline-block rounded-full border border-indigo-800/50 bg-indigo-950/80 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-300">
               B2B Macro-Risk Engine
@@ -57,15 +57,17 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="sm:col-span-7">
-            <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/40">
-              <div className="flex items-center gap-1.5 border-b border-slate-800 px-4 py-3">
+          <div className="sm:col-span-7 sm:min-h-0">
+            <div className="flex h-auto flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/40 sm:h-full">
+              <div className="flex shrink-0 items-center gap-1.5 border-b border-slate-800 px-4 py-3">
                 <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
                 <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
                 <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
               </div>
-              <div className="relative aspect-video overflow-hidden bg-slate-950">
-                <HeroReel />
+              <div className="relative aspect-video overflow-hidden bg-slate-950 sm:aspect-auto sm:min-h-0 sm:flex-1">
+                <div className="absolute inset-0">
+                  <HeroReel />
+                </div>
               </div>
             </div>
           </div>

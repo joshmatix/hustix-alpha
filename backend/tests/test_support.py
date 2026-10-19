@@ -1,5 +1,5 @@
 from mailer import build_inquiry_email
-from routers.support import Inquiry, clean_inquiry
+from routers.support import Inquiry, clean_inquiry, inquiry_accepted
 
 
 def test_clean_inquiry_requires_name_email_and_message():
@@ -21,3 +21,9 @@ def test_inquiry_email_goes_to_support_and_replies_to_the_visitor(monkeypatch):
     assert msg["Reply-To"] == "ada@example.com"
     assert "\n" not in msg["Subject"]
     assert "\r" not in msg["Subject"]
+
+
+def test_a_saved_question_is_accepted_when_mail_cannot_be_sent():
+    assert inquiry_accepted(stored=True, emailed=False)
+    assert inquiry_accepted(stored=False, emailed=True)
+    assert not inquiry_accepted(stored=False, emailed=False)

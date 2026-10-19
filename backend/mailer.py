@@ -43,7 +43,8 @@ def _supabase_mailpit() -> tuple[str, int] | None:
     return host, 1025
 
 
-def _smtp_target() -> tuple[str, int, bool]:
+def smtp_target() -> tuple[str, int, bool] | None:
+    """Where to hand the message, or None when this machine cannot send mail."""
     host = (os.getenv("SMTP_HOST") or "").strip()
     if host:
         port = int(os.getenv("SMTP_PORT") or "587")
@@ -51,7 +52,7 @@ def _smtp_target() -> tuple[str, int, bool]:
     local = _supabase_mailpit()
     if local:
         return local[0], local[1], False
-    raise RuntimeError("No mail server is available")
+    return None
 
 
 def build_inquiry_email(name: str, email: str, message: str) -> EmailMessage:
@@ -67,7 +68,10 @@ def build_inquiry_email(name: str, email: str, message: str) -> EmailMessage:
 
 
 def send_inquiry_email(name: str, email: str, message: str) -> None:
-    host, port, use_tls = _smtp_target()
+    target = smtp_target()
+    if target is None:
+        raise RuntimeError("No mail server is available")
+    host, port, use_tls = target
     user = os.getenv("SMTP_USER") or ""
     password = os.getenv("SMTP_PASSWORD") or ""
     msg = build_inquiry_email(name, email, message)

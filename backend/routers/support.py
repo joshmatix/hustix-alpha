@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import time
+import uuid
 from collections import defaultdict
 from typing import Optional
 
@@ -17,7 +18,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from database import supabase
-from mailer import send_inquiry_email
+from mailer import send_inquiry_email, smtp_target
 from routers.portfolios import _require_user_id
 
 router = APIRouter(prefix="/api/support", tags=["Support"])
@@ -41,6 +42,44 @@ def clean_inquiry(body: Inquiry) -> tuple[str, str, str] | None:
     if not name or not message or not _EMAIL.match(email):
         return None
     return name, email, message
+
+
+def inquiry_accepted(stored: bool, emailed: bool) -> bool:
+    return stored or emailed
+
+
+def _store_inquiry_file(name: str, email: str, message: str) -> None:
+    bucket = "contact-inquiries"
+    try:
+        supabase.storage.create_bucket(bucket, options={"public": False})
+    except Exception:
+        pass
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    path = f"{stamp}-{uuid.uuid4().hex}.txt"
+    body = f"Name: {name}\nEmail: {email}\n\n{message}\n"
+    supabase.storage.from_(bucket).upload(
+        path,
+        body.encode(),
+        file_options={"content-type": "text/plain"},
+    )
+
+
+def _store_inquiry(name: str, email: str, message: str) -> bool:
+    if supabase is None:
+        return False
+    try:
+        supabase.table("contact_inquiries").insert(
+            {"name": name, "email": email, "message": message}
+        ).execute()
+        return True
+    except Exception:
+        log.exception("contact inquiry was not stored in the table")
+    try:
+        _store_inquiry_file(name, email, message)
+        return True
+    except Exception:
+        log.exception("contact inquiry was not stored")
+        return False
 
 
 def _allow(ip: str) -> bool:
@@ -75,17 +114,14 @@ def create_inquiry(body: Inquiry, request: Request):
         raise HTTPException(status_code=429, detail="Please wait before sending another question.")
 
     name, email, message = cleaned
-    if supabase is not None:
+    stored = _store_inquiry(name, email, message)
+    emailed = False
+    if smtp_target() is not None:
         try:
-            supabase.table("contact_inquiries").insert(
-                {"name": name, "email": email, "message": message}
-            ).execute()
+            send_inquiry_email(name, email, message)
+            emailed = True
         except Exception:
-            log.exception("contact inquiry was not stored")
-
-    try:
-        send_inquiry_email(name, email, message)
-    except Exception:
-        log.exception("contact inquiry email was not sent")
+            log.exception("contact inquiry email was not sent")
+    if not inquiry_accepted(stored, emailed):
         raise HTTPException(status_code=503, detail="Questions cannot be sent right now.")
-    return {"ok": True}
+    return {"ok": True, "emailed": emailed}
