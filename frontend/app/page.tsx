@@ -33,8 +33,8 @@ export default function HomePage() {
       </header>
 
       <section className="mx-auto mb-12 mt-4 w-full max-w-6xl lg:mb-16 lg:mt-6">
-        <div className="grid grid-cols-1 items-start sm:grid-cols-12 sm:items-stretch sm:gap-x-6 lg:gap-x-12">
-          <div className="mb-4 space-y-4 text-left sm:col-span-5 sm:col-start-1 sm:row-start-1 lg:mb-6 lg:space-y-6">
+        <div className="grid grid-cols-1 items-start sm:grid-cols-12 sm:items-stretch sm:gap-x-6 md:grid-cols-[minmax(0,calc(50%-0.75rem))_minmax(0,1fr)]">
+          <div className="space-y-4 text-left sm:col-span-5 sm:col-start-1 sm:row-start-1 md:col-span-1 md:col-start-1 lg:space-y-6">
             <div className="inline-block rounded-full border border-indigo-800/50 bg-indigo-950/80 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-300">
               B2B Macro-Risk Engine
             </div>
@@ -44,7 +44,7 @@ export default function HomePage() {
             </h2>
           </div>
 
-          <div className="mb-8 space-y-4 text-left sm:col-span-5 sm:col-start-1 sm:row-start-2 sm:mb-0 lg:space-y-6">
+          <div className="mb-8 space-y-4 pt-4 text-left sm:col-span-5 sm:col-start-1 sm:row-start-2 sm:mb-0 md:col-span-1 md:col-start-1 lg:space-y-6 lg:pt-6">
             <p className="text-sm font-normal text-slate-400 sm:text-base lg:text-lg">
               Stress-test client portfolios against stagflation, rate shocks, and recession scenarios using institutional-grade Monte Carlo simulations.
             </p>
@@ -59,7 +59,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="sm:col-span-7 sm:col-start-6 sm:row-start-2 sm:min-h-0">
+          <div className="sm:col-span-7 sm:col-start-6 sm:row-start-2 sm:min-h-0 md:col-span-1 md:col-start-2">
             <div className="flex h-auto flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/40 sm:h-full">
               <div className="flex shrink-0 items-center gap-1.5 border-b border-slate-800 px-4 py-3">
                 <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
