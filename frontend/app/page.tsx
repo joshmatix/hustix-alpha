@@ -81,7 +81,7 @@ export default function HomePage() {
               Get Started Free
             </Link>
             <p className="text-sm font-normal text-slate-500 md:text-base">
-              Built for modern ticker-based allocations. Instantly model portfolios composed of Bond ETFs, Mutual Funds, and Equities without manual spreadsheet mapping.
+              Built for modern ticker-based allocations. Instantly model multi-asset portfolios across traditional equities, fixed income, and spot Bitcoin—no manual mapping required.
             </p>
           </div>
 

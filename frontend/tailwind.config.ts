@@ -9,6 +9,11 @@ const config: Config = {
   theme: {
     extend: {
       keyframes: {
+        shimmer: {
+          '0%': { backgroundPosition: '200% 0', opacity: '1' },
+          '50%': { opacity: '0.55' },
+          '100%': { backgroundPosition: '-200% 0', opacity: '1' },
+        },
         'hero-reel': {
           '0%, 14%': { transform: 'translateX(0%)' },
           '18%, 32%': { transform: 'translateX(-16.666%)' },
@@ -19,6 +24,7 @@ const config: Config = {
         },
       },
       animation: {
+        shimmer: 'shimmer 1.8s ease-in-out infinite',
         'hero-reel': 'hero-reel 72s ease-in-out infinite',
       },
     },

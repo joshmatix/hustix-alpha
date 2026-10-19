@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import PortfolioTable from '@/components/dashboard/PortfolioTable';
 import AssetAllocationChart from '@/components/dashboard/AssetAllocationChart';
 import RiskGauge from '@/components/dashboard/RiskGauge';
+import { DashboardSkeleton, SkeletonFade } from '@/components/ui/Skeleton';
 import { apiFetch, type Portfolio } from '@/lib/api';
 
 const emptyAllocation = { equities: 0, bonds: 0, realAssets: 0, cash: 0 };
@@ -64,9 +65,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {loading ? (
-        <p className="text-sm text-slate-400">Loading portfolios...</p>
-      ) : (
+      <SkeletonFade loading={loading} skeleton={<DashboardSkeleton />}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
             <PortfolioTable
@@ -86,7 +85,7 @@ export default function DashboardPage() {
             <AssetAllocationChart allocation={selected?.asset_allocation || emptyAllocation} />
           </div>
         </div>
-      )}
+      </SkeletonFade>
     </div>
   );
 }

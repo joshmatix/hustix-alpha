@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import Card from '@/components/ui/Card';
+import { AdvisorProfileSkeleton, ReportHeaderSkeleton, SkeletonFade } from '@/components/ui/Skeleton';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { portfolioLimitSentence } from '@/lib/planLimits';
@@ -284,9 +285,7 @@ export default function ProfilePage() {
         title="Advisor"
         subtitle="The name is printed on the right side of both reports."
       >
-        {loading ? (
-          <div className="py-8 text-center text-slate-400 text-sm">Loading profile...</div>
-        ) : (
+        <SkeletonFade loading={loading} skeleton={<AdvisorProfileSkeleton />}>
           <form onSubmit={handleUpdateProfile} className="space-y-4 mt-2">
             <div>
               <p className="text-xs font-medium text-slate-300">Account</p>
@@ -402,7 +401,7 @@ export default function ProfilePage() {
               <StatusLine status={nameStatus} />
             </div>
           </form>
-        )}
+        </SkeletonFade>
       </Card>
 
       <Card title="Password" subtitle="Choose a new password for this account.">
@@ -438,9 +437,7 @@ export default function ProfilePage() {
         title="Report header"
         subtitle="Upload the firm JSON for colors, logo, date, and report id."
       >
-        {loading ? (
-          <div className="py-8 text-center text-slate-400 text-sm">Loading header...</div>
-        ) : (
+        <SkeletonFade loading={loading} skeleton={<ReportHeaderSkeleton />}>
           <div className="space-y-4">
             <p className="text-sm text-slate-300">{headerLabel(reportHeader)}</p>
             <p className="text-xs text-slate-500">
@@ -481,7 +478,7 @@ export default function ProfilePage() {
               <StatusLine status={headerStatus} />
             </div>
           </div>
-        )}
+        </SkeletonFade>
       </Card>
     </div>
   );

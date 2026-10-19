@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import CreatePortfolioModal from '@/components/CreatePortfolioModal';
 import DeletePortfolioModal from '@/components/DeletePortfolioModal';
 import Button from '@/components/ui/Button';
+import { PortfolioListSkeleton, SkeletonFade } from '@/components/ui/Skeleton';
 import { apiFetch, type Holding, type Portfolio } from '@/lib/api';
 import { portfolioLimitSentence } from '@/lib/planLimits';
 import { supabase } from '@/lib/supabaseClient';
@@ -273,9 +274,8 @@ export default function PortfoliosPage() {
         </div>
       )}
 
-      {isLoading ? (
-        <div className="py-12 text-center text-slate-400">Loading portfolios...</div>
-      ) : portfolios.length === 0 ? (
+      <SkeletonFade loading={isLoading} skeleton={<PortfolioListSkeleton />}>
+        {portfolios.length === 0 ? (
         <div className="rounded-xl border-2 border-dashed border-slate-700 p-12 text-center">
           <h3 className="text-lg font-medium text-white">No portfolios available</h3>
           <p className="mt-1 text-sm text-slate-400">
@@ -363,7 +363,8 @@ export default function PortfoliosPage() {
           ))}
         </div>
         </>
-      )}
+        )}
+      </SkeletonFade>
 
       {selectedId && (
         <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
