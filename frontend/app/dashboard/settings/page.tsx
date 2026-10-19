@@ -409,6 +409,7 @@ export default function ProfilePage() {
           <Input
             label="New password"
             type="password"
+            reveal
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -417,6 +418,7 @@ export default function ProfilePage() {
           <Input
             label="Confirm password"
             type="password"
+            reveal
             autoComplete="new-password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
