@@ -19,7 +19,7 @@ const config: Config = {
         },
       },
       animation: {
-        'hero-reel': 'hero-reel 48s ease-in-out infinite',
+        'hero-reel': 'hero-reel 72s ease-in-out infinite',
       },
     },
   },

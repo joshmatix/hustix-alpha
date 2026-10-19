@@ -32,32 +32,43 @@ export default function HomePage() {
         </div>
       </header>
 
-      <section className="relative -mx-6 my-10 overflow-hidden px-6 py-16 md:-mx-12 md:px-12">
-        <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-          <HeroReel />
-          <div className="absolute inset-0 bg-black/20" />
-        </div>
-        <div className="relative z-10 mx-auto max-w-4xl space-y-6 text-center">
-          <div className="inline-block px-3 py-1 rounded-full bg-indigo-950/80 border border-indigo-800/50 text-indigo-300 text-xs font-semibold uppercase tracking-wider">
-            B2B Macro-Risk Engine
+      <section className="mx-auto my-12 w-full max-w-6xl lg:my-16">
+        <div className="grid grid-cols-1 items-start sm:grid-cols-12 sm:gap-6 lg:gap-12">
+          <div className="mb-8 space-y-4 text-left sm:col-span-5 sm:mb-0 lg:space-y-6">
+            <div className="inline-block rounded-full border border-indigo-800/50 bg-indigo-950/80 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-300">
+              B2B Macro-Risk Engine
+            </div>
+
+            <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-white sm:text-3xl lg:text-5xl">
+              Quantify Macroeconomic Risk for Wealth Advisors
+            </h2>
+
+            <p className="text-sm font-normal text-slate-400 sm:text-base lg:text-lg">
+              Stress-test client portfolios against stagflation, rate shocks, and recession scenarios using institutional-grade Monte Carlo simulations.
+            </p>
+            <Link
+              href="/signup"
+              className="inline-flex rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-indigo-500/10 transition-all hover:bg-indigo-500"
+            >
+              Get Started Free
+            </Link>
+            <p className="text-sm font-normal text-slate-500 md:text-base">
+              Built for modern ticker-based allocations. Instantly model portfolios composed of Bond ETFs, Mutual Funds, and Equities without manual spreadsheet mapping.
+            </p>
           </div>
 
-          <h2 className="text-4xl md:text-6xl font-extrabold text-white tracking-tight leading-tight">
-            Quantify Macroeconomic Risk for Wealth Advisors
-          </h2>
-
-          <p className="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto font-normal">
-            Stress-test client portfolios against stagflation, rate shocks, and recession scenarios using institutional-grade Monte Carlo simulations.
-          </p>
-          <Link
-            href="/signup"
-            className="inline-flex rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-indigo-500/10 transition-all hover:bg-indigo-500"
-          >
-            Get Started Free
-          </Link>
-          <p className="mx-auto max-w-2xl text-sm font-normal text-slate-500 md:text-base">
-            Built for modern ticker-based allocations. Instantly model portfolios composed of Bond ETFs, Mutual Funds, and Equities without manual spreadsheet mapping.
-          </p>
+          <div className="sm:col-span-7">
+            <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/40">
+              <div className="flex items-center gap-1.5 border-b border-slate-800 px-4 py-3">
+                <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
+                <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
+                <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
+              </div>
+              <div className="relative aspect-video overflow-hidden bg-slate-950">
+                <HeroReel />
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
