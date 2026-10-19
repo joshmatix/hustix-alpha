@@ -3,7 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-const slides = [
+type Slide = {
+  src: string;
+  side: 'left' | 'right';
+  alt: string;
+  duplicate?: boolean;
+};
+
+const slides: Slide[] = [
   {
     src: '/hero/portfolio.png',
     side: 'left',
@@ -35,9 +42,7 @@ const slides = [
     alt: '',
     duplicate: true,
   },
-] as const;
-
-type Slide = (typeof slides)[number];
+];
 
 type PopupBox = {
   left: number;
@@ -119,13 +124,24 @@ export default function HeroReel() {
     setBox(popupBox(frame.getBoundingClientRect()));
   }
 
-  function scheduleClose(event?: { relatedTarget: EventTarget | null }) {
+  function pointInside(node: HTMLElement | null, x: number, y: number) {
+    if (!node) return false;
+    const rect = node.getBoundingClientRect();
+    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+  }
+
+  function scheduleClose(event?: { relatedTarget: EventTarget | null; clientX?: number; clientY?: number }) {
     const next = event?.relatedTarget;
     if (next instanceof Node) {
       if (frameRef.current?.contains(next) || popupRef.current?.contains(next)) return;
     }
+    const x = event?.clientX;
+    const y = event?.clientY;
     cancelClose();
     closeTimer.current = window.setTimeout(() => {
+      if (typeof x === 'number' && typeof y === 'number') {
+        if (pointInside(frameRef.current, x, y) || pointInside(popupRef.current, x, y)) return;
+      }
       const reel = reelRef.current;
       if (reel) reel.style.animationPlayState = '';
       setActive(null);
