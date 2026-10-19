@@ -143,6 +143,14 @@ export default function HomePage() {
             Customer Agreement
           </Link>
           <span className="px-2">·</span>
+          <Link href="/privacy" className="text-indigo-300 hover:text-indigo-200">
+            Privacy Policy
+          </Link>
+          <span className="px-2">·</span>
+          <Link href="/terms" className="text-indigo-300 hover:text-indigo-200">
+            Terms of Service
+          </Link>
+          <span className="px-2">·</span>
           <Link href="/contact" className="text-indigo-300 hover:text-indigo-200">
             Any questions?
           </Link>

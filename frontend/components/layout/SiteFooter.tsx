@@ -53,6 +53,14 @@ export default function SiteFooter() {
         <Link href="/agreement" className="text-indigo-300 hover:text-indigo-200">
           Customer Agreement
         </Link>
+        <span className="px-2">·</span>
+        <Link href="/privacy" className="text-indigo-300 hover:text-indigo-200">
+          Privacy Policy
+        </Link>
+        <span className="px-2">·</span>
+        <Link href="/terms" className="text-indigo-300 hover:text-indigo-200">
+          Terms of Service
+        </Link>
         {email ? (
           <>
             <span className="px-2">·</span>
