@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 import { ensureProfile } from '@/lib/ensureProfile';
+import { isLocalHost, tryLocalLoginBypass } from '@/lib/localLoginBypass';
 import { authenticatorStillRequired, hasVerifiedAuthenticator } from '@/lib/mfa';
 
 const IDLE_LIMIT_MS = 15 * 60 * 1000;
@@ -53,69 +54,108 @@ async function signOutForInactivity() {
 
 interface AuthGuardProps {
   children: React.ReactNode;
+  /** Server already confirmed the local bypass flag. Render the dashboard immediately. */
+  bypass?: boolean;
 }
 
-export default function AuthGuard({ children }: AuthGuardProps) {
+export default function AuthGuard({ children, bypass = false }: AuthGuardProps) {
   const router = useRouter();
-  const [authenticated, setAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const bypassRef = useRef(bypass || false);
+  const [authenticated, setAuthenticated] = useState(bypass);
+  const [loading, setLoading] = useState(!bypass);
 
   useEffect(() => {
+    let cancelled = false;
+    if (bypass || isLocalHost()) bypassRef.current = true;
+
     async function checkAuth() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      try {
+        if (bypass || isLocalHost()) {
+          const bypassed = await tryLocalLoginBypass({ ignoreHost: bypass });
+          if (cancelled) return;
+          if (bypassed) {
+            const {
+              data: { session },
+            } = await supabase.auth.getSession();
+            if (session) {
+              noteSession(session);
+              setAuthenticated(true);
+              void ensureProfile(session.user.id);
+              return;
+            }
+          }
+          if (!bypass) bypassRef.current = false;
+          if (bypass) return;
+        }
 
-      if (!session || (await authenticatorStillRequired())) {
-        router.push('/login');
-      } else if (!(await hasVerifiedAuthenticator())) {
-        router.push('/signup');
-      } else {
-        noteSession(session);
-        await ensureProfile(session.user.id);
-        setAuthenticated(true);
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (cancelled) return;
+
+        if (!session || (await authenticatorStillRequired())) {
+          router.push('/login');
+        } else if (!(await hasVerifiedAuthenticator())) {
+          router.push('/signup');
+        } else {
+          noteSession(session);
+          void ensureProfile(session.user.id);
+          setAuthenticated(true);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     }
-
-    checkAuth();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        setAuthenticated(false);
-        router.push('/login');
-        return;
-      }
-      void authenticatorStillRequired().then(async (needsCode) => {
-        if (needsCode) {
+      // Leave the auth lock before touching the session again.
+      window.setTimeout(() => {
+        if (cancelled || bypassRef.current) return;
+        if (event === 'SIGNED_OUT' || !session) {
           setAuthenticated(false);
           router.push('/login');
           return;
         }
-        if (!(await hasVerifiedAuthenticator())) {
-          setAuthenticated(false);
-          router.push('/signup');
-          return;
-        }
-        noteSession(session);
-        void ensureProfile(session.user.id);
-        setAuthenticated(true);
-      });
+        void authenticatorStillRequired().then(async (needsCode) => {
+          if (cancelled || bypassRef.current) return;
+          if (needsCode) {
+            setAuthenticated(false);
+            router.push('/login');
+            return;
+          }
+          if (!(await hasVerifiedAuthenticator())) {
+            setAuthenticated(false);
+            router.push('/signup');
+            return;
+          }
+          noteSession(session);
+          void ensureProfile(session.user.id);
+          setAuthenticated(true);
+          setLoading(false);
+        });
+      }, 0);
     });
 
+    void checkAuth();
+
     return () => {
+      cancelled = true;
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, [bypass, router]);
 
   useEffect(() => {
     if (!authenticated) return;
 
     if (idleExpired()) {
-      void signOutForInactivity();
-      return;
+      if (bypassRef.current) {
+        localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+      } else {
+        void signOutForInactivity();
+        return;
+      }
     }
 
     let lastWrite = lastActivity();

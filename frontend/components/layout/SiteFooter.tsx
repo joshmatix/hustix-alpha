@@ -37,7 +37,9 @@ export default function SiteFooter() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(() => {
-      void load();
+      window.setTimeout(() => {
+        void load();
+      }, 0);
     });
     return () => {
       cancelled = true;

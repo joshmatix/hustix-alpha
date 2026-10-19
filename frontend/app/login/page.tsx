@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { authenticatorDigits, authenticatorStillRequired, hasVerifiedAuthenticator } from '@/lib/mfa';
+import { tryLocalLoginBypass } from '@/lib/localLoginBypass';
 import { oauthErrorMessage, startOAuth, type OAuthProvider } from '@/lib/oauth';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { useRouter } from 'next/navigation';
@@ -40,10 +41,19 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    void authenticatorStillRequired().then((needsCode) => {
-      if (needsCode) void beginAuthenticator();
-    });
-  }, []);
+    let cancelled = false;
+    void (async () => {
+      if (await tryLocalLoginBypass()) {
+        if (!cancelled) router.replace('/dashboard');
+        return;
+      }
+      if (cancelled) return;
+      if (await authenticatorStillRequired()) void beginAuthenticator();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   const handleOAuth = async (provider: OAuthProvider) => {
     setLoading(true);

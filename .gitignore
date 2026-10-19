@@ -13,5 +13,6 @@ backend/.venv/
 **/.venv/
 backend/.env
 frontend/.env.local
+frontend/.local-login-bypass
 .DS_Store
 admin/logs/
