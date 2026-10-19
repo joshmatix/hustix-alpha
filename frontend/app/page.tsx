@@ -60,18 +60,7 @@ export default function HomePage() {
           </div>
 
           <div className="sm:col-span-7 sm:col-start-6 sm:row-start-2 sm:min-h-0 md:col-span-1 md:col-start-2">
-            <div className="flex h-auto flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/40 sm:h-full">
-              <div className="flex shrink-0 items-center gap-1.5 border-b border-slate-800 px-4 py-3">
-                <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
-                <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
-                <span className="h-2.5 w-2.5 rounded-full bg-slate-700" />
-              </div>
-              <div className="relative aspect-video overflow-hidden bg-slate-950 sm:aspect-auto sm:min-h-0 sm:flex-1">
-                <div className="absolute inset-0">
-                  <HeroReel />
-                </div>
-              </div>
-            </div>
+            <HeroReel />
           </div>
         </div>
       </section>
