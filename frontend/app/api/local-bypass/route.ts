@@ -63,8 +63,7 @@ export async function GET(request: NextRequest) {
     email: STAND_IN_EMAIL,
   });
   const tokenHash = link.data.properties?.hashed_token;
-  const verificationType = link.data.properties?.verification_type;
-  if (link.error || !tokenHash || !verificationType) {
+  if (link.error || !tokenHash || link.data.properties?.verification_type !== 'magiclink') {
     return NextResponse.json({ message: 'Local stand-in session did not start.' }, { status: 503 });
   }
 
@@ -73,7 +72,7 @@ export async function GET(request: NextRequest) {
   });
   const verified = await anon.auth.verifyOtp({
     token_hash: tokenHash,
-    type: verificationType,
+    type: 'magiclink',
   });
   const accessToken = verified.data.session?.access_token;
   const refreshToken = verified.data.session?.refresh_token;
