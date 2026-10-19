@@ -155,7 +155,7 @@ export default function HeroReel() {
     <>
       <div
         ref={frameRef}
-        className="group flex h-auto cursor-zoom-in flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/40 sm:h-full"
+        className="group flex h-auto cursor-zoom-in flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/40 sm:-mt-[var(--window-pull)] sm:h-[calc(100%+var(--window-pull))]"
         onMouseEnter={pauseOnSlide}
         onMouseLeave={scheduleClose}
       >

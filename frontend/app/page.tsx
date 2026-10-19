@@ -1,9 +1,28 @@
 'use client';
 
+import { useLayoutEffect, useRef } from 'react';
 import Link from 'next/link';
 import HeroReel from '@/components/home/HeroReel';
 
 export default function HomePage() {
+  const heroRef = useRef<HTMLElement>(null);
+  const headlineRef = useRef<HTMLHeadingElement>(null);
+
+  useLayoutEffect(() => {
+    const headline = headlineRef.current;
+    const hero = heroRef.current;
+    if (!headline || !hero) return;
+
+    const alignWindow = () => {
+      hero.style.setProperty('--window-pull', `${headline.getBoundingClientRect().height / 2}px`);
+    };
+
+    alignWindow();
+    const observer = new ResizeObserver(alignWindow);
+    observer.observe(headline);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <main className="flex flex-1 flex-col bg-slate-950 px-6 pb-6 pt-4 text-slate-100 md:px-12 md:pb-12 md:pt-8">
       {/* Header Bar */}
@@ -32,14 +51,21 @@ export default function HomePage() {
         </div>
       </header>
 
-      <section className="mx-auto mb-8 mt-4 w-full max-w-6xl lg:mb-12 lg:mt-6">
+      <section
+        ref={heroRef}
+        className="mx-auto mb-8 mt-4 w-full max-w-6xl lg:mb-12 lg:mt-6"
+        style={{ '--window-pull': '0px' } as React.CSSProperties}
+      >
         <div className="grid grid-cols-1 items-start sm:grid-cols-12 sm:items-stretch sm:gap-x-6 md:grid-cols-[minmax(0,calc(50%-0.75rem))_minmax(0,1fr)]">
           <div className="space-y-4 text-left sm:col-span-5 sm:col-start-1 sm:row-start-1 md:col-span-1 md:col-start-1 lg:space-y-6">
             <div className="inline-block rounded-full border border-indigo-800/50 bg-indigo-950/80 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-300">
               B2B Macro-Risk Engine
             </div>
 
-            <h2 className="text-xl font-bold leading-snug tracking-tight text-white sm:text-2xl lg:text-4xl">
+            <h2
+              ref={headlineRef}
+              className="text-xl font-bold leading-snug tracking-tight text-white sm:text-2xl lg:text-4xl"
+            >
               Quantify Macroeconomic Risk for Wealth Advisors
             </h2>
           </div>
