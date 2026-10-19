@@ -5,7 +5,7 @@ import HeroReel from '@/components/home/HeroReel';
 
 export default function HomePage() {
   return (
-    <main className="flex flex-1 flex-col bg-slate-950 p-6 text-slate-100 md:p-12">
+    <main className="flex flex-1 flex-col bg-slate-950 px-6 pb-6 pt-4 text-slate-100 md:px-12 md:pb-12 md:pt-8">
       {/* Header Bar */}
       <header className="w-full max-w-6xl mx-auto flex justify-between items-center py-4 border-b border-slate-800">
         <div className="flex items-center gap-2">
@@ -32,7 +32,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      <section className="mx-auto mb-12 mt-4 w-full max-w-6xl lg:mb-16 lg:mt-6">
+      <section className="mx-auto mb-8 mt-4 w-full max-w-6xl lg:mb-12 lg:mt-6">
         <div className="grid grid-cols-1 items-start sm:grid-cols-12 sm:items-stretch sm:gap-x-6 md:grid-cols-[minmax(0,calc(50%-0.75rem))_minmax(0,1fr)]">
           <div className="space-y-4 text-left sm:col-span-5 sm:col-start-1 sm:row-start-1 md:col-span-1 md:col-start-1 lg:space-y-6">
             <div className="inline-block rounded-full border border-indigo-800/50 bg-indigo-950/80 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-300">
