@@ -1,4 +1,4 @@
-export const AGREEMENT_VERSION = '2026-10-17';
+export const AGREEMENT_VERSION = '2026-10-19';
 
 export const AGREEMENT_TITLE = 'Hustix Macro Customer Agreement';
 
@@ -11,7 +11,7 @@ export const agreementSections: AgreementSection[] = [
   {
     heading: '1. This agreement & acceptance',
     paragraphs: [
-      'This is the binding legal agreement between you and Hustix for the Hustix Macro service at hustix.com[cite: 1]. The version date is October 17, 2026.',
+      'This is the binding legal agreement between you and Hustix for the Hustix Macro service at hustix.com[cite: 1]. The version date is October 19, 2026.',
       'By clicking to create an account, subscribing, or using the service, you agree to this text. If you accept on behalf of a firm or RIA, you confirm that you have legal authority to bind that entity.',
     ],
   },
@@ -88,7 +88,7 @@ export const agreementSections: AgreementSection[] = [
   {
     heading: '12. Governing law and contact',
     paragraphs: [
-      'This agreement is governed by the laws of the State of Delaware, without regard to conflict-of-law rules.',
+      'This agreement is governed by the laws of the State of New Jersey, without regard to conflict-of-law rules.',
       'Questions regarding this agreement must be sent to the support contact shown in your account after you sign in.',
     ],
   },
