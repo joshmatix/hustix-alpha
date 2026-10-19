@@ -6,6 +6,8 @@ import Card from '@/components/ui/Card';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { portfolioLimitSentence } from '@/lib/planLimits';
+import { createCheckoutSession } from '@/lib/stripeCheckout';
+import AuthenticatorCard from '@/components/auth/AuthenticatorCard';
 
 type Status = { text: string; type: 'success' | 'error' } | null;
 type PlanCode = 'free' | 'pro' | 'pro_plus' | 'enterprise';
@@ -161,23 +163,32 @@ export default function ProfilePage() {
   };
 
   const handlePlan = async (target: 'free' | 'pro' | 'pro_plus') => {
-    const previous = quote?.plan_code;
     setPlanAction(target);
     setPlanStatus(null);
+    if (target === 'pro' || target === 'pro_plus') {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        setPlanStatus({ text: 'Sign in again before changing the plan.', type: 'error' });
+        setPlanAction(null);
+        return;
+      }
+      const result = await createCheckoutSession(target, session.access_token);
+      if ('error' in result) {
+        setPlanStatus({ text: result.error, type: 'error' });
+        setPlanAction(null);
+        return;
+      }
+      window.location.assign(result.url);
+      return;
+    }
     const { data, error } = await supabase.rpc('set_firm_plan', { target });
     if (error) {
       setPlanStatus({ text: error.message, type: 'error' });
     } else {
       setQuote(data as FirmQuote);
-      const text =
-        target === 'pro_plus'
-          ? 'Upgraded to Pro+.'
-          : target === 'free'
-            ? 'Downgraded to Free.'
-            : previous === 'pro_plus'
-              ? 'Downgraded to Pro.'
-              : 'Upgraded to Pro.';
-      setPlanStatus({ text, type: 'success' });
+      setPlanStatus({ text: 'Downgraded to Free.', type: 'success' });
     }
     setPlanAction(null);
   };
@@ -345,7 +356,7 @@ export default function ProfilePage() {
                       </Button>
                     )}
                     <span className="text-xs text-slate-500">
-                      Plan changes stay on this firm and do not charge a card.
+                      Pro and Pro+ open Stripe checkout. The plan changes after Stripe confirms payment.
                     </span>
                   </div>
                   <div className="flex flex-wrap items-end gap-3">
@@ -420,6 +431,8 @@ export default function ProfilePage() {
           </div>
         </form>
       </Card>
+
+      <AuthenticatorCard />
 
       <Card
         title="Report header"

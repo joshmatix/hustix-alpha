@@ -9,4 +9,5 @@ supabase
 python-multipart
 requests
 httpx
+stripe
 fpdf2

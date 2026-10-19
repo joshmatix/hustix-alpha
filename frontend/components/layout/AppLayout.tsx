@@ -5,7 +5,7 @@ import Header from './Header';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans">
+    <div className="flex min-h-screen flex-1 bg-slate-950 font-sans text-slate-100">
       {/* Fixed Left Sidebar */}
       <Sidebar />
 
