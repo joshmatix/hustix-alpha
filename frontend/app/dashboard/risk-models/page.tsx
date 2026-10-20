@@ -368,8 +368,8 @@ function RiskModelsPage() {
     !Number.isFinite(shock.equityPct);
 
   return (
-    <div className="-mt-3 grid grid-cols-1 gap-6 sm:-mt-5 lg:h-[calc(100vh-7.5rem)] lg:grid-cols-12">
-      <aside className="space-y-4 self-start overflow-y-auto lg:col-span-4 lg:max-h-full xl:col-span-3">
+    <div className="-mt-3 grid grid-cols-1 gap-6 sm:-mt-5 md:h-[calc(100vh-7.5rem)] md:grid-cols-12">
+      <aside className="space-y-4 self-start overflow-y-auto md:col-span-5 md:max-h-full lg:col-span-4 xl:col-span-3">
         <div>
           <label className="block text-xs font-medium text-slate-400" htmlFor="risk-portfolio">
             Portfolio
@@ -449,7 +449,7 @@ function RiskModelsPage() {
         </button>
       </aside>
 
-      <section className="flex min-h-0 flex-col gap-4 lg:col-span-8 lg:max-h-full lg:overflow-y-auto xl:col-span-9">
+      <section className="flex min-h-0 flex-col gap-4 md:col-span-7 md:max-h-full md:overflow-y-auto lg:col-span-8 xl:col-span-9">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-lg font-bold text-white">Simulation output</h1>
