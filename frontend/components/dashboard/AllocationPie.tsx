@@ -22,7 +22,13 @@ function slicePath(start: number, end: number) {
   return `M ${center} ${center} L ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2} Z`;
 }
 
-export default function AllocationPie({ allocation }: { allocation: AssetAllocation | null }) {
+export default function AllocationPie({
+  allocation,
+  compact = false,
+}: {
+  allocation: AssetAllocation | null;
+  compact?: boolean;
+}) {
   const parts = SLICES.map((slice) => ({
     ...slice,
     value: Math.max(0, Number(allocation?.[slice.key] ?? 0)),
@@ -40,15 +46,19 @@ export default function AllocationPie({ allocation }: { allocation: AssetAllocat
     });
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-      <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
-        Portfolio Mix
-      </h3>
+    <div className={compact ? '' : 'bg-slate-900 border border-slate-800 rounded-xl p-5'}>
+      {!compact && (
+        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+          Portfolio Mix
+        </h3>
+      )}
       {!allocation || total <= 0 ? (
-        <p className="mt-4 text-sm text-slate-400">Select a portfolio to see its allocation.</p>
+        <p className={compact ? 'text-xs text-slate-400' : 'mt-4 text-sm text-slate-400'}>
+          Select a portfolio to see its allocation.
+        </p>
       ) : (
-        <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-center">
-          <svg viewBox="0 0 160 160" className="h-40 w-40 shrink-0" role="img" aria-label="Portfolio allocation pie chart">
+        <div className={`flex items-center ${compact ? 'gap-3' : 'mt-4 flex-col gap-4 sm:flex-row sm:items-center'}`}>
+          <svg viewBox="0 0 160 160" className={compact ? 'h-24 w-24 shrink-0' : 'h-40 w-40 shrink-0'} role="img" aria-label="Portfolio allocation pie chart">
             {wedges.length === 1 ? (
               <circle cx="80" cy="80" r="68" fill={wedges[0].color} />
             ) : (

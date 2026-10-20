@@ -38,6 +38,7 @@ def run_distribution(
         shock_adjustment,
     )
 
+    p1 = float(np.percentile(final_values, 1))
     p5 = float(np.percentile(final_values, 5))
     p50 = float(np.percentile(final_values, 50))
     p95 = float(np.percentile(final_values, 95))
@@ -49,12 +50,14 @@ def run_distribution(
         "time_horizon_years": time_horizon_years,
         "starting_value": starting_value,
         "metrics": {
+            "p1": p1,
             "p5": p5,
             "p25": float(np.percentile(final_values, 25)),
             "p50": p50,
             "p75": float(np.percentile(final_values, 75)),
             "p95": p95,
             "var_95": float(starting_value - p5),
+            "var_99": float(starting_value - p1),
             "expected_shortfall_95": float(starting_value - shortfall),
         },
         "paths_sampled": simulations,

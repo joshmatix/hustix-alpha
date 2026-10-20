@@ -9,8 +9,6 @@ interface DistributionPanelProps {
   onSimulations: (value: number) => void;
   timeHorizonYears: number;
   onTimeHorizonYears: (value: number) => void;
-  onRun: () => void;
-  isCalculating?: boolean;
 }
 
 const fieldClass =
@@ -25,13 +23,12 @@ export default function DistributionPanel({
   onSimulations,
   timeHorizonYears,
   onTimeHorizonYears,
-  onRun,
-  isCalculating = false,
 }: DistributionPanelProps) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="block min-w-[10rem] flex-1 text-xs font-medium text-slate-300">
+    <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900 p-3">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-300">Parameters</h2>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="col-span-2 block text-[11px] font-medium text-slate-300">
           Distribution
           <select
             value={distribution}
@@ -43,8 +40,7 @@ export default function DistributionPanel({
             <option value="bootstrap">Bootstrap</option>
           </select>
         </label>
-
-        <label className="block w-32 text-xs font-medium text-slate-300">
+        <label className="block text-[11px] font-medium text-slate-300">
           Yield shock (bps)
           <input
             type="number"
@@ -53,8 +49,7 @@ export default function DistributionPanel({
             className={`${fieldClass} mt-1`}
           />
         </label>
-
-        <label className="block w-32 text-xs font-medium text-slate-300">
+        <label className="block text-[11px] font-medium text-slate-300">
           Paths
           <select
             value={simulations}
@@ -66,8 +61,7 @@ export default function DistributionPanel({
             <option value={50000}>50,000</option>
           </select>
         </label>
-
-        <label className="block w-32 text-xs font-medium text-slate-300">
+        <label className="col-span-2 block text-[11px] font-medium text-slate-300">
           Horizon (years)
           <select
             value={timeHorizonYears}
@@ -81,17 +75,7 @@ export default function DistributionPanel({
             <option value={30}>30</option>
           </select>
         </label>
-
-        <button
-          type="button"
-          onClick={onRun}
-          disabled={isCalculating}
-          className="ml-auto shrink-0 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800/50 text-white font-semibold text-xs rounded-lg transition"
-        >
-          {isCalculating ? 'Running Monte Carlo...' : 'Run Monte Carlo'}
-        </button>
       </div>
-      <p className="text-xs text-slate-400">Projected paths from the portfolio&apos;s current market value.</p>
     </div>
   );
 }

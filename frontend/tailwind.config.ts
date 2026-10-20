@@ -14,6 +14,24 @@ const config: Config = {
           '50%': { opacity: '0.55' },
           '100%': { backgroundPosition: '-200% 0', opacity: '1' },
         },
+        heartbeat: {
+          '0%, 70%, 100%': {
+            borderColor: 'rgb(51 65 85)',
+            boxShadow: '0 0 0 0 rgb(99 102 241 / 0)',
+          },
+          '12%': {
+            borderColor: 'rgb(165 180 252)',
+            boxShadow: '0 0 0 3px rgb(99 102 241 / 0.55)',
+          },
+          '24%': {
+            borderColor: 'rgb(51 65 85)',
+            boxShadow: '0 0 0 0 rgb(99 102 241 / 0)',
+          },
+          '40%': {
+            borderColor: 'rgb(129 140 248)',
+            boxShadow: '0 0 0 6px rgb(99 102 241 / 0.28)',
+          },
+        },
         'hero-reel': {
           '0%, 14%': { transform: 'translateX(0%)' },
           '18%, 32%': { transform: 'translateX(-16.666%)' },
@@ -25,6 +43,7 @@ const config: Config = {
       },
       animation: {
         shimmer: 'shimmer 1.8s ease-in-out infinite',
+        heartbeat: 'heartbeat 1.8s ease-in-out infinite',
         'hero-reel': 'hero-reel 72s ease-in-out infinite',
       },
     },

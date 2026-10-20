@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import CreatePortfolioModal from '@/components/CreatePortfolioModal';
 import DeletePortfolioModal from '@/components/DeletePortfolioModal';
@@ -288,7 +289,7 @@ export default function PortfoliosPage() {
       ) : (
         <>
         <p id="csv-format-help" className="sr-only">
-          Column order is not significant. Required columns: ticker, asset_class, quantity, and current_price. Optional columns: asset_name, duration_years, and beta. Only bonds with stock-exchange tickers are supported. Uploading replaces the holdings already in this portfolio.
+          Column order is not significant. Required columns: ticker, asset_class, quantity, and current_price. Quantity is the number of shares. Optional columns: asset_name, duration_years, and beta. Class labels are Equity, Bond, Commodity, Gold, and Cash. A sample file is at /samples/holdings-sample.csv. Uploading replaces the holdings already in this portfolio.
         </p>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {portfolios.map((portfolio) => (
@@ -344,8 +345,21 @@ export default function PortfoliosPage() {
                       <p className="mt-2 text-slate-400">Optional</p>
                       <p>asset_name, duration_years, beta</p>
                       <p className="mt-2 text-slate-400">
-                        Only bonds with stock-exchange tickers are supported. Uploading replaces the holdings already in this portfolio.
+                        Quantity is the share count. Equity prices are replaced with the Yahoo close. Uploading replaces the holdings already in this portfolio.
                       </p>
+                      <a
+                        href="/samples/holdings-sample.csv"
+                        download="holdings-sample.csv"
+                        className="mt-2 inline-block font-semibold text-indigo-300 hover:text-indigo-200"
+                      >
+                        Download sample CSV
+                      </a>
+                      <Link
+                        href="/dashboard/help#holdings-csv"
+                        className="mt-1 block font-semibold text-indigo-300 hover:text-indigo-200"
+                      >
+                        Format guide
+                      </Link>
                     </div>
                   </div>
                 </div>

@@ -3,11 +3,10 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from uuid import UUID, uuid4
 import datetime
-import io
-import pandas as pd
 
 from database import SUPABASE_UNREACHABLE, SUPABASE_URL, authorize_client, client_for_token
 from engine.equity_prices import fetch_closing_prices, fetch_equity_price, is_equity_class, yahoo_symbol
+from engine.holdings_csv import HoldingsCsvError, number_field, parse_holdings_csv
 
 router = APIRouter(prefix="/api/portfolios", tags=["Portfolios"])
 
@@ -275,7 +274,13 @@ async def get_portfolios(authorization: Optional[str] = Header(default=None)):
             .order("created_at", desc=True)
             .execute()
         )
-        return [_to_list_item(item) for item in (response.data or [])]
+        items = [_to_list_item(item) for item in (response.data or [])]
+        fresh = _allocations_by_portfolio(db, [str(item["id"]) for item in items])
+        for item in items:
+            allocation = fresh.get(str(item["id"]))
+            if allocation:
+                item["asset_allocation"] = allocation
+        return items
     except HTTPException:
         raise
     except Exception as e:
@@ -297,7 +302,11 @@ async def get_portfolio(portfolio_id: UUID, authorization: Optional[str] = Heade
         )
         if not response.data:
             raise HTTPException(status_code=404, detail="Portfolio not found.")
-        return _to_list_item(response.data[0])
+        item = _to_list_item(response.data[0])
+        fresh = _allocations_by_portfolio(db, [str(item["id"])])
+        if fresh.get(str(item["id"])):
+            item["asset_allocation"] = fresh[str(item["id"])]
+        return item
     except HTTPException:
         raise
     except Exception as e:
@@ -469,6 +478,52 @@ async def add_ticker(holding: HoldingCreate, authorization: Optional[str] = Head
         raise HTTPException(status_code=500, detail=f"Failed to add holding in database: {str(e)}")
 
 
+def _allocation_bucket(asset_class: str) -> str:
+    """Map a class label onto a pie slice. The first class word wins."""
+    text = str(asset_class).strip().lower().replace(",", " ")
+    for word in text.split():
+        if word in {"equities", "equity", "stocks", "stock"} or word.startswith("equit") or word.startswith("stock"):
+            return "equities"
+        if word in {"bonds", "bond", "fixed"} or word.startswith("bond") or word.startswith("fixed"):
+            return "bonds"
+        if word.startswith("real") or word.startswith("commod") or word in {"gold", "gld"}:
+            return "realAssets"
+        if word.startswith("cash"):
+            return "cash"
+    return "equities"
+
+
+def allocation_from_holdings(rows: list[dict]) -> Optional[Dict[str, float]]:
+    totals = {"equities": 0.0, "bonds": 0.0, "realAssets": 0.0, "cash": 0.0}
+    for row in rows:
+        value = float(row.get("quantity") or 0) * float(row.get("current_price") or 0)
+        totals[_allocation_bucket(str(row.get("asset_class") or ""))] += value
+    total = sum(totals.values())
+    if total <= 0:
+        return None
+    return {key: round((value / total) * 100, 1) for key, value in totals.items()}
+
+
+def _allocations_by_portfolio(db, portfolio_ids: List[str]) -> Dict[str, Dict[str, float]]:
+    if not portfolio_ids:
+        return {}
+    response = (
+        db.table("portfolio_holdings")
+        .select("portfolio_id,asset_class,quantity,current_price")
+        .in_("portfolio_id", portfolio_ids)
+        .execute()
+    )
+    grouped: Dict[str, list] = {}
+    for row in response.data or []:
+        grouped.setdefault(str(row["portfolio_id"]), []).append(row)
+    fresh: Dict[str, Dict[str, float]] = {}
+    for portfolio_id, holdings in grouped.items():
+        allocation = allocation_from_holdings(holdings)
+        if allocation:
+            fresh[portfolio_id] = allocation
+    return fresh
+
+
 @router.post("/{portfolio_id}/upload-csv", status_code=status.HTTP_201_CREATED)
 async def upload_csv(
     portfolio_id: UUID,
@@ -483,44 +538,24 @@ async def upload_csv(
 
     try:
         contents = await file.read()
-        df = pd.read_csv(io.BytesIO(contents))
-        df.columns = [c.strip().lower() for c in df.columns]
-
-        required_cols = {"ticker", "asset_class", "quantity", "current_price"}
-        if not required_cols.issubset(set(df.columns)):
-            raise HTTPException(
-                status_code=422,
-                detail=f"CSV missing required columns: {required_cols - set(df.columns)}",
-            )
+        table = parse_holdings_csv(contents)
 
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         records_to_insert = []
         total_value = 0.0
         class_totals = {"equities": 0.0, "bonds": 0.0, "realAssets": 0.0, "cash": 0.0}
-        class_map = {
-            "equities": "equities",
-            "equity": "equities",
-            "stocks": "equities",
-            "bonds": "bonds",
-            "fixed income": "bonds",
-            "real_assets": "realAssets",
-            "real assets": "realAssets",
-            "commodities": "realAssets",
-            "cash": "cash",
-        }
-
         parsed_rows = []
-        for _, row in df.iterrows():
+        for row in table:
             asset_class = str(row["asset_class"]).strip()
             ticker = yahoo_symbol(row["ticker"])
             parsed_rows.append({
                 "ticker": ticker,
-                "asset_name": str(row["asset_name"] if "asset_name" in df.columns else row["ticker"]).strip(),
+                "asset_name": str(row["asset_name"] if "asset_name" in row else row["ticker"]).strip() or ticker,
                 "asset_class": asset_class,
-                "quantity": float(row["quantity"]),
-                "current_price": float(row["current_price"]),
-                "duration_years": float(row["duration_years"]) if "duration_years" in df.columns else 0.0,
-                "beta": float(row["beta"]) if "beta" in df.columns else 1.0,
+                "quantity": number_field(row["quantity"], "quantity", ticker),
+                "current_price": number_field(row["current_price"], "current_price", ticker),
+                "duration_years": number_field(row["duration_years"], "duration_years", ticker) if "duration_years" in row else 0.0,
+                "beta": number_field(row["beta"], "beta", ticker) if "beta" in row else 1.0,
                 "equity": is_equity_class(asset_class),
             })
 
@@ -538,7 +573,7 @@ async def upload_csv(
             price = equity_prices[row["ticker"]] if row["equity"] else row["current_price"]
             market_value = row["quantity"] * price
             total_value += market_value
-            mapped = class_map.get(row["asset_class"].lower(), "equities")
+            mapped = _allocation_bucket(row["asset_class"])
             class_totals[mapped] += market_value
             records_to_insert.append({
                 "holding_id": str(uuid4()),
@@ -622,5 +657,7 @@ async def upload_csv(
         }
     except HTTPException:
         raise
+    except HoldingsCsvError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"CSV upload failed: {str(e)}")

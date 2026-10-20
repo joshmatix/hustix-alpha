@@ -34,10 +34,13 @@ CLASS_MAP = {
     "bonds": "Bonds",
     "bond": "Bonds",
     "fixed income": "Bonds",
+    "fixed": "Bonds",
     "real_assets": "Real_Assets",
     "real assets": "Real_Assets",
     "commodities": "Real_Assets",
     "commodity": "Real_Assets",
+    "gold": "Real_Assets",
+    "gld": "Real_Assets",
     "cash": "Cash",
     "alternatives": "Unclassified",
     "alternative": "Unclassified",
@@ -65,7 +68,21 @@ class LiveRiskError(Exception):
 
 
 def asset_bucket(asset_class: str) -> str:
-    return CLASS_MAP.get(str(asset_class).strip().lower(), "Unclassified")
+    text = str(asset_class).strip().lower().replace(",", " ")
+    if text in CLASS_MAP:
+        return CLASS_MAP[text]
+    for word in text.split():
+        if word in CLASS_MAP:
+            return CLASS_MAP[word]
+        if word.startswith("equit") or word.startswith("stock"):
+            return "Equities"
+        if word.startswith("bond") or word.startswith("fixed"):
+            return "Bonds"
+        if word.startswith("commod") or word.startswith("real") or word in {"gold", "gld"}:
+            return "Real_Assets"
+        if word.startswith("cash"):
+            return "Cash"
+    return "Unclassified"
 
 
 def is_cash_holding(ticker: str, asset_class: str) -> bool:

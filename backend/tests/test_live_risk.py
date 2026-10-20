@@ -68,6 +68,9 @@ def test_unknown_class_is_unclassified():
     assert asset_bucket("not-a-class") == "Unclassified"
     assert asset_bucket("") == "Unclassified"
     assert asset_bucket("equities") == "Equities"
+    assert asset_bucket("Bond") == "Bonds"
+    assert asset_bucket("Commodity") == "Real_Assets"
+    assert asset_bucket("Gold") == "Real_Assets"
 
 
 def test_stagflation_uses_partial_betas_and_reprices_once():
