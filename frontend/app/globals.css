@@ -43,7 +43,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-hero-reel {
+  .animate-hero-reel,
+  .animate-heartbeat {
     animation: none;
   }
 }

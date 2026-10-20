@@ -35,6 +35,7 @@ type DistributionResults = {
   p75: number;
   p95: number;
   var95: number;
+  var99: number;
   expectedShortfall: number;
 };
 
@@ -112,7 +113,7 @@ function DistributionChart({
   if (!results || startingValue == null) {
     return (
       <div className="flex h-44 items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-4 text-center text-sm text-slate-400">
-        Run a Monte Carlo simulation to compare today&apos;s value with the shocked ending-value distribution.
+        Run Risk Analysis to compare today&apos;s value with the shocked ending-value distribution.
       </div>
     );
   }
@@ -246,7 +247,7 @@ function RiskModelsPage() {
 
   const handleRunDistribution = async () => {
     if (!portfolioId) {
-      throw new Error('Choose a portfolio before running a Monte Carlo.');
+      throw new Error('Choose a portfolio before running the risk analysis.');
     }
     const res = await apiFetch('/api/v1/distribution-simulate', {
         method: 'POST',
@@ -260,7 +261,7 @@ function RiskModelsPage() {
       });
       const body = await res.json();
       if (!res.ok) {
-        throw new Error(body.detail || 'Monte Carlo run failed.');
+        throw new Error(body.detail || 'Risk analysis failed.');
       }
       const metrics = body.metrics || {};
       setDistributionResults({
@@ -272,18 +273,19 @@ function RiskModelsPage() {
         p75: Number(metrics.p75 ?? 0),
         p95: Number(metrics.p95 ?? 0),
         var95: Number(metrics.var_95 ?? 0),
+        var99: Number(metrics.var_99 ?? 0),
         expectedShortfall: Number(metrics.expected_shortfall_95 ?? 0),
       });
   };
 
   const handleRunWorkspace = async () => {
     if (!portfolioId) {
-      setError('Choose a portfolio before running a Monte Carlo.');
+      setError('Choose a portfolio before running the risk analysis.');
       return;
     }
     const portfolioValue = Number(portfolio?.portfolio_value ?? 0);
     if (portfolioValue <= 0) {
-      setError('Upload holdings before running a Monte Carlo. This account has no value yet.');
+      setError('Upload holdings before running the risk analysis. This account has no value yet.');
       return;
     }
     const yieldError = shock.yieldBps < -1000 || shock.yieldBps > 1000;
@@ -380,7 +382,9 @@ function RiskModelsPage() {
               setError(null);
               router.push(nextId ? `/dashboard/risk-models?portfolio=${nextId}` : '/dashboard/risk-models');
             }}
-            className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+            className={`mt-1 w-full rounded-md border bg-slate-950 p-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none ${
+              portfolioId ? 'border-slate-700' : 'animate-heartbeat border-slate-600'
+            }`}
           >
             <option value="">Select a portfolio</option>
             {portfolios.map((item) => (
@@ -452,7 +456,7 @@ function RiskModelsPage() {
             <p className="mt-0.5 text-xs text-slate-400">
               {portfolio
                 ? `${portfolio.name} · $${Number(portfolio.portfolio_value).toLocaleString()}`
-                : 'Choose a portfolio, then run the simulation.'}
+                : 'Choose a portfolio, then run the risk analysis.'}
             </p>
           </div>
           <div className="flex shrink-0 gap-2">
@@ -503,8 +507,9 @@ function RiskModelsPage() {
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">VaR 99%</p>
-            <p className="mt-1 text-2xl font-bold text-slate-500">—</p>
-            <p className="mt-1 text-[11px] text-slate-500">This run returns the 95% tail.</p>
+            <p className="mt-1 text-2xl font-bold text-rose-400">
+              {distributionResults ? money.format(distributionResults.var99) : '—'}
+            </p>
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">CVaR / Expected shortfall</p>
