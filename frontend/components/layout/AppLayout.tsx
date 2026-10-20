@@ -1,24 +1,12 @@
 'use client';
 
-import Sidebar from './Sidebar';
 import Header from './Header';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-1 bg-slate-950 font-sans text-slate-100">
-      {/* Fixed Left Sidebar */}
-      <Sidebar />
-
-      {/* Main App Container */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header Bar */}
-        <Header />
-
-        {/* Page Content Viewport */}
-        <main className="flex-1 p-6 overflow-y-auto">
-          {children}
-        </main>
-      </div>
+    <div className="flex min-h-screen flex-1 flex-col bg-slate-950 font-sans text-slate-100">
+      <Header />
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
     </div>
   );
 }

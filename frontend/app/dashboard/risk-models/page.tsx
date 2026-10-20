@@ -9,14 +9,9 @@ import MacroScenarioPicker, {
   shockRequest,
   type AdvisorShock,
 } from '@/components/dashboard/MacroScenarioPicker';
-import RiskGauge from '@/components/dashboard/RiskGauge';
-import Card from '@/components/ui/Card';
-import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
-import { apiFetch, type Portfolio } from '@/lib/api';
+import { apiFetch, type Holding, type Portfolio } from '@/lib/api';
 import { chooseAdvisorReportDestination, saveReportBlob } from '@/lib/saveReportFile';
-
-type Engine = 'history' | 'distribution';
 
 type HistoryResults = {
   kind: 'history';
@@ -49,11 +44,127 @@ const money = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0,
 });
 
+function classImpact(assetClass: string, results: HistoryResults | null) {
+  if (!results) return null;
+  const key = assetClass.toLowerCase();
+  if (key.includes('bond') || key.includes('fixed')) return results.bondImpact;
+  if (key.includes('real') || key.includes('commod')) return results.realAssetHedge;
+  if (key.includes('cash')) return 0;
+  if (key.includes('unclass')) return results.unclassifiedImpact;
+  return results.equityDrawdown;
+}
+
+function densityPoints(results: DistributionResults, startingValue: number) {
+  const knots = [
+    { x: results.p5, cdf: 0.05 },
+    { x: results.p25, cdf: 0.25 },
+    { x: results.p50, cdf: 0.5 },
+    { x: results.p75, cdf: 0.75 },
+    { x: results.p95, cdf: 0.95 },
+  ];
+  for (let index = 1; index < knots.length; index += 1) {
+    if (knots[index].x <= knots[index - 1].x) knots[index].x = knots[index - 1].x + 1;
+  }
+  const densities = knots.map((knot, index) => {
+    const previous = knots[index - 1];
+    const next = knots[index + 1];
+    const leftSpacing = previous ? (knot.x - previous.x) / (knot.cdf - previous.cdf) : 0;
+    const rightSpacing = next ? (next.x - knot.x) / (next.cdf - knot.cdf) : 0;
+    const spacing = leftSpacing && rightSpacing ? (leftSpacing + rightSpacing) / 2 : leftSpacing || rightSpacing;
+    return { x: knot.x, y: 1 / Math.max(spacing, 1e-9) };
+  });
+  const span = Math.max(knots[knots.length - 1].x - knots[0].x, 1);
+  const left = Math.min(knots[0].x - span * 0.12, startingValue);
+  const right = Math.max(knots[knots.length - 1].x + span * 0.12, startingValue);
+  return {
+    left,
+    right,
+    samples: [{ x: left, y: 0 }, ...densities, { x: right, y: 0 }],
+  };
+}
+
+function smoothCurve(points: Array<{ x: number; y: number }>, floor: number, ceiling: number) {
+  const clamp = (value: number) => Math.min(Math.max(value, ceiling), floor);
+  const commands = [`M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const p0 = points[index - 1] ?? points[index];
+    const p1 = points[index];
+    const p2 = points[index + 1];
+    const p3 = points[index + 2] ?? p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = clamp(p1.y + (p2.y - p0.y) / 6);
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = clamp(p2.y - (p3.y - p1.y) / 6);
+    commands.push(
+      `C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`,
+    );
+  }
+  return commands.join(' ');
+}
+
+function DistributionChart({
+  startingValue,
+  results,
+}: {
+  startingValue: number | null;
+  results: DistributionResults | null;
+}) {
+  if (!results || startingValue == null) {
+    return (
+      <div className="flex h-44 items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-4 text-center text-sm text-slate-400">
+        Run a Monte Carlo simulation to compare today&apos;s value with the shocked ending-value distribution.
+      </div>
+    );
+  }
+
+  const width = 640;
+  const height = 168;
+  const pad = { top: 16, right: 12, bottom: 28, left: 12 };
+  const { left, right, samples } = densityPoints(results, startingValue);
+  const peak = Math.max(...samples.map((sample) => sample.y));
+  const plotBottom = height - pad.bottom;
+  const xOf = (value: number) =>
+    pad.left + ((value - left) / Math.max(right - left, 1)) * (width - pad.left - pad.right);
+  const yOf = (density: number) => pad.top + (1 - (density / peak) * 0.9) * (plotBottom - pad.top);
+  const plotted = samples.map((sample) => ({ x: xOf(sample.x), y: yOf(sample.y) }));
+  const line = smoothCurve(plotted, plotBottom, pad.top);
+  const area = `${line} L ${plotted[plotted.length - 1].x.toFixed(1)} ${plotBottom.toFixed(1)} L ${plotted[0].x.toFixed(1)} ${plotBottom.toFixed(1)} Z`;
+  const baseline = xOf(startingValue);
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full" role="img" aria-label="Baseline value and shocked ending-value distribution">
+        <path d={area} fill="rgba(99, 102, 241, 0.25)" />
+        <path d={line} fill="none" stroke="#818cf8" strokeWidth="2" />
+        <line x1={baseline} x2={baseline} y1={pad.top} y2={height - pad.bottom} stroke="#34d399" strokeWidth="2" />
+        <text x={baseline + 6} y={pad.top + 12} fill="#6ee7b7" fontSize="11">
+          Today
+        </text>
+        <text x={pad.left} y={height - 8} fill="#94a3b8" fontSize="11">
+          {money.format(left)}
+        </text>
+        <text x={width - pad.right} y={height - 8} fill="#94a3b8" fontSize="11" textAnchor="end">
+          {money.format(right)}
+        </text>
+      </svg>
+      <div className="mt-1 flex gap-4 text-[11px] text-slate-400">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-emerald-400" />
+          Baseline
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-indigo-400" />
+          Shocked
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function RiskModelsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const portfolioId = searchParams.get('portfolio');
-  const [engine, setEngine] = useState<Engine>('history');
   const [shock, setShock] = useState<AdvisorShock>(defaultAdvisorShock);
   const [distribution, setDistribution] = useState('student_t');
   const [macroShockBps, setMacroShockBps] = useState(200);
@@ -64,7 +175,9 @@ function RiskModelsPage() {
   const [error, setError] = useState<string | null>(null);
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
-  const [simulationResults, setSimulationResults] = useState<HistoryResults | DistributionResults | null>(null);
+  const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [historyResults, setHistoryResults] = useState<HistoryResults | null>(null);
+  const [distributionResults, setDistributionResults] = useState<DistributionResults | null>(null);
 
   useEffect(() => {
     apiFetch('/api/portfolios')
@@ -77,7 +190,9 @@ function RiskModelsPage() {
 
   useEffect(() => {
     setError(null);
-    setSimulationResults(null);
+    setHistoryResults(null);
+    setDistributionResults(null);
+    setHoldings([]);
     if (!portfolioId) {
       setPortfolio(null);
       return;
@@ -88,26 +203,19 @@ function RiskModelsPage() {
         setPortfolio(await res.json());
       })
       .catch(() => undefined);
+    apiFetch(`/api/portfolios/${portfolioId}/holdings`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        setHoldings(await res.json());
+      })
+      .catch(() => undefined);
   }, [portfolioId]);
 
   const handleRunSimulation = async () => {
     if (!portfolioId) {
-      setError('Choose a portfolio before running a stress test.');
-      return;
+      throw new Error('Choose a portfolio before running a stress test.');
     }
-    const portfolioValue = Number(portfolio?.portfolio_value ?? 0);
-    if (portfolioValue <= 0) {
-      setError('Upload holdings before running a stress test. This account has no value yet.');
-      return;
-    }
-    if (!Number.isFinite(shock.yieldBps) || !Number.isFinite(shock.equityPct)) {
-      setError('Enter a yield move and an S&P move before running a stress test.');
-      return;
-    }
-    setIsCalculating(true);
-    setError(null);
-    try {
-      const res = await apiFetch('/api/v1/simulate', {
+    const res = await apiFetch('/api/v1/simulate', {
         method: 'POST',
         body: JSON.stringify({
           portfolio_id: portfolioId,
@@ -120,7 +228,7 @@ function RiskModelsPage() {
       }
       const unclassifiedValue = Number(body.class_values?.Unclassified ?? 0);
       const fallbackHoldings = Array.isArray(body.fallback_holdings) ? body.fallback_holdings : [];
-      setSimulationResults({
+      setHistoryResults({
         kind: 'history',
         overallScore: Number(body.overall_score ?? 50),
         equityDrawdown: Number(body.asset_impacts?.Equities ?? 0),
@@ -134,22 +242,13 @@ function RiskModelsPage() {
           .map((row: { ticker?: string; method_label?: string }) => `${row.ticker} (${row.method_label})`)
           .join(', '),
       });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not reach the risk engine.');
-    } finally {
-      setIsCalculating(false);
-    }
   };
 
   const handleRunDistribution = async () => {
     if (!portfolioId) {
-      setError('Choose a portfolio before running a Monte Carlo.');
-      return;
+      throw new Error('Choose a portfolio before running a Monte Carlo.');
     }
-    setIsCalculating(true);
-    setError(null);
-    try {
-      const res = await apiFetch('/api/v1/distribution-simulate', {
+    const res = await apiFetch('/api/v1/distribution-simulate', {
         method: 'POST',
         body: JSON.stringify({
           portfolio_id: portfolioId,
@@ -164,7 +263,7 @@ function RiskModelsPage() {
         throw new Error(body.detail || 'Monte Carlo run failed.');
       }
       const metrics = body.metrics || {};
-      setSimulationResults({
+      setDistributionResults({
         kind: 'distribution',
         startingValue: Number(body.starting_value ?? 0),
         p5: Number(metrics.p5 ?? 0),
@@ -175,21 +274,33 @@ function RiskModelsPage() {
         var95: Number(metrics.var_95 ?? 0),
         expectedShortfall: Number(metrics.expected_shortfall_95 ?? 0),
       });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not reach the risk engine.');
-    } finally {
-      setIsCalculating(false);
+  };
+
+  const handleRunWorkspace = async () => {
+    if (!portfolioId) {
+      setError('Choose a portfolio before running a Monte Carlo.');
+      return;
     }
-  };
-
-  const selectEngine = (next: Engine) => {
-    setEngine(next);
-    setSimulationResults(null);
+    const portfolioValue = Number(portfolio?.portfolio_value ?? 0);
+    if (portfolioValue <= 0) {
+      setError('Upload holdings before running a Monte Carlo. This account has no value yet.');
+      return;
+    }
+    const yieldError = shock.yieldBps < -1000 || shock.yieldBps > 1000;
+    const equityError = !shock.useWorstEquityWindow && (shock.equityPct < -80 || shock.equityPct > 100);
+    if (!Number.isFinite(shock.yieldBps) || !Number.isFinite(shock.equityPct) || yieldError || equityError) {
+      setError('Yield moves stay between -1000 and 1000 bp. S&P moves stay between -80% and 100%.');
+      return;
+    }
+    setIsCalculating(true);
     setError(null);
+    const [monteCarlo, stress] = await Promise.allSettled([handleRunDistribution(), handleRunSimulation()]);
+    const messages = [monteCarlo, stress].flatMap((result) =>
+      result.status === 'rejected' ? [result.reason instanceof Error ? result.reason.message : 'Simulation failed.'] : [],
+    );
+    if (messages.length) setError(messages.join(' '));
+    setIsCalculating(false);
   };
-
-  const historyResults = simulationResults?.kind === 'history' ? simulationResults : null;
-  const distributionResults = simulationResults?.kind === 'distribution' ? simulationResults : null;
 
   const handleDownloadReport = async (audience: 'client' | 'advisor') => {
     if (!portfolioId) {
@@ -240,11 +351,110 @@ function RiskModelsPage() {
     }
   };
 
+  const invested = holdings.reduce((sum, holding) => sum + Number(holding.market_value || 0), 0);
+  const tickerRows = [...holdings].sort(
+    (left, right) => Number(right.market_value || 0) - Number(left.market_value || 0),
+  );
+  const yieldError = shock.yieldBps < -1000 || shock.yieldBps > 1000;
+  const equityError = !shock.useWorstEquityWindow && (shock.equityPct < -80 || shock.equityPct > 100);
+  const runDisabled =
+    isCalculating ||
+    !portfolioId ||
+    yieldError ||
+    equityError ||
+    !Number.isFinite(shock.yieldBps) ||
+    !Number.isFinite(shock.equityPct);
+
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="flex items-start justify-between gap-4">
-          <h1 className="text-2xl font-bold text-white">Macroeconomic Risk Modeling</h1>
+    <div className="-mt-3 grid grid-cols-1 gap-6 sm:-mt-5 lg:h-[calc(100vh-7.5rem)] lg:grid-cols-12">
+      <aside className="sticky top-20 space-y-4 self-start overflow-y-auto lg:col-span-4 lg:max-h-full xl:col-span-3">
+        <div>
+          <label className="block text-xs font-medium text-slate-400" htmlFor="risk-portfolio">
+            Portfolio
+          </label>
+          <select
+            id="risk-portfolio"
+            value={portfolioId || ''}
+            onChange={(event) => {
+              const nextId = event.target.value;
+              setError(null);
+              router.push(nextId ? `/dashboard/risk-models?portfolio=${nextId}` : '/dashboard/risk-models');
+            }}
+            className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+          >
+            <option value="">Select a portfolio</option>
+            {portfolios.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-900 p-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-300">Portfolio mix</h2>
+          <AllocationPie allocation={portfolio?.asset_allocation ?? null} compact />
+          {tickerRows.length === 0 ? (
+            <p className="text-xs text-slate-400">Ticker weights appear after you select a portfolio with holdings.</p>
+          ) : (
+            <div className="max-h-36 overflow-y-auto">
+              <table className="w-full text-left text-[11px] text-slate-300">
+                <thead className="sticky top-0 bg-slate-900 text-[10px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="py-1 pr-2 font-medium">Ticker</th>
+                    <th className="py-1 pr-2 font-medium">Class</th>
+                    <th className="py-1 text-right font-medium">Weight</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tickerRows.map((holding) => {
+                    const weight = invested > 0 ? (Number(holding.market_value) / invested) * 100 : 0;
+                    return (
+                      <tr key={holding.holding_id} className="border-t border-slate-800/80">
+                        <td className="py-1 pr-2 font-medium text-white">{holding.ticker}</td>
+                        <td className="py-1 pr-2 text-slate-400">{holding.asset_class}</td>
+                        <td className="py-1 text-right font-mono">{weight.toFixed(1)}%</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <MacroScenarioPicker shock={shock} onShock={setShock} />
+        <DistributionPanel
+          distribution={distribution}
+          onDistribution={setDistribution}
+          macroShockBps={macroShockBps}
+          onMacroShockBps={setMacroShockBps}
+          simulations={simulations}
+          onSimulations={setSimulations}
+          timeHorizonYears={timeHorizonYears}
+          onTimeHorizonYears={setTimeHorizonYears}
+        />
+
+        <button
+          type="button"
+          onClick={handleRunWorkspace}
+          disabled={runDisabled}
+          className="sticky bottom-0 flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:bg-indigo-800/50"
+        >
+          {isCalculating ? 'Running risk analysis...' : '▶ Run Risk Analysis'}
+        </button>
+      </aside>
+
+      <section className="flex min-h-0 flex-col gap-4 lg:col-span-8 lg:max-h-full lg:overflow-y-auto xl:col-span-9">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-bold text-white">Simulation output</h1>
+            <p className="mt-0.5 text-xs text-slate-400">
+              {portfolio
+                ? `${portfolio.name} · $${Number(portfolio.portfolio_value).toLocaleString()}`
+                : 'Choose a portfolio, then run the simulation.'}
+            </p>
+          </div>
           <div className="flex shrink-0 gap-2">
             <Button
               variant="secondary"
@@ -266,249 +476,100 @@ function RiskModelsPage() {
             </Button>
           </div>
         </div>
-        <p className="text-xs text-slate-400 mt-1">
-          {portfolio
-            ? `Stress testing ${portfolio.name} ($${Number(portfolio.portfolio_value).toLocaleString()}).`
-            : 'Choose a portfolio, then price a shock from its live holdings.'}
-        </p>
-        <div className="mt-4 flex flex-wrap items-end gap-3">
-          <div className="min-w-[16rem] flex-1 max-w-md">
-            <label className="block text-xs font-medium text-slate-400" htmlFor="risk-portfolio">
-              Portfolio
-            </label>
-            <select
-              id="risk-portfolio"
-              value={portfolioId || ''}
-              onChange={(event) => {
-                const nextId = event.target.value;
-                setError(null);
-                router.push(nextId ? `/dashboard/risk-models?portfolio=${nextId}` : '/dashboard/risk-models');
-              }}
-              className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
-            >
-              <option value="">Select a portfolio</option>
-              {portfolios.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex shrink-0 rounded-lg border border-slate-800 bg-slate-950 p-1">
-            <button
-              type="button"
-              onClick={() => selectEngine('history')}
-              className={`rounded-md px-3 py-2 text-xs font-semibold ${
-                engine === 'history' ? 'bg-indigo-600 text-white' : 'text-slate-400'
-              }`}
-            >
-              Stress test
-            </button>
-            <button
-              type="button"
-              onClick={() => selectEngine('distribution')}
-              className={`rounded-md px-3 py-2 text-xs font-semibold ${
-                engine === 'distribution' ? 'bg-indigo-600 text-white' : 'text-slate-400'
-              }`}
-            >
-              Monte Carlo
-            </button>
-          </div>
-        </div>
-      </div>
 
-      {error && (
-        <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-          {error}
-        </div>
-      )}
-
-      {engine === 'history' ? (
-        <MacroScenarioPicker
-          shock={shock}
-          onShock={setShock}
-          onRunSimulation={handleRunSimulation}
-          isCalculating={isCalculating}
-        />
-      ) : (
-        <DistributionPanel
-          distribution={distribution}
-          onDistribution={setDistribution}
-          macroShockBps={macroShockBps}
-          onMacroShockBps={setMacroShockBps}
-          simulations={simulations}
-          onSimulations={setSimulations}
-          timeHorizonYears={timeHorizonYears}
-          onTimeHorizonYears={setTimeHorizonYears}
-          onRun={handleRunDistribution}
-          isCalculating={isCalculating}
-        />
-      )}
-
-      <div className={`grid grid-cols-1 gap-6 ${engine === 'history' ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-        <div className="space-y-6">
-          {engine === 'history' && (
-            <Card title="Model Parameters" subtitle="Yahoo Finance daily prices, resampled">
-              <div className="space-y-3 text-xs">
-                <div className="flex justify-between py-1.5 border-b border-slate-800">
-                  <span className="text-slate-400">Confidence Interval</span>
-                  <span className="text-white font-mono font-semibold">95.0%</span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-slate-800">
-                  <span className="text-slate-400">Time Horizon</span>
-                  <span className="text-white font-mono font-semibold">12 Months</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span className="text-slate-400">Paths</span>
-                  <Badge variant="emerald">1,000</Badge>
-                </div>
-              </div>
-            </Card>
-          )}
-          {engine === 'distribution' && (
-            <Card title="Ending-value percentiles" subtitle="Expected shortfall is the average loss in the worst 5%">
-              <div className="grid grid-cols-1 gap-4 mt-2">
-                {(
-                  [
-                    ['P5', distributionResults?.p5],
-                    ['P25', distributionResults?.p25],
-                    ['P75', distributionResults?.p75],
-                    ['P95', distributionResults?.p95],
-                    ['Shortfall', distributionResults?.expectedShortfall],
-                  ] as const
-                ).map(([label, value]) => (
-                  <div key={label} className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                    <span className="text-xs uppercase font-semibold text-slate-400">{label}</span>
-                    <p className="text-lg font-bold mt-2 text-white">
-                      {value === undefined ? '—' : money.format(value)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-          <AllocationPie allocation={portfolio?.asset_allocation ?? null} />
-        </div>
-
-        {engine === 'history' ? (
-          <div className="space-y-6">
-            <Card
-              title="Asset Class Impact Analysis"
-              subtitle="Immediate price impact of this scenario"
-            >
-                <div
-                  className="grid grid-cols-1 gap-4 mt-2"
-                >
-                  <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                    <span className="text-xs uppercase font-semibold text-slate-400">Equities</span>
-                    <p
-                      className={`text-2xl font-bold mt-2 ${
-                        (historyResults?.equityDrawdown ?? 0) < 0 ? 'text-rose-400' : 'text-emerald-400'
-                      }`}
-                    >
-                      {historyResults ? `${historyResults.equityDrawdown}%` : '—'}
-                    </p>
-                  </div>
-                  <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                    <span className="text-xs uppercase font-semibold text-slate-400">Fixed Income</span>
-                    <p
-                      className={`text-2xl font-bold mt-2 ${
-                        (historyResults?.bondImpact ?? 0) < 0 ? 'text-rose-400' : 'text-emerald-400'
-                      }`}
-                    >
-                      {historyResults ? `${historyResults.bondImpact}%` : '—'}
-                    </p>
-                  </div>
-                  <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                    <span className="text-xs uppercase font-semibold text-slate-400">
-                      Real Assets / Commodities
-                    </span>
-                    <p
-                      className={`text-2xl font-bold mt-2 ${
-                        (historyResults?.realAssetHedge ?? 0) > 0 ? 'text-emerald-400' : 'text-rose-400'
-                      }`}
-                    >
-                      {historyResults
-                        ? `${historyResults.realAssetHedge > 0 ? '+' : ''}${historyResults.realAssetHedge}%`
-                        : '—'}
-                    </p>
-                  </div>
-                  {historyResults?.unclassifiedImpact != null && (
-                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                      <span className="text-xs uppercase font-semibold text-slate-400">Unclassified</span>
-                      <p
-                        className={`text-2xl font-bold mt-2 ${
-                          historyResults.unclassifiedImpact < 0 ? 'text-rose-400' : 'text-emerald-400'
-                        }`}
-                      >
-                        {`${historyResults.unclassifiedImpact > 0 ? '+' : ''}${historyResults.unclassifiedImpact}%`}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                {historyResults?.fallbackLabel && (
-                  <p className="text-xs text-slate-400 mt-3 leading-relaxed">
-                    Class fallback: {historyResults.fallbackLabel}.
-                  </p>
-                )}
-                {historyResults?.fallbackNote && (
-                  <p className="text-xs text-amber-200/90 mt-2 leading-relaxed">{historyResults.fallbackNote}</p>
-                )}
-            </Card>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4">
-            <Card title="Starting value" subtitle="Latest Yahoo close for each traded holding">
-              <span className="text-2xl font-extrabold text-white">
-                {distributionResults ? money.format(distributionResults.startingValue) : '—'}
-              </span>
-            </Card>
-            <Card title="Median outcome (P50)" subtitle="Middle ending value of the paths">
-              <span className="text-2xl font-extrabold text-emerald-400">
-                {distributionResults ? money.format(distributionResults.p50) : '—'}
-              </span>
-            </Card>
-            <Card title="Value at Risk (VaR)" subtitle="95% loss from the live starting value">
-              <span className="text-2xl font-extrabold text-rose-400">
-                {distributionResults ? money.format(distributionResults.var95) : '—'}
-              </span>
-            </Card>
+        {error && (
+          <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+            {error}
           </div>
         )}
 
-        {engine === 'history' && (
-          <div className="space-y-6">
-            {historyResults ? (
-              <RiskGauge
-                score={historyResults.overallScore}
-                label="Portfolio Vulnerability Index"
-                projectedLoss={historyResults.var95}
-              />
-            ) : (
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                <span className="text-xs font-semibold uppercase text-slate-400 tracking-wider">
-                  Portfolio Vulnerability Index
-                </span>
-                <p className="mt-3 text-sm text-slate-400">
-                  Run a stress test to price this account.
-                </p>
-              </div>
-            )}
-
-            <Card title="Value at Risk (VaR)" subtitle="95% one-year loss from resampled market days">
-              <div className="mt-2">
-                <span className="text-3xl font-extrabold text-rose-400">
-                  {historyResults ? `$${historyResults.var95.toLocaleString()}` : '—'}
-                </span>
-                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                  {historyResults?.narrative ||
-                    'Results use Yahoo Finance prices for the tickers in this portfolio, not a fixed shock.'}
-                </p>
-              </div>
-            </Card>
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+          <h2 className="text-sm font-semibold text-white">Monte Carlo probability distribution</h2>
+          <p className="mt-0.5 text-[11px] text-slate-400">Baseline value against the shocked ending-value distribution.</p>
+          <div className="mt-2">
+            <DistributionChart
+              startingValue={distributionResults?.startingValue ?? (portfolio ? Number(portfolio.portfolio_value) : null)}
+              results={distributionResults}
+            />
           </div>
-        )}
-      </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">VaR 95%</p>
+            <p className="mt-1 text-2xl font-bold text-rose-400">
+              {distributionResults ? money.format(distributionResults.var95) : '—'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">VaR 99%</p>
+            <p className="mt-1 text-2xl font-bold text-slate-500">—</p>
+            <p className="mt-1 text-[11px] text-slate-500">This run returns the 95% tail.</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">CVaR / Expected shortfall</p>
+            <p className="mt-1 text-2xl font-bold text-rose-300">
+              {distributionResults ? money.format(distributionResults.expectedShortfall) : '—'}
+            </p>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+          <div className="border-b border-slate-800 px-4 py-3">
+            <h2 className="text-sm font-semibold text-white">Asset-level factor risk attribution</h2>
+            <p className="mt-0.5 text-[11px] text-slate-400">
+              Weight, market beta, and rate duration. Class impact fills in after the stress pricing.
+            </p>
+          </div>
+          {tickerRows.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-slate-400">Select a portfolio to see holding-level factors.</p>
+          ) : (
+            <div className="max-h-64 overflow-auto lg:max-h-none">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="sticky top-0 bg-slate-950/90 text-[10px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">Ticker</th>
+                    <th className="px-3 py-2 text-right font-medium">Weight</th>
+                    <th className="px-3 py-2 text-right font-medium">Beta</th>
+                    <th className="px-3 py-2 text-right font-medium">Duration</th>
+                    <th className="px-3 py-2 text-right font-medium">Market</th>
+                    <th className="px-3 py-2 text-right font-medium">Rate</th>
+                    <th className="px-4 py-2 text-right font-medium">Class impact</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/70">
+                  {tickerRows.map((holding) => {
+                    const weight = invested > 0 ? Number(holding.market_value) / invested : 0;
+                    const beta = Number(holding.beta || 0);
+                    const duration = Number(holding.duration_years || 0);
+                    const impact = classImpact(holding.asset_class, historyResults);
+                    return (
+                      <tr key={holding.holding_id}>
+                        <td className="px-4 py-2 font-medium text-white">{holding.ticker}</td>
+                        <td className="px-3 py-2 text-right font-mono">{(weight * 100).toFixed(1)}%</td>
+                        <td className="px-3 py-2 text-right font-mono">{beta.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right font-mono">{duration.toFixed(1)}</td>
+                        <td className="px-3 py-2 text-right font-mono">{(weight * beta).toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right font-mono">{(weight * duration).toFixed(2)}</td>
+                        <td
+                          className={`px-4 py-2 text-right font-mono ${
+                            impact == null ? 'text-slate-500' : impact < 0 ? 'text-rose-400' : 'text-emerald-400'
+                          }`}
+                        >
+                          {impact == null ? '—' : `${impact > 0 ? '+' : ''}${impact}%`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {historyResults?.fallbackNote && (
+            <p className="border-t border-slate-800 px-4 py-2 text-[11px] text-amber-200/90">{historyResults.fallbackNote}</p>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
