@@ -25,6 +25,11 @@ export default function PortfoliosPage() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
   const [portfolioToDelete, setPortfolioToDelete] = useState<Portfolio | null>(null);
+  const [csvReplace, setCsvReplace] = useState<{
+    portfolioId: string;
+    portfolioName: string;
+    file: File;
+  } | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [planLimits, setPlanLimits] = useState<{
     name: string;
@@ -100,7 +105,7 @@ export default function PortfoliosPage() {
     fetchPortfolios();
   }, []);
 
-  const handleCreatePortfolio = async (data: { name: string; description: string }) => {
+  const handleCreatePortfolio = async (data: { name: string; description: string; file: File | null }) => {
     const res = await apiFetch('/api/portfolios/create', {
       method: 'POST',
       body: JSON.stringify({
@@ -129,7 +134,11 @@ export default function PortfoliosPage() {
     }
     setNotice(null);
 
+    const created = await res.json().catch(() => ({}));
     await fetchPortfolios();
+    if (data.file && created.portfolio_id) {
+      await handleCsvUpload(String(created.portfolio_id), data.file);
+    }
   };
 
   const handleDeletePortfolio = async () => {
@@ -314,20 +323,29 @@ export default function PortfoliosPage() {
                 >
                   Analyze Risk
                 </Button>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
                 <div className="group relative inline-flex">
-                  <label className="relative inline-flex rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 focus-within:ring-offset-2 focus-within:ring-offset-slate-950">
-                    <span className="inline-flex items-center justify-center px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-700 text-slate-300 group-hover:bg-slate-800 cursor-pointer">
+                  <label className="relative inline-flex rounded-lg focus-within:ring-2 focus-within:ring-amber-500 focus-within:ring-offset-2 focus-within:ring-offset-slate-950">
+                    <span className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-amber-500/70 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100 group-hover:bg-amber-500/25">
                       {uploadingId === portfolio.id ? 'Uploading...' : 'Upload CSV'}
                     </span>
                     <input
                       type="file"
                       accept=".csv,.CSV,text/csv"
+                      aria-label={`Upload CSV for ${portfolio.name}`}
                       aria-describedby="csv-format-help"
                       disabled={uploadingId === portfolio.id}
                       className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed focus:outline-none"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        if (file) handleCsvUpload(portfolio.id, file);
+                        if (file) {
+                          setCsvReplace({
+                            portfolioId: portfolio.id,
+                            portfolioName: portfolio.name,
+                            file,
+                          });
+                        }
                         e.target.value = '';
                       }}
                     />
@@ -363,6 +381,7 @@ export default function PortfoliosPage() {
                     </div>
                   </div>
                 </div>
+                <p className="text-xs font-medium text-amber-300">Replaces existing holdings</p>
               </div>
               <div className="mt-4 border-t border-slate-800 pt-3">
                 <button
@@ -436,6 +455,69 @@ export default function PortfoliosPage() {
         onClose={() => setPortfolioToDelete(null)}
         onConfirm={handleDeletePortfolio}
       />
+      <ReplaceHoldingsDialog
+        pending={csvReplace}
+        onAbort={() => setCsvReplace(null)}
+        onConfirm={async () => {
+          if (!csvReplace) return;
+          const pending = csvReplace;
+          setCsvReplace(null);
+          await handleCsvUpload(pending.portfolioId, pending.file);
+        }}
+      />
+    </div>
+  );
+}
+
+function ReplaceHoldingsDialog({
+  pending,
+  onAbort,
+  onConfirm,
+}: {
+  pending: { portfolioName: string; file: File } | null;
+  onAbort: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    if (!pending) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onAbort();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [pending, onAbort]);
+
+  if (!pending) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="replace-holdings-title"
+        aria-describedby="replace-holdings-warning"
+        className="w-full max-w-md rounded-lg border border-amber-500/40 bg-slate-900 p-6 shadow-xl"
+      >
+        <h2 id="replace-holdings-title" className="text-xl font-semibold text-white">
+          Replace holdings?
+        </h2>
+        <p id="replace-holdings-warning" className="mt-3 text-sm text-slate-300">
+          <span className="font-semibold text-white">{pending.file.name}</span> will replace every
+          holding in <span className="font-semibold text-white">{pending.portfolioName}</span>.
+          The current holdings will be removed.
+        </p>
+        <div className="mt-6 flex justify-end gap-3">
+          <Button type="button" variant="outline" autoFocus onClick={onAbort}>
+            Abort
+          </Button>
+          <Button type="button" variant="danger" onClick={onConfirm}>
+            Replace holdings
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
