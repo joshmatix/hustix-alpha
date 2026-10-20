@@ -35,7 +35,7 @@ const sections = [
     heading: '4. Who we share information with',
     paragraphs: [
       'Service providers process information for us. That includes our authentication and database host, Stripe when you pay, and email delivery used for account messages. They may use the information only to perform those services.',
-      'Market-data providers. To price a portfolio, we send tickers and related request details to providers such as Yahoo Finance. Those providers handle the request under their own terms.',
+      'Market-data providers. To price a portfolio, we send tickers and related request details to the market-data provider. That provider handles the request under its own terms.',
       'Legal and safety. We may disclose information if the law requires it, or if we believe disclosure is needed to protect Hustix, our users, or others.',
       'A firm account. People you authorize on a firm account can see the portfolios and reports stored in that account.',
     ],

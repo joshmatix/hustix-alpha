@@ -1,6 +1,6 @@
 """Which market-data vendor the process uses.
 
-Set MARKET_DATA_PROVIDER in backend/.env to yahoo or eodhd.
+Set MARKET_DATA_PROVIDER in backend/.env to yahoo, eodhd, or tiingo.
 The value is read on each call. The API process does not reload .env by itself.
 """
 
@@ -12,6 +12,8 @@ load_dotenv()
 
 _YAHOO = "yahoo"
 _EODHD = "eodhd"
+_TIINGO = "tiingo"
+_LABELS = {_YAHOO: "Yahoo Finance", _EODHD: "EODHD", _TIINGO: "Tiingo"}
 
 
 def selected_provider() -> str:
@@ -20,8 +22,10 @@ def selected_provider() -> str:
         return _YAHOO
     if raw in {_EODHD, "eod"}:
         return _EODHD
-    raise ValueError("MARKET_DATA_PROVIDER must be yahoo or eodhd.")
+    if raw == _TIINGO:
+        return _TIINGO
+    raise ValueError("MARKET_DATA_PROVIDER must be yahoo, eodhd, or tiingo.")
 
 
 def provider_label() -> str:
-    return "EODHD" if selected_provider() == _EODHD else "Yahoo Finance"
+    return _LABELS[selected_provider()]

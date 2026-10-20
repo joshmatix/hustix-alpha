@@ -46,7 +46,7 @@ export const agreementSections: AgreementSection[] = [
   {
     heading: '6. Third-party data & market feeds',
     paragraphs: [
-      'The service relies on external market data feeds, historical prices, and economic indicators from third-party providers (such as Yahoo Finance)[cite: 1, 3, 4].',
+      'The service relies on external market data feeds, historical prices, and economic indicators from third-party providers[cite: 1, 3, 4].',
       'Hustix does not warrant the accuracy, timeliness, or completeness of third-party market data. Market data gaps, delayed feeds, or proxy calculation fallbacks[cite: 3] may impact simulation results, for which Hustix disclaims all liability.',
     ],
   },

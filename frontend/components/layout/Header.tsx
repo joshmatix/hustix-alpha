@@ -13,6 +13,7 @@ type Ticker = {
   value: string;
   change: number | null;
   unit: MoveUnit;
+  hint?: string;
 };
 
 const navItems = [
@@ -26,7 +27,7 @@ const navItems = [
 const fallbackTickers: Ticker[] = [
   { label: 'Fed Funds (EFFR)', value: '5.25%', change: -0.01, unit: 'bps' },
   { label: 'US 10Y (TNX)', value: '4.22%', change: 0.02, unit: 'bps' },
-  { label: 'USD Index (DXY)', value: '104.20', change: 0.12, unit: 'pct' },
+  { label: 'USD Proxy', value: '104.20', change: 0.12, unit: 'pct', hint: 'Synthetic USD Index (Calculated via UUP)' },
   { label: 'Bitcoin (BTC)', value: '$67,420', change: -0.05, unit: 'pct' },
 ];
 
@@ -66,7 +67,10 @@ function TrendBadge({ change, unit }: { change: number | null; unit: MoveUnit })
 
 function TickerChip({ ticker }: { ticker: Ticker }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-slate-800 bg-slate-950 px-2.5 py-1 text-[11px]">
+    <div
+      title={ticker.hint}
+      className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-slate-800 bg-slate-950 px-2.5 py-1 text-[11px]"
+    >
       <span className="text-slate-400">{ticker.label}</span>
       <span className="font-semibold text-indigo-300">{ticker.value}</span>
       <TrendBadge change={ticker.change} unit={ticker.unit} />
@@ -148,7 +152,8 @@ export default function Header() {
         }
         if (indicators.Dollar_Index != null) {
           next.push({
-            label: 'USD Index (DXY)',
+            label: 'USD Proxy',
+            hint: 'Synthetic USD Index (Calculated via UUP)',
             value: Number(indicators.Dollar_Index).toFixed(2),
             change: indicators.Dollar_Index_change_pct == null ? null : Number(indicators.Dollar_Index_change_pct),
             unit: 'pct',

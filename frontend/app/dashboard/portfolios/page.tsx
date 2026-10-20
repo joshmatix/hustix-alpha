@@ -298,7 +298,7 @@ export default function PortfoliosPage() {
       ) : (
         <>
         <p id="csv-format-help" className="sr-only">
-          Column order is not significant. Required columns: ticker, asset_class, quantity, and current_price. Quantity is the number of shares. Optional columns: asset_name, duration_years, and beta. Class labels are Equity, Bond, Commodity, Gold, and Cash. A sample file is at /samples/holdings-sample.csv. Uploading replaces the holdings already in this portfolio.
+          Column order is not significant. Required columns: ticker, asset_class, quantity, and current_price. Quantity is the number of shares. Optional columns: asset_name, duration_years, and beta. Class labels are Equity, Bond, Commodity, Gold, and Cash. A positions export from Schwab, Fidelity, LPL, BNY Mellon, or Raymond James is also accepted. A sample file is at /samples/holdings-sample.csv. Uploading replaces the holdings already in this portfolio.
         </p>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {portfolios.map((portfolio) => (
@@ -363,7 +363,7 @@ export default function PortfoliosPage() {
                       <p className="mt-2 text-slate-400">Optional</p>
                       <p>asset_name, duration_years, beta</p>
                       <p className="mt-2 text-slate-400">
-                        Quantity is the share count. Equity prices are replaced with the Yahoo close. Uploading replaces the holdings already in this portfolio.
+                        Quantity is the share count. Equity prices are replaced with the market-data close. Schwab, Fidelity, LPL, BNY Mellon, and Raymond James position exports are accepted. Uploading replaces the holdings already in this portfolio.
                       </p>
                       <a
                         href="/samples/holdings-sample.csv"
