@@ -106,14 +106,30 @@ function smoothCurve(points: Array<{ x: number; y: number }>, floor: number, cei
 function DistributionChart({
   startingValue,
   results,
+  onRun,
+  running,
+  runDisabled,
 }: {
   startingValue: number | null;
   results: DistributionResults | null;
+  onRun: () => void;
+  running: boolean;
+  runDisabled: boolean;
 }) {
   if (!results || startingValue == null) {
     return (
-      <div className="flex h-44 items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-4 text-center text-sm text-slate-400">
-        Run Risk Analysis to compare today&apos;s value with the shocked ending-value distribution.
+      <div className="flex h-44 items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-6 text-center text-sm text-slate-400">
+        <p className="max-w-full leading-6">
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={runDisabled}
+            className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-0.5 align-baseline text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-800/50"
+          >
+            {running ? 'Running...' : '▶ Run Risk Analysis'}
+          </button>{' '}
+          to compare today&apos;s value with the shocked ending-value distribution.
+        </p>
       </div>
     );
   }
@@ -494,6 +510,9 @@ function RiskModelsPage() {
             <DistributionChart
               startingValue={distributionResults?.startingValue ?? (portfolio ? Number(portfolio.portfolio_value) : null)}
               results={distributionResults}
+              onRun={handleRunWorkspace}
+              running={isCalculating}
+              runDisabled={runDisabled}
             />
           </div>
         </div>
