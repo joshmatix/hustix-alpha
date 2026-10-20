@@ -16,7 +16,11 @@ _HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 def is_equity_class(asset_class: str) -> bool:
-    return str(asset_class).strip().lower() in EQUITY_CLASSES
+    key = str(asset_class).strip().lower()
+    if key in EQUITY_CLASSES:
+        return True
+    head = key.split(",")[0].strip()
+    return head in EQUITY_CLASSES or head.startswith("equit") or head.startswith("stock")
 
 
 def yahoo_symbol(ticker: str) -> str:

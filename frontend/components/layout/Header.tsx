@@ -20,6 +20,7 @@ const navItems = [
   { name: 'Portfolios', href: '/dashboard/portfolios' },
   { name: 'Risk Models', href: '/dashboard/risk-models' },
   { name: 'Settings', href: '/dashboard/settings' },
+  { name: 'Help', href: '/dashboard/help' },
 ];
 
 const fallbackTickers: Ticker[] = [

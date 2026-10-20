@@ -367,7 +367,7 @@ function RiskModelsPage() {
 
   return (
     <div className="-mt-3 grid grid-cols-1 gap-6 sm:-mt-5 lg:h-[calc(100vh-7.5rem)] lg:grid-cols-12">
-      <aside className="sticky top-20 space-y-4 self-start overflow-y-auto lg:col-span-4 lg:max-h-full xl:col-span-3">
+      <aside className="space-y-4 self-start overflow-y-auto lg:col-span-4 lg:max-h-full xl:col-span-3">
         <div>
           <label className="block text-xs font-medium text-slate-400" htmlFor="risk-portfolio">
             Portfolio
