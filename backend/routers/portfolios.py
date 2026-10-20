@@ -7,6 +7,7 @@ import datetime
 from database import SUPABASE_UNREACHABLE, SUPABASE_URL, authorize_client, client_for_token
 from engine.equity_prices import fetch_closing_prices, fetch_equity_price, is_equity_class, yahoo_symbol
 from engine.holdings_csv import HoldingsCsvError, number_field, parse_holdings_csv
+from engine.market_data import provider_label
 
 router = APIRouter(prefix="/api/portfolios", tags=["Portfolios"])
 
@@ -441,7 +442,7 @@ async def add_ticker(holding: HoldingCreate, authorization: Optional[str] = Head
             if live_price is None:
                 raise HTTPException(
                     status_code=422,
-                    detail=f"Yahoo Finance has no price for {ticker}.",
+                    detail=f"{provider_label()} has no price for {ticker}.",
                 )
             price = live_price
         payload = {
@@ -566,7 +567,7 @@ async def upload_csv(
         if missing:
             raise HTTPException(
                 status_code=422,
-                detail=f"Yahoo Finance has no price for: {', '.join(missing)}",
+                detail=f"{provider_label()} has no price for: {', '.join(missing)}",
             )
 
         for row in parsed_rows:
