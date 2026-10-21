@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS public.portfolios (
   name TEXT NOT NULL,
   description TEXT,
   account_alias TEXT,
+  internal_account_number TEXT,
+  tax_status TEXT,
   target_risk_profile TEXT DEFAULT 'Balanced',
   portfolio_value NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
   asset_allocation JSONB DEFAULT '{"equities": 60, "bonds": 25, "realAssets": 10, "cash": 5}'::jsonb,
@@ -24,6 +26,8 @@ CREATE TABLE IF NOT EXISTS public.portfolios (
 ALTER TABLE public.portfolios ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE public.portfolios ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE public.portfolios ADD COLUMN IF NOT EXISTS account_alias TEXT;
+ALTER TABLE public.portfolios ADD COLUMN IF NOT EXISTS internal_account_number TEXT;
+ALTER TABLE public.portfolios ADD COLUMN IF NOT EXISTS tax_status TEXT;
 ALTER TABLE public.portfolios ADD COLUMN IF NOT EXISTS target_risk_profile TEXT DEFAULT 'Balanced';
 ALTER TABLE public.portfolios ADD COLUMN IF NOT EXISTS portfolio_value NUMERIC(15, 2) DEFAULT 0.00;
 ALTER TABLE public.portfolios ADD COLUMN IF NOT EXISTS asset_allocation JSONB DEFAULT '{"equities": 60, "bonds": 25, "realAssets": 10, "cash": 5}'::jsonb;

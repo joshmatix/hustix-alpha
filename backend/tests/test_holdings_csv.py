@@ -1,7 +1,7 @@
 import pytest
 
 from engine.equity_prices import is_equity_class
-from engine.holdings_csv import HoldingsCsvError, parse_holdings_csv
+from engine.holdings_csv import HoldingsCsvError, number_field, parse_holdings_csv
 from routers.portfolios import _allocation_bucket, allocation_from_holdings
 
 
@@ -141,6 +141,47 @@ def test_raymond_james_positions_export():
         ("BRK-B", "Equity", "2", "532.23"),
         ("CASH", "Cash", "1200", "1"),
     ]
+
+
+def test_dollar_price_is_a_number():
+    exported = """ticker,Asset Class,Share Quantity,Share Price
+VTI,Equity,10,"$378.42"
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert number_field(row["current_price"], "current_price", "VTI") == 378.42
+
+
+def test_asset_class_header_is_accepted_on_the_app_file():
+    exported = """ticker,Asset Class,Share Quantity,Share Price
+VTI,Equity,10,280.50
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert row["ticker"] == "VTI"
+    assert row["asset_class"] == "Equity"
+    assert row["quantity"] == "10"
+    assert row["current_price"] == "280.50"
+
+
+def test_share_quantity_and_share_price_fill_the_app_file():
+    exported = """ticker,asset_class,Share Quantity,Share Price
+VTI,Equity,10,280.50
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert row["ticker"] == "VTI"
+    assert row["asset_class"] == "Equity"
+    assert row["quantity"] == "10"
+    assert row["current_price"] == "280.50"
+
+
+def test_share_price_fills_current_price_on_the_app_file():
+    exported = """ticker,asset_class,quantity,Share Price
+VTI,Equity,10,280.50
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert row["ticker"] == "VTI"
+    assert row["asset_class"] == "Equity"
+    assert row["quantity"] == "10"
+    assert row["current_price"] == "280.50"
 
 
 def test_market_value_fills_a_missing_price():

@@ -1,11 +1,18 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { TAX_STATUSES, type TaxStatus } from "@/lib/taxStatus";
 
 interface CreatePortfolioModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit?: (data: { name: string; description: string; file: File | null }) => void | Promise<void>;
+  onSubmit?: (data: {
+    name: string;
+    description: string;
+    internalAccountNumber: string;
+    taxStatus: TaxStatus;
+    file: File | null;
+  }) => void | Promise<void>;
 }
 
 function labelFromCsv(file: File) {
@@ -19,6 +26,8 @@ export default function CreatePortfolioModal({
   onSubmit,
 }: CreatePortfolioModalProps) {
   const [portfolioName, setPortfolioName] = useState("");
+  const [internalAccountNumber, setInternalAccountNumber] = useState("");
+  const [taxStatus, setTaxStatus] = useState<TaxStatus | "">("");
   const [description, setDescription] = useState("");
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [showDescriptionInfo, setShowDescriptionInfo] = useState(false);
@@ -38,6 +47,8 @@ export default function CreatePortfolioModal({
   useEffect(() => {
     if (!isOpen) return;
     setPortfolioName("");
+    setInternalAccountNumber("");
+    setTaxStatus("");
     setDescription("");
     setCsvFile(null);
     setError(null);
@@ -85,9 +96,17 @@ export default function CreatePortfolioModal({
     setError(null);
     try {
       if (onSubmit) {
-        await onSubmit({ name: portfolioName, description, file: csvFile });
+        await onSubmit({
+          name: portfolioName,
+          description,
+          internalAccountNumber,
+          taxStatus: taxStatus as TaxStatus,
+          file: csvFile,
+        });
       }
       setPortfolioName("");
+      setInternalAccountNumber("");
+      setTaxStatus("");
       setDescription("");
       setCsvFile(null);
       if (fileRef.current) fileRef.current.value = "";
@@ -122,7 +141,7 @@ export default function CreatePortfolioModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-portfolio-title"
-        className="relative w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-xl"
+        className="relative w-full max-w-3xl rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -177,6 +196,53 @@ export default function CreatePortfolioModal({
               placeholder="e.g., Growth & Income"
               className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-sm text-slate-100 placeholder:text-slate-500 caret-slate-100 focus:border-indigo-500 focus:outline-none"
             />
+          </div>
+
+          <div>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 sm:flex-nowrap">
+              <label
+                htmlFor="internalAccountNumber"
+                className="shrink-0 text-sm font-medium text-slate-300"
+              >
+                Internal account number
+              </label>
+              <p className="whitespace-nowrap text-xs text-slate-400">
+                <span className="font-semibold text-red-500">Do not use</span>
+                : SSNs, Tax IDs, passport numbers or other personally identifiable information
+              </p>
+            </div>
+            <input
+              id="internalAccountNumber"
+              type="text"
+              required
+              maxLength={64}
+              value={internalAccountNumber}
+              onChange={(e) => setInternalAccountNumber(e.target.value)}
+              placeholder="Firm account number"
+              className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-sm text-slate-100 placeholder:text-slate-500 caret-slate-100 focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="taxStatus" className="block text-sm font-medium text-slate-300">
+              Tax status
+            </label>
+            <select
+              id="taxStatus"
+              required
+              value={taxStatus}
+              onChange={(e) => setTaxStatus(e.target.value as TaxStatus)}
+              className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="" disabled>
+                Select tax status
+              </option>
+              {TAX_STATUSES.map((status) => (
+                <option key={status.value} value={status.value}>
+                  {status.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>

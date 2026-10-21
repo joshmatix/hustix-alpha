@@ -1,4 +1,4 @@
-export const AGREEMENT_VERSION = '2026-10-19';
+export const AGREEMENT_VERSION = '2026-10-20';
 
 export const AGREEMENT_TITLE = 'Hustix Macro Customer Agreement';
 
@@ -11,7 +11,7 @@ export const agreementSections: AgreementSection[] = [
   {
     heading: '1. This agreement & acceptance',
     paragraphs: [
-      'This is the binding legal agreement between you and Hustix for the Hustix Macro service at hustix.com[cite: 1]. The version date is October 19, 2026.',
+      'This is the binding legal agreement between you and Hustix for the Hustix Macro service at hustix.com[cite: 1]. The version date is October 20, 2026.',
       'By clicking to create an account, subscribing, or using the service, you agree to this text. If you accept on behalf of a firm or RIA, you confirm that you have legal authority to bind that entity.',
     ],
   },
@@ -39,7 +39,9 @@ export const agreementSections: AgreementSection[] = [
     heading: '5. Information you upload & data privacy',
     paragraphs: [
       'You may store client and portfolio information in the service. You warrant that you have all necessary rights and client consents to upload this information and to allow Hustix to store and process it.',
-      'Hustix uses uploaded data solely to provide, maintain, and secure the service and to comply with the law. Hustix does not sell your data.',
+      'The RIA or advisor retains ownership of all uploaded portfolio data and client identifier data. Hustix receives only a limited right to store and process that data to provide the service.',
+      'Do not enter sensitive government identifiers in any free-text field. That includes Social Security numbers, tax identification numbers, and passport numbers.',
+      'Hustix uses uploaded data solely to provide, maintain, and secure the service and to comply with the law. Hustix Macro does not sell, market to, or aggregate end-client data for third-party monetization.',
       'The service is not an official books-and-records retention system under SEC or FINRA regulations. You are solely responsible for maintaining your own firm compliance archives and official client records[cite: 2, 3].',
     ],
   },

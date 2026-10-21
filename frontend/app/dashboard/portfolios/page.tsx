@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import CreatePortfolioModal from '@/components/CreatePortfolioModal';
@@ -9,10 +9,14 @@ import Button from '@/components/ui/Button';
 import { PortfolioListSkeleton, SkeletonFade } from '@/components/ui/Skeleton';
 import { apiFetch, type Holding, type Portfolio } from '@/lib/api';
 import { portfolioLimitSentence } from '@/lib/planLimits';
+import { TAX_STATUSES, taxStatusLabel } from '@/lib/taxStatus';
 import { supabase } from '@/lib/supabaseClient';
 import { createCheckoutSession } from '@/lib/stripeCheckout';
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+const PORTFOLIO_VIEW_KEY = 'hustix-portfolio-view';
+
+type PortfolioView = 'cards' | 'list';
 
 export default function PortfoliosPage() {
   const router = useRouter();
@@ -36,6 +40,13 @@ export default function PortfoliosPage() {
     portfolioLimit: number | null;
     tickerLimit: number | null;
   } | null>(null);
+  const [portfolioView, setPortfolioView] = useState<PortfolioView>('cards');
+  const [accountFilter, setAccountFilter] = useState('');
+  const [taxFilter, setTaxFilter] = useState<string[]>([]);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [taxMenuOpen, setTaxMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  const taxMenuRef = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState<{
     message: string;
     detail: string;
@@ -64,6 +75,87 @@ export default function PortfoliosPage() {
       applyQuote(data);
     });
   }, []);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(PORTFOLIO_VIEW_KEY);
+    if (saved === 'list' || saved === 'cards') setPortfolioView(saved);
+  }, []);
+
+  const choosePortfolioView = (next: PortfolioView) => {
+    setPortfolioView(next);
+    window.localStorage.setItem(PORTFOLIO_VIEW_KEY, next);
+  };
+
+  const accountIds = Array.from(
+    new Set(
+      portfolios
+        .map((portfolio) => (portfolio.internal_account_number || '').trim())
+        .filter(Boolean)
+    )
+  ).sort((left, right) => left.localeCompare(right));
+
+  useEffect(() => {
+    if (!accountFilter) return;
+    const stillThere = portfolios.some(
+      (portfolio) => (portfolio.internal_account_number || '').trim() === accountFilter
+    );
+    if (!stillThere) setAccountFilter('');
+  }, [portfolios, accountFilter]);
+
+  useEffect(() => {
+    if (!accountMenuOpen && !taxMenuOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!accountMenuRef.current?.contains(target)) setAccountMenuOpen(false);
+      if (!taxMenuRef.current?.contains(target)) setTaxMenuOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setAccountMenuOpen(false);
+        setTaxMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [accountMenuOpen, taxMenuOpen]);
+
+  const chooseAccount = (accountId: string) => {
+    setAccountFilter(accountId);
+    setAccountMenuOpen(false);
+  };
+
+  const chooseTaxStatus = (status: string) => {
+    setTaxFilter((current) => {
+      if (!status) return [];
+      return current.includes(status)
+        ? current.filter((item) => item !== status)
+        : [...current, status];
+    });
+  };
+
+  const visiblePortfolios = portfolios.filter((portfolio) => {
+    if (accountFilter && (portfolio.internal_account_number || '').trim() !== accountFilter) return false;
+    if (taxFilter.length && !taxFilter.includes(portfolio.tax_status || '')) return false;
+    return true;
+  });
+  const taxFilterLabel = taxFilter.length
+    ? TAX_STATUSES.filter((status) => taxFilter.includes(status.value)).map((status) => status.label).join(', ')
+    : '';
+  const emptyFilterMessage = accountFilter && taxFilter.length
+    ? 'No portfolios match that client and tax status.'
+    : taxFilter.length
+      ? 'No portfolios match that tax status.'
+      : 'No portfolios match that client.';
+
+  if (selectedId && !visiblePortfolios.some((portfolio) => portfolio.id === selectedId)) {
+    setSelectedId(null);
+    setHoldings([]);
+    setHoldingsLoading(false);
+  }
 
   const fetchPortfolios = async (quiet = false) => {
     try {
@@ -105,12 +197,20 @@ export default function PortfoliosPage() {
     fetchPortfolios();
   }, []);
 
-  const handleCreatePortfolio = async (data: { name: string; description: string; file: File | null }) => {
+  const handleCreatePortfolio = async (data: {
+    name: string;
+    description: string;
+    internalAccountNumber: string;
+    taxStatus: string;
+    file: File | null;
+  }) => {
     const res = await apiFetch('/api/portfolios/create', {
       method: 'POST',
       body: JSON.stringify({
         name: data.name,
         description: data.description,
+        internal_account_number: data.internalAccountNumber,
+        tax_status: data.taxStatus,
         account_alias: data.name,
         target_risk_profile: 'Balanced',
         portfolio_value: 0,
@@ -246,7 +346,7 @@ export default function PortfoliosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Portfolios</h1>
           <p className="mt-1 text-xs text-slate-400">
@@ -254,7 +354,33 @@ export default function PortfoliosPage() {
             {planLimits ? ` ${portfolioLimitSentence(planLimits.name, planLimits.portfolioLimit, planLimits.tickerLimit)}` : ''}
           </p>
         </div>
-        <Button onClick={() => setIsModalOpen(true)}>+ Create Portfolio</Button>
+        <div className="flex items-center gap-2">
+          {portfolios.length > 0 && (
+            <div className="inline-flex rounded-lg border border-slate-700 p-0.5" role="group" aria-label="Portfolio layout">
+              <button
+                type="button"
+                aria-pressed={portfolioView === 'cards'}
+                onClick={() => choosePortfolioView('cards')}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                  portfolioView === 'cards' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Cards
+              </button>
+              <button
+                type="button"
+                aria-pressed={portfolioView === 'list'}
+                onClick={() => choosePortfolioView('list')}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                  portfolioView === 'list' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                List
+              </button>
+            </div>
+          )}
+          <Button onClick={() => setIsModalOpen(true)}>+ Create Portfolio</Button>
+        </div>
       </div>
 
       <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-xs leading-relaxed text-slate-400">
@@ -300,13 +426,150 @@ export default function PortfoliosPage() {
         <p id="csv-format-help" className="sr-only">
           Column order is not significant. Required columns: ticker, asset_class, quantity, and current_price. Quantity is the number of shares. Optional columns: asset_name, duration_years, and beta. Class labels are Equity, Bond, Commodity, Gold, and Cash. A positions export from Schwab, Fidelity, LPL, BNY Mellon, or Raymond James is also accepted. A sample file is at /samples/holdings-sample.csv. Uploading replaces the holdings already in this portfolio.
         </p>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {portfolios.map((portfolio) => (
+        <div className="flex flex-wrap gap-2">
+        <div ref={accountMenuRef} className="relative w-full max-w-xs">
+          <button
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={accountMenuOpen}
+            onClick={() => {
+              setTaxMenuOpen(false);
+              setAccountMenuOpen((open) => !open);
+            }}
+            className="flex w-full items-center justify-between rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-left text-sm focus:border-indigo-500 focus:outline-none"
+          >
+            <span className={accountFilter ? 'text-slate-100' : 'text-slate-400'}>
+              {accountFilter || 'All clients'}
+            </span>
+            <span aria-hidden="true" className="text-slate-500">▾</span>
+          </button>
+          {accountMenuOpen && (
+            <ul
+              role="listbox"
+              aria-label="Internal account numbers"
+              className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-md border border-slate-700 bg-slate-950 py-1 shadow-lg"
+            >
+              <li>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={!accountFilter}
+                  onClick={() => chooseAccount('')}
+                  className={`block w-full px-3 py-2 text-left text-sm ${
+                    accountFilter ? 'text-slate-300 hover:bg-slate-800' : 'bg-slate-800 text-white'
+                  }`}
+                >
+                  All clients
+                </button>
+              </li>
+              {accountIds.length === 0 ? (
+                <li className="px-3 py-2 text-sm text-slate-500">No internal account numbers yet.</li>
+              ) : (
+                accountIds.map((accountId) => (
+                  <li key={accountId}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={accountFilter === accountId}
+                      onClick={() => chooseAccount(accountId)}
+                      className={`block w-full px-3 py-2 text-left text-sm ${
+                        accountFilter === accountId
+                          ? 'bg-slate-800 text-white'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      {accountId}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+        </div>
+        <div ref={taxMenuRef} className="relative w-full max-w-xs">
+          <button
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={taxMenuOpen}
+            onClick={() => {
+              setAccountMenuOpen(false);
+              setTaxMenuOpen((open) => !open);
+            }}
+            className="flex w-full items-center justify-between rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-left text-sm focus:border-indigo-500 focus:outline-none"
+          >
+            <span className={`truncate ${taxFilter.length ? 'text-slate-100' : 'text-slate-400'}`}>
+              {taxFilterLabel || 'All tax statuses'}
+            </span>
+            <span aria-hidden="true" className="text-slate-500">▾</span>
+          </button>
+          {taxMenuOpen && (
+            <ul
+              role="listbox"
+              aria-multiselectable="true"
+              aria-label="Tax statuses"
+              className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-md border border-slate-700 bg-slate-950 py-1 shadow-lg"
+            >
+              <li role="option" aria-selected={taxFilter.length === 0}>
+                <label
+                  className={`flex cursor-pointer items-center gap-2 px-3 py-2 text-sm ${
+                    taxFilter.length ? 'text-slate-300 hover:bg-slate-800' : 'bg-slate-800 text-white'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={taxFilter.length === 0}
+                    onChange={() => chooseTaxStatus('')}
+                    className="h-4 w-4 accent-indigo-500"
+                  />
+                  All tax statuses
+                </label>
+              </li>
+              {TAX_STATUSES.map((status) => {
+                const checked = taxFilter.includes(status.value);
+                return (
+                  <li key={status.value} role="option" aria-selected={checked}>
+                    <label
+                      className={`flex cursor-pointer items-center gap-2 px-3 py-2 text-sm ${
+                        checked ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => chooseTaxStatus(status.value)}
+                        className="h-4 w-4 accent-indigo-500"
+                      />
+                      {status.label}
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+        </div>
+        {visiblePortfolios.length === 0 ? (
+          <p className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-8 text-center text-sm text-slate-400">
+            {emptyFilterMessage}
+          </p>
+        ) : (
+        <div className={portfolioView === 'cards' ? 'grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3' : 'divide-y divide-slate-800 overflow-hidden rounded-xl border border-slate-800 bg-slate-900'}>
+          {visiblePortfolios.map((portfolio) => portfolioView === 'cards' ? (
             <div
               key={portfolio.id}
               className="relative rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-sm hover:z-20 focus-within:z-20"
             >
               <h3 className="text-lg font-semibold text-white">{portfolio.name}</h3>
+              {(portfolio.internal_account_number || taxStatusLabel(portfolio.tax_status)) && (
+                <p className="mt-1 text-xs text-slate-500">
+                  {[
+                    portfolio.internal_account_number
+                      ? `Internal account ${portfolio.internal_account_number}`
+                      : '',
+                    taxStatusLabel(portfolio.tax_status),
+                  ].filter(Boolean).join(' · ')}
+                </p>
+              )}
               <p className="mt-2 text-sm text-slate-400">
                 {portfolio.description || 'No description provided.'}
               </p>
@@ -393,8 +656,74 @@ export default function PortfoliosPage() {
                 </button>
               </div>
             </div>
+          ) : (
+            <div key={portfolio.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-white">{portfolio.name}</p>
+                {(portfolio.internal_account_number || taxStatusLabel(portfolio.tax_status)) && (
+                  <p className="truncate text-xs text-slate-500">
+                    {[
+                      portfolio.internal_account_number
+                        ? `Internal account ${portfolio.internal_account_number}`
+                        : '',
+                      taxStatusLabel(portfolio.tax_status),
+                    ].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+                <p className="truncate text-xs text-slate-400">
+                  {portfolio.description || 'No description provided.'}
+                </p>
+              </div>
+              <p className="shrink-0 text-sm font-semibold text-emerald-400">
+                ${Number(portfolio.portfolio_value || 0).toLocaleString()}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="secondary" onClick={() => loadHoldings(portfolio.id)}>
+                  {selectedId === portfolio.id ? 'Holdings' : 'View holdings'}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => router.push(`/dashboard/risk-models?portfolio=${portfolio.id}`)}
+                >
+                  Analyze Risk
+                </Button>
+                <label className="relative inline-flex rounded-lg focus-within:ring-2 focus-within:ring-amber-500 focus-within:ring-offset-2 focus-within:ring-offset-slate-950">
+                  <span className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-amber-500/70 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-500/25">
+                    {uploadingId === portfolio.id ? 'Uploading...' : 'Upload CSV'}
+                  </span>
+                  <input
+                    type="file"
+                    accept=".csv,.CSV,text/csv"
+                    aria-label={`Upload CSV for ${portfolio.name}`}
+                    title="Replaces existing holdings"
+                    aria-describedby="csv-format-help"
+                    disabled={uploadingId === portfolio.id}
+                    className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed focus:outline-none"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setCsvReplace({
+                          portfolioId: portfolio.id,
+                          portfolioName: portfolio.name,
+                          file,
+                        });
+                      }
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setPortfolioToDelete(portfolio)}
+                  className="text-xs font-semibold text-rose-400 hover:text-rose-300"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
           ))}
         </div>
+        )}
         </>
         )}
       </SkeletonFade>

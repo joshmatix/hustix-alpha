@@ -21,6 +21,8 @@ export type Portfolio = {
   id: string;
   name: string;
   description?: string;
+  internal_account_number?: string | null;
+  tax_status?: string | null;
   portfolio_value: number;
   asset_allocation: AssetAllocation;
   target_risk_profile?: string;

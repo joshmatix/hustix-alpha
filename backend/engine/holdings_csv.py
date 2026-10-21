@@ -36,6 +36,7 @@ _PRICE_KEYS = (
     "closingprice",
     "recentprice",
     "last",
+    "shareprice",
 )
 _VALUE_KEYS = ("marketvalue", "mktval", "mktvalmarketvalue", "currentvalue", "positiondollarvalue")
 _NAME_KEYS = ("description", "securitydescription", "securityname", "name", "assetname")
@@ -128,9 +129,15 @@ def parse_holdings_csv(contents: bytes) -> list[dict[str, str]]:
         raise HoldingsCsvError("CSV has no holdings.")
 
     header = _header_index(rows[0])
-    if _APP_REQUIRED <= set(header):
+    app_keys = _APP_REQUIRED & set(header)
+    if (
+        "ticker" in header
+        and "assetclass" in header
+        and _pick(header, _QUANTITY_KEYS) is not None
+        and _pick(header, _PRICE_KEYS) is not None
+    ):
         return _parse_app_rows(rows)
-    if len(_APP_REQUIRED & set(header)) >= 2:
+    if len(app_keys) >= 2:
         missing = sorted(_display_name(key) for key in _APP_REQUIRED - set(header))
         raise HoldingsCsvError(f"CSV missing required columns: {', '.join(missing)}")
 
@@ -155,6 +162,21 @@ def _parse_app_rows(rows: list[list[str]]) -> list[dict[str, str]]:
     header = [cell.lower() for cell in rows[0]]
     while header and header[-1] == "":
         header.pop()
+    if "asset_class" not in header:
+        for index, cell in enumerate(header):
+            if _compact(cell) == "assetclass":
+                header[index] = "asset_class"
+                break
+    if "quantity" not in header:
+        for index, cell in enumerate(header):
+            if _compact(cell) in _QUANTITY_KEYS:
+                header[index] = "quantity"
+                break
+    if "current_price" not in header:
+        for index, cell in enumerate(header):
+            if _compact(cell) in _PRICE_KEYS:
+                header[index] = "current_price"
+                break
     required = {"ticker", "asset_class", "quantity", "current_price"}
     missing = required - set(header)
     if missing:
@@ -314,8 +336,8 @@ def _broker_record(row: list[str], columns: dict[str, int | None], line_no: int)
 
 
 def number_field(value: str, column: str, ticker: str) -> float:
-    try:
-        return float(str(value).replace(",", ""))
-    except ValueError as exc:
+    number = _number(str(value))
+    if number is None:
         label = ticker or "row"
-        raise HoldingsCsvError(f"{column} for {label} must be a number, not {value!r}.") from exc
+        raise HoldingsCsvError(f"{column} for {label} must be a number, not {value!r}.")
+    return number
