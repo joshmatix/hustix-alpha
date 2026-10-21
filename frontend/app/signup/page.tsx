@@ -31,6 +31,7 @@ function money(cents: number) {
 }
 
 export default function SignupPage() {
+  const [fullName, setFullName] = useState('');
   const [firmName, setFirmName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -68,12 +69,13 @@ export default function SignupPage() {
       const signedInEmail = session.user.email ?? null;
       const { data: profile } = await supabase
         .from('profiles')
-        .select('agreement_version, firm_name')
+        .select('agreement_version, firm_name, full_name')
         .eq('id', session.user.id)
         .maybeSingle();
       if (!profile?.agreement_version) {
         setOauthUserId(session.user.id);
         if (signedInEmail) setEmail(signedInEmail);
+        if (profile?.full_name) setFullName(profile.full_name);
         if (profile?.firm_name) setFirmName(profile.firm_name);
         return;
       }
@@ -92,6 +94,7 @@ export default function SignupPage() {
     setOauthUserId(null);
     setActiveEmail(null);
     setEmail('');
+    setFullName('');
     setFirmName('');
     setPassword('');
     setAgreed(false);
@@ -123,6 +126,13 @@ export default function SignupPage() {
       return;
     }
 
+    const name = fullName.trim();
+    if (!name) {
+      setError('Enter your name.');
+      setLoading(false);
+      return;
+    }
+
     const firm = firmName.trim();
     if (!firm) {
       setError('Enter the firm name.');
@@ -141,6 +151,7 @@ export default function SignupPage() {
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
+          full_name: name,
           firm_name: firm,
           agreement_version: AGREEMENT_VERSION,
           agreement_accepted_at: acceptedAt,
@@ -164,6 +175,7 @@ export default function SignupPage() {
       options: {
         data: {
           plan,
+          full_name: name,
           firm_name: firm,
           agreement_version: AGREEMENT_VERSION,
           agreement_accepted_at: acceptedAt,
@@ -190,6 +202,7 @@ export default function SignupPage() {
       await supabase
         .from('profiles')
         .update({
+          full_name: name,
           firm_name: firm,
           agreement_version: AGREEMENT_VERSION,
           agreement_accepted_at: acceptedAt,
@@ -241,7 +254,7 @@ export default function SignupPage() {
             {step === 'authenticator'
               ? 'Add an authenticator app to finish this account.'
               : oauthUserId
-                ? 'Confirm your firm and accept the agreement to finish this sign-in.'
+                ? 'Confirm your name and firm, then accept the agreement to finish this sign-in.'
                 : 'Register as a wealth advisor to start running scenario analytics.'}
           </p>
         </div>
@@ -331,6 +344,23 @@ export default function SignupPage() {
           )}
 
           <div className="flex flex-col">
+            <label className="block text-xs font-medium text-slate-300 mb-2 leading-none" htmlFor="full-name">
+              Full Name
+            </label>
+            <input
+              id="full-name"
+              type="text"
+              required
+              autoComplete="name"
+              maxLength={120}
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition"
+              placeholder="Sarah Jenkins"
+            />
+          </div>
+
+          <div className="flex flex-col">
             <label className="block text-xs font-medium text-slate-300 mb-2 leading-none" htmlFor="firm-name">
               Firm Name
             </label>
@@ -401,7 +431,7 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={loading || email.trim() === '' || (oauthUserId === null && password === '')}
+            disabled={loading || fullName.trim() === '' || email.trim() === '' || (oauthUserId === null && password === '')}
             className="w-full py-3 mt-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white font-semibold rounded-lg text-sm transition shadow-lg shadow-indigo-600/20"
           >
             {loading ? 'Creating Account...' : oauthUserId ? 'I agree and continue' : 'I agree and create account'}
