@@ -57,7 +57,7 @@ const sections = [
   {
     heading: '8. Third-party market data',
     paragraphs: [
-      'The service uses market data, historical prices, and economic indicators from outside providers, including Yahoo Finance. Hustix does not guarantee that this data is accurate, complete, or current. Gaps, delays, and fallback calculations can change a result.',
+      'The service uses market data, historical prices, and economic indicators from outside providers. Hustix does not guarantee that this data is accurate, complete, or current. Gaps, delays, and fallback calculations can change a result.',
     ],
   },
   {

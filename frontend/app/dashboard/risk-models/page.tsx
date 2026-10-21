@@ -106,14 +106,30 @@ function smoothCurve(points: Array<{ x: number; y: number }>, floor: number, cei
 function DistributionChart({
   startingValue,
   results,
+  onRun,
+  running,
+  runDisabled,
 }: {
   startingValue: number | null;
   results: DistributionResults | null;
+  onRun: () => void;
+  running: boolean;
+  runDisabled: boolean;
 }) {
   if (!results || startingValue == null) {
     return (
-      <div className="flex h-44 items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-4 text-center text-sm text-slate-400">
-        Run Risk Analysis to compare today&apos;s value with the shocked ending-value distribution.
+      <div className="flex h-44 items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-6 text-center text-sm text-slate-400">
+        <p className="max-w-full leading-6">
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={runDisabled}
+            className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-0.5 align-baseline text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-800/50"
+          >
+            {running ? 'Running...' : '▶ Run Risk Analysis'}
+          </button>{' '}
+          to compare today&apos;s value with the shocked ending-value distribution.
+        </p>
       </div>
     );
   }
@@ -357,9 +373,9 @@ function RiskModelsPage() {
   const tickerRows = [...holdings].sort(
     (left, right) => Number(right.market_value || 0) - Number(left.market_value || 0),
   );
-  const selectedAccount = portfolios.find((item) => item.id === portfolioId)?.account_alias?.trim() || '';
+  const selectedAccount = portfolios.find((item) => item.id === portfolioId)?.internal_account_number?.trim() || '';
   const accountPortfolios = selectedAccount
-    ? portfolios.filter((item) => item.account_alias?.trim() === selectedAccount)
+    ? portfolios.filter((item) => item.internal_account_number?.trim() === selectedAccount)
     : portfolios;
   const yieldError = shock.yieldBps < -1000 || shock.yieldBps > 1000;
   const equityError = !shock.useWorstEquityWindow && (shock.equityPct < -80 || shock.equityPct > 100);
@@ -372,8 +388,8 @@ function RiskModelsPage() {
     !Number.isFinite(shock.equityPct);
 
   return (
-    <div className="-mt-3 grid grid-cols-1 gap-6 sm:-mt-5 lg:h-[calc(100vh-7.5rem)] lg:grid-cols-12">
-      <aside className="space-y-4 self-start overflow-y-auto lg:col-span-4 lg:max-h-full xl:col-span-3">
+    <div className="-mt-3 grid grid-cols-1 gap-6 sm:-mt-5 md:h-[calc(100vh-7.5rem)] md:grid-cols-12">
+      <aside className="space-y-4 self-start overflow-y-auto md:col-span-5 md:max-h-full lg:col-span-4 xl:col-span-3">
         <div>
           <label className="block text-xs font-medium text-slate-400" htmlFor="risk-portfolio">
             Portfolio
@@ -453,7 +469,7 @@ function RiskModelsPage() {
         </button>
       </aside>
 
-      <section className="flex min-h-0 flex-col gap-4 lg:col-span-8 lg:max-h-full lg:overflow-y-auto xl:col-span-9">
+      <section className="flex min-h-0 flex-col gap-4 md:col-span-7 md:max-h-full md:overflow-y-auto lg:col-span-8 xl:col-span-9">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-lg font-bold text-white">Simulation output</h1>
@@ -498,6 +514,9 @@ function RiskModelsPage() {
             <DistributionChart
               startingValue={distributionResults?.startingValue ?? (portfolio ? Number(portfolio.portfolio_value) : null)}
               results={distributionResults}
+              onRun={handleRunWorkspace}
+              running={isCalculating}
+              runDisabled={runDisabled}
             />
           </div>
         </div>

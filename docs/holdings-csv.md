@@ -2,6 +2,8 @@
 
 Upload a `.csv` file from a portfolio card. The upload replaces every holding already in that portfolio. A sample file is at [`frontend/public/samples/holdings-sample.csv`](../frontend/public/samples/holdings-sample.csv), and the app serves it at `/samples/holdings-sample.csv`.
 
+A positions export from Charles Schwab, Fidelity, LPL ClientWorks, BNY Mellon (including Pershing), or Raymond James can be uploaded as downloaded. Account titles, totals, pending-activity rows, and the disclaimer at the bottom are skipped. Cash and money-market rows are stored as cash. Equity, ETF, and mutual-fund rows use a market-data close. Bonds and other rows keep the price in the file.
+
 ## File shape
 
 - UTF-8 text, one holding per row, with a header row.
@@ -28,9 +30,9 @@ Market value is `quantity × price`. For cash, set `current_price` to `1` and pu
 
 ## Prices
 
-Equity rows must use a ticker Yahoo Finance can price. The file's `current_price` is still required, but the upload replaces it with the last completed session close.
+Equity rows must use a ticker the market-data provider can price. The file's `current_price` is still required, but the upload replaces it with the last completed session close.
 
-Bond, commodity, gold, and cash rows keep the `current_price` from the file. Those tickers still need Yahoo price history before a risk run, except `CASH`, `USD`, and `USD-CASH`.
+Bond, commodity, gold, and cash rows keep the `current_price` from the file. Those tickers still need price history from the market-data provider before a risk run, except `CASH`, `USD`, and `USD-CASH`.
 
 ## Class labels
 
@@ -38,11 +40,11 @@ The first class word in `asset_class` chooses the slice. Matching ignores case.
 
 | Words | Slice | Price used |
 | --- | --- | --- |
-| Equity, Equities, Stock, Stocks | Equities | Yahoo close |
+| Equity, Equities, Stock, Stocks | Equities | Market-data close |
 | Bond, Bonds, Fixed Income | Fixed income | File price |
 | Commodity, Commodities, Real Assets, Gold | Real assets | File price |
 | Cash | Cash | File price (`1`) |
-| Anything else | Equities | Yahoo close |
+| Anything else | Equities | Market-data close |
 
 A longer label is fine when the class word comes first, for example `Bond, U.S., Long-Term`. Quote it:
 

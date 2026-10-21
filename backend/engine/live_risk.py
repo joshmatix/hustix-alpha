@@ -1,16 +1,16 @@
-"""One-year stress test from live Yahoo Finance price history."""
+"""One-year stress test from live daily prices.
+
+The price vendor is MARKET_DATA_PROVIDER. LOOKBACK is the two-year window both vendors request.
+"""
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from urllib.parse import quote
 
 import numpy as np
-import requests
 
 from engine.equity_prices import yahoo_symbol
+from engine.market_data import fetch_daily_closes, provider_label
 
-YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-_HEADERS = {"User-Agent": "Mozilla/5.0"}
 LOOKBACK = "2y"
 HORIZON_DAYS = 252
 N_PATHS = 1000
@@ -89,37 +89,6 @@ def is_cash_holding(ticker: str, asset_class: str) -> bool:
     return asset_bucket(asset_class) == "Cash" or yahoo_symbol(ticker) in CASH_TICKERS
 
 
-def fetch_daily_closes(symbol: str) -> dict[str, float]:
-    safe = quote(yahoo_symbol(symbol), safe="")
-    response = requests.get(
-        YAHOO_CHART_URL.format(symbol=safe),
-        params={"interval": "1d", "range": LOOKBACK},
-        headers=_HEADERS,
-        timeout=15,
-    )
-    if response.status_code != 200:
-        return {}
-    result = (response.json().get("chart") or {}).get("result") or []
-    if not result:
-        return {}
-    block = result[0]
-    timestamps = block.get("timestamp") or []
-    indicators = block.get("indicators") or {}
-    adj = (indicators.get("adjclose") or [{}])[0].get("adjclose")
-    closes = (indicators.get("quote") or [{}])[0].get("close") or []
-    series = adj if isinstance(adj, list) and any(value is not None for value in adj) else closes
-    prices: dict[str, float] = {}
-    for stamp, price in zip(timestamps, series):
-        if price is None:
-            continue
-        price = float(price)
-        if price <= 0:
-            continue
-        day = datetime.fromtimestamp(int(stamp), tz=timezone.utc).date().isoformat()
-        prices[day] = price
-    return prices
-
-
 def _daily_returns(closes: dict[str, float]) -> dict[str, float]:
     days = sorted(closes)
     returns: dict[str, float] = {}
@@ -180,7 +149,11 @@ def _aligned_proxy(closes: dict[str, float], days: list[str]) -> dict | None:
 
 
 def _yield_decimal(tnx_level: float) -> float:
-    """Yahoo ^TNX is a percent yield, or the legacy quote at ten times the yield."""
+    """^TNX is a percent yield, or the index quote at ten times the yield.
+
+    Yahoo and EODHD's TNX.INDX both use that index quote, near 40 when the yield is 4%.
+    Tiingo has no yield index, so its series is the FRED 10-year yield multiplied by 10.
+    """
     percent = tnx_level / 10.0 if tnx_level > 20.0 else tnx_level
     return percent / 100.0
 
@@ -305,10 +278,10 @@ def _build_context(holdings: list[dict], cash_daily_return: float = 0.0) -> dict
 
     missing = [symbol for symbol in symbols if len(closes.get(symbol, {})) < 2]
     if missing:
-        raise LiveRiskError(f"Yahoo Finance has no price history for: {', '.join(missing)}")
+        raise LiveRiskError(f"{provider_label()} has no price history for: {', '.join(missing)}")
     missing_proxies = [symbol for symbol in PROXIES if len(closes.get(symbol, {})) < 2]
     if missing_proxies:
-        raise LiveRiskError(f"Yahoo Finance has no price history for: {', '.join(missing_proxies)}")
+        raise LiveRiskError(f"{provider_label()} has no price history for: {', '.join(missing_proxies)}")
 
     returns = {symbol: _daily_returns(closes[symbol]) for symbol in symbols}
     spy = _daily_returns(closes["SPY"])
@@ -797,7 +770,7 @@ def run_all_scenarios(
 
 
 def live_starting_value(holdings: list[dict]) -> float:
-    """Mark the portfolio at the latest Yahoo close. Cash keeps its stored price."""
+    """Mark the portfolio at the latest close. Cash keeps its stored price."""
     if not holdings:
         raise LiveRiskError("This portfolio has no holdings. Upload a CSV first.")
 
@@ -824,7 +797,7 @@ def live_starting_value(holdings: list[dict]) -> float:
                 closes[symbol] = series
         missing = [symbol for symbol in symbols if not closes.get(symbol)]
         if missing:
-            raise LiveRiskError(f"Yahoo Finance has no price for: {', '.join(missing)}")
+            raise LiveRiskError(f"{provider_label()} has no price for: {', '.join(missing)}")
 
     total = 0.0
     for row in positions:

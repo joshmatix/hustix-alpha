@@ -7,6 +7,7 @@ import datetime
 from database import SUPABASE_UNREACHABLE, SUPABASE_URL, authorize_client, client_for_token
 from engine.equity_prices import fetch_closing_prices, fetch_equity_price, is_equity_class, yahoo_symbol
 from engine.holdings_csv import HoldingsCsvError, number_field, parse_holdings_csv
+from engine.market_data import provider_label
 
 router = APIRouter(prefix="/api/portfolios", tags=["Portfolios"])
 
@@ -15,7 +16,8 @@ class PortfolioListResponse(BaseModel):
     id: UUID
     name: str
     description: Optional[str] = None
-    account_alias: Optional[str] = None
+    internal_account_number: Optional[str] = None
+    tax_status: Optional[str] = None
     portfolio_value: float = 0
     asset_allocation: Dict[str, float] = Field(
         default_factory=lambda: {"equities": 60, "bonds": 25, "realAssets": 10, "cash": 5}
@@ -27,6 +29,8 @@ class PortfolioListResponse(BaseModel):
 class PortfolioCreateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    internal_account_number: Optional[str] = None
+    tax_status: Optional[str] = None
     account_alias: Optional[str] = None
     target_risk_profile: Optional[str] = "Balanced"
     portfolio_value: Optional[float] = 0
@@ -70,8 +74,9 @@ class HoldingListItem(BaseModel):
 
 
 DEFAULT_ALLOCATION = {"equities": 60, "bonds": 25, "realAssets": 10, "cash": 5}
+TAX_STATUSES = {"taxable", "tax_deferred", "tax_exempt"}
 PORTFOLIO_COLUMNS = (
-    "id,name,description,account_alias,target_risk_profile,"
+    "id,name,description,internal_account_number,tax_status,account_alias,target_risk_profile,"
     "portfolio_value,asset_allocation,created_at,firm_id,created_by"
 )
 
@@ -254,7 +259,8 @@ def _to_list_item(item: dict) -> dict:
         "id": item.get("id") or item.get("portfolio_id"),
         "name": name,
         "description": item.get("description") or item.get("target_risk_profile") or "",
-        "account_alias": (item.get("account_alias") or "").strip(),
+        "internal_account_number": (item.get("internal_account_number") or "").strip() or None,
+        "tax_status": item.get("tax_status") if item.get("tax_status") in TAX_STATUSES else None,
         "portfolio_value": float(item.get("portfolio_value") or item.get("total_value") or 0),
         "asset_allocation": _normalize_allocation(item.get("asset_allocation") or item.get("weights")),
         "target_risk_profile": item.get("target_risk_profile") or "Balanced",
@@ -382,6 +388,14 @@ async def create_portfolio(
     name = (portfolio_data.name or portfolio_data.account_alias or "").strip()
     if not name:
         raise HTTPException(status_code=422, detail="Portfolio name is required.")
+    internal_account_number = (portfolio_data.internal_account_number or "").strip()
+    if not internal_account_number:
+        raise HTTPException(status_code=422, detail="Internal account number is required.")
+    if len(internal_account_number) > 64:
+        raise HTTPException(status_code=422, detail="Internal account number must be 64 characters or fewer.")
+    tax_status = (portfolio_data.tax_status or "").strip()
+    if tax_status not in TAX_STATUSES:
+        raise HTTPException(status_code=422, detail="Tax status must be taxable, tax-deferred, or tax-exempt.")
     firm_id = _firm_for_new_portfolio(firm_ids, portfolio_data.firm_id)
     portfolio_count = len(_assigned_portfolio_ids(user_id, db))
     blocked = _limit_block(db, firm_id, "portfolios", portfolio_count + 1)
@@ -393,6 +407,8 @@ async def create_portfolio(
         "created_by": user_id,
         "name": name,
         "description": portfolio_data.description or "",
+        "internal_account_number": internal_account_number,
+        "tax_status": tax_status,
         "account_alias": portfolio_data.account_alias or name,
         "target_risk_profile": portfolio_data.target_risk_profile or "Balanced",
         "portfolio_value": 0 if portfolio_data.portfolio_value is None else portfolio_data.portfolio_value,
@@ -443,7 +459,7 @@ async def add_ticker(holding: HoldingCreate, authorization: Optional[str] = Head
             if live_price is None:
                 raise HTTPException(
                     status_code=422,
-                    detail=f"Yahoo Finance has no price for {ticker}.",
+                    detail=f"{provider_label()} has no price for {ticker}.",
                 )
             price = live_price
         payload = {
@@ -568,7 +584,7 @@ async def upload_csv(
         if missing:
             raise HTTPException(
                 status_code=422,
-                detail=f"Yahoo Finance has no price for: {', '.join(missing)}",
+                detail=f"{provider_label()} has no price for: {', '.join(missing)}",
             )
 
         for row in parsed_rows:

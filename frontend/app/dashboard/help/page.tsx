@@ -16,11 +16,11 @@ const columns = [
 ];
 
 const classes = [
-  ['Equity, Equities, Stock, Stocks', 'Equities', 'Yahoo close'],
+  ['Equity, Equities, Stock, Stocks', 'Equities', 'Market-data close'],
   ['Bond, Bonds, Fixed Income', 'Fixed income', 'File price'],
   ['Commodity, Commodities, Real Assets, Gold', 'Real assets', 'File price'],
   ['Cash', 'Cash', 'File price (1)'],
-  ['Anything else', 'Equities', 'Yahoo close'],
+  ['Anything else', 'Equities', 'Market-data close'],
 ];
 
 const sample = `ticker,asset_name,quantity,current_price,duration_years,beta,asset_class
@@ -68,6 +68,11 @@ export default function HelpPage() {
         <p>
           On Portfolios, open a portfolio card and choose Upload CSV. The file replaces every
           holding already in that portfolio.
+        </p>
+        <p>
+          A positions export from Charles Schwab, Fidelity, LPL ClientWorks, BNY Mellon, or
+          Raymond James can be uploaded as downloaded. Account titles, totals, and disclaimer
+          rows are skipped. Cash and money-market rows are stored as cash.
         </p>
         <p>
           <a
@@ -130,13 +135,13 @@ export default function HelpPage() {
         <div>
           <h3 className="font-semibold text-slate-100">Prices</h3>
           <p className="mt-2">
-            Equity rows must use a ticker Yahoo Finance can price. The file still needs
+            Equity rows must use a ticker the market-data provider can price. The file still needs
             current_price, and the upload replaces it with the last completed session close.
           </p>
           <p className="mt-2">
             Bond, commodity, gold, and cash rows keep the current_price from the file. Those
-            tickers still need Yahoo price history before a risk run, except CASH, USD, and
-            USD-CASH.
+            tickers still need price history from the market-data provider before a risk run,
+            except CASH, USD, and USD-CASH.
           </p>
         </div>
 

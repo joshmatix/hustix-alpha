@@ -10,6 +10,7 @@ from fpdf.fonts import FontFace
 
 from engine.distribution import CONE_MODEL, CONE_PATHS, CONE_YEARS, DISTRIBUTION_LABELS, DISTRIBUTION_PARAMETERS
 from engine.live_risk import HORIZON_DAYS, LOOKBACK, N_PATHS
+from engine.market_data import provider_label
 from engine.output_formatter import format_analysis_output
 
 SCENARIO_LABELS = {
@@ -332,7 +333,7 @@ def build_stress_report(
     pdf.cell(
         0,
         6,
-        f"Priced from {history_days} Yahoo Finance trading days. The shock reprices the account once, then the year resamples those days.",
+        f"Priced from {history_days} {provider_label()} trading days. The shock reprices the account once, then the year resamples those days.",
         new_x="LMARGIN",
         new_y="NEXT",
     )
@@ -463,7 +464,7 @@ def _market_history_groups(scenarios: list[dict]) -> list[tuple[str, list[tuple[
         (
             "Method",
             [
-                ("Historical source", "Yahoo Finance daily prices"),
+                ("Historical source", f"{provider_label()} daily prices"),
                 ("Requested range", LOOKBACK),
                 ("Period used", f"{first.get('history_start')} through {first.get('history_end')}"),
                 ("Overlapping trading days", f"{int(first['history_days']):,} (holdings, SPY, and the 10-year yield)"),

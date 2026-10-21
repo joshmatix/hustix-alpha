@@ -1,11 +1,23 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { TAX_STATUSES, type TaxStatus } from "@/lib/taxStatus";
 
 interface CreatePortfolioModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit?: (data: { name: string; description: string }) => void | Promise<void>;
+  onSubmit?: (data: {
+    name: string;
+    description: string;
+    internalAccountNumber: string;
+    taxStatus: TaxStatus;
+    file: File | null;
+  }) => void | Promise<void>;
+}
+
+function labelFromCsv(file: File) {
+  const base = file.name.split(/[/\\]/).pop() || file.name;
+  return base.replace(/\.csv$/i, "") || base;
 }
 
 export default function CreatePortfolioModal({
@@ -14,11 +26,15 @@ export default function CreatePortfolioModal({
   onSubmit,
 }: CreatePortfolioModalProps) {
   const [portfolioName, setPortfolioName] = useState("");
+  const [internalAccountNumber, setInternalAccountNumber] = useState("");
+  const [taxStatus, setTaxStatus] = useState<TaxStatus | "">("");
   const [description, setDescription] = useState("");
+  const [csvFile, setCsvFile] = useState<File | null>(null);
   const [showDescriptionInfo, setShowDescriptionInfo] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const onCloseRef = useRef(onClose);
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const wasOpen = useRef(isOpen);
@@ -30,6 +46,14 @@ export default function CreatePortfolioModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    setPortfolioName("");
+    setInternalAccountNumber("");
+    setTaxStatus("");
+    setDescription("");
+    setCsvFile(null);
+    setError(null);
+    setShowDescriptionInfo(false);
+    if (fileRef.current) fileRef.current.value = "";
     const root = dialogRef.current;
 
     const onKey = (event: KeyboardEvent) => {
@@ -72,10 +96,20 @@ export default function CreatePortfolioModal({
     setError(null);
     try {
       if (onSubmit) {
-        await onSubmit({ name: portfolioName, description });
+        await onSubmit({
+          name: portfolioName,
+          description,
+          internalAccountNumber,
+          taxStatus: taxStatus as TaxStatus,
+          file: csvFile,
+        });
       }
       setPortfolioName("");
+      setInternalAccountNumber("");
+      setTaxStatus("");
       setDescription("");
+      setCsvFile(null);
+      if (fileRef.current) fileRef.current.value = "";
       setShowDescriptionInfo(false);
       onClose();
     } catch (err) {
@@ -86,6 +120,15 @@ export default function CreatePortfolioModal({
   };
 
   // React event handler for closing the description popup/info box
+  const handleCsv = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setCsvFile(file);
+    if (!file) return;
+    const label = labelFromCsv(file);
+    setPortfolioName(label);
+    setDescription(label);
+  };
+
   const handleCloseDescriptionPopup = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     setShowDescriptionInfo(false);
@@ -98,7 +141,7 @@ export default function CreatePortfolioModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-portfolio-title"
-        className="relative w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-xl"
+        className="relative w-full max-w-3xl rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -121,6 +164,22 @@ export default function CreatePortfolioModal({
             <p className="text-sm text-rose-500">{error}</p>
           )}
           <div>
+            <label htmlFor="portfolioCsv" className="block text-sm font-medium text-slate-300">
+              Upload CSV file
+            </label>
+            <input
+              ref={fileRef}
+              id="portfolioCsv"
+              type="file"
+              accept=".csv,.CSV,text/csv"
+              onChange={handleCsv}
+              className="mt-1 block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-indigo-500"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              The file name becomes the portfolio name and description. You can edit both before creating.
+            </p>
+          </div>
+          <div>
             <label
               htmlFor="portfolioName"
               className="block text-sm font-medium text-slate-300"
@@ -137,6 +196,53 @@ export default function CreatePortfolioModal({
               placeholder="e.g., Growth & Income"
               className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-sm text-slate-100 placeholder:text-slate-500 caret-slate-100 focus:border-indigo-500 focus:outline-none"
             />
+          </div>
+
+          <div>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 sm:flex-nowrap">
+              <label
+                htmlFor="internalAccountNumber"
+                className="shrink-0 text-sm font-medium text-slate-300"
+              >
+                Internal account number
+              </label>
+              <p className="whitespace-nowrap text-xs text-slate-400">
+                <span className="font-semibold text-red-500">Do not use</span>
+                : SSNs, Tax IDs, passport numbers or other personally identifiable information
+              </p>
+            </div>
+            <input
+              id="internalAccountNumber"
+              type="text"
+              required
+              maxLength={64}
+              value={internalAccountNumber}
+              onChange={(e) => setInternalAccountNumber(e.target.value)}
+              placeholder="Firm account number"
+              className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-sm text-slate-100 placeholder:text-slate-500 caret-slate-100 focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="taxStatus" className="block text-sm font-medium text-slate-300">
+              Tax status
+            </label>
+            <select
+              id="taxStatus"
+              required
+              value={taxStatus}
+              onChange={(e) => setTaxStatus(e.target.value as TaxStatus)}
+              className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="" disabled>
+                Select tax status
+              </option>
+              {TAX_STATUSES.map((status) => (
+                <option key={status.value} value={status.value}>
+                  {status.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>

@@ -22,28 +22,10 @@ def _latest_pair(observations: list) -> tuple[float | None, float | None]:
 
 
 def _dollar_index() -> tuple[float | None, float | None]:
-    """ICE US Dollar Index (DXY) and its percent move from the prior close."""
-    response = requests.get(
-        "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB",
-        params={"interval": "1d", "range": "5d"},
-        headers={"User-Agent": "Mozilla/5.0"},
-        timeout=10,
-    )
-    if response.status_code != 200:
-        return None, None
-    result = (response.json().get("chart") or {}).get("result") or []
-    if not result:
-        return None, None
-    meta = result[0].get("meta") or {}
-    latest = meta.get("regularMarketPrice")
-    prior = meta.get("previousClose") or meta.get("chartPreviousClose")
-    if latest is None or prior in (None, 0):
-        return None, None
-    latest = float(latest)
-    prior = float(prior)
-    if latest <= 0 or prior <= 0:
-        return None, None
-    return latest, (latest - prior) / prior * 100
+    """ICE US Dollar Index and its percent move from the prior close."""
+    from engine.market_data import fetch_dollar_index
+
+    return fetch_dollar_index()
 
 
 def fetch_macro_indicators() -> dict:

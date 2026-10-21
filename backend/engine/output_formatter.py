@@ -1,5 +1,8 @@
 # output_formatter.py
 
+from engine.market_data import provider_label
+
+
 def format_analysis_output(simulation_results: dict, scenario_name: str) -> dict:
     loss_val = abs(simulation_results["var_95_loss"])
     percent_loss = (loss_val / simulation_results["baseline_value"]) * 100
@@ -10,7 +13,7 @@ def format_analysis_output(simulation_results: dict, scenario_name: str) -> dict
         narrative = (
             f"Under the {label} scenario, the 95% one-year loss is "
             f"${loss_val:,.0f} ({percent_loss:.1f}% of the account). "
-            f"Prices and yield sensitivity come from {history_days} Yahoo Finance trading days "
+            f"Prices and yield sensitivity come from {history_days} {provider_label()} trading days "
             f"for the holdings in this portfolio. The scenario is applied once, on top of that live volatility."
         )
         cash_note = str(simulation_results.get("cash_note") or "").strip()
