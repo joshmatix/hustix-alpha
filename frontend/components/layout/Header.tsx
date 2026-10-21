@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { API_BASE } from '@/lib/api';
+import VersionAlert from './VersionAlert';
 
 type MoveUnit = 'bps' | 'pct';
 
@@ -226,7 +227,8 @@ export default function Header() {
           })}
         </nav>
 
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          <VersionAlert />
           {userEmail && (
             <span className="hidden max-w-[12rem] truncate rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-xs font-medium text-slate-300 lg:inline">
               {userEmail}

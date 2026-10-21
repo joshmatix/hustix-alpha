@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import pkg from '../../package.json';
 
 export default function SiteFooter() {
   const pathname = usePathname();
@@ -50,8 +51,8 @@ export default function SiteFooter() {
   if (pathname === '/login' || pathname === '/' || pathname === '/auth/callback') return null;
 
   return (
-    <footer className="border-t border-slate-900 px-6 py-4 text-center">
-      <p className="text-xs text-slate-500">
+    <footer className="flex items-center gap-4 border-t border-slate-900 px-6 py-4 text-xs text-slate-500">
+      <p className="flex-1 text-center">
         <Link href="/agreement" className="text-indigo-300 hover:text-indigo-200">
           Customer Agreement
         </Link>
@@ -66,13 +67,15 @@ export default function SiteFooter() {
         {email ? (
           <>
             <span className="px-2">·</span>
-            Support{' '}
             <a href={`mailto:${email}`} className="text-indigo-300 hover:text-indigo-200">
               {email}
             </a>
           </>
         ) : null}
       </p>
+      <span className="shrink-0 tabular-nums">
+        {pkg.version} · {process.env.NEXT_PUBLIC_BUILD_ID || 'dev'}
+      </span>
     </footer>
   );
 }
