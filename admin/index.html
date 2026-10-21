@@ -59,11 +59,35 @@
     .banner.ok { color: #6ee7b7; }
     .login { max-width: 380px; }
     .hidden { display: none; }
-    code { color: #c7d2fe; }
+    code, pre { color: #c7d2fe; }
+    pre {
+      margin: 8px 0 0;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #020617;
+      border: 1px solid #1e293b;
+      overflow-x: auto;
+      font-size: 13px;
+    }
+    details summary { cursor: pointer; font-weight: 600; }
+    details p, details li { font-size: 14px; }
+    details ol { margin: 8px 0 0; padding-left: 20px; }
   </style>
 </head>
 <body>
   <main>
+    <section class="card">
+      <h2>How to start</h2>
+      <p>The same notes are in <code>admin/README.md</code>.</p>
+      <ol>
+        <li>From the <code>hustix-alpha</code> directory, run <code>python3 admin/server.py</code>.</li>
+        <li>Open <a href="http://127.0.0.1:3090">http://127.0.0.1:3090</a>. This console is port <code>3090</code>.</li>
+        <li>Sign in with <code>ADMIN_PASSWORD</code> from <code>admin/.env</code>. The first start writes that file.</li>
+        <li>Use Services to start the frontend on port <code>3000</code> and the backend on port <code>8000</code>.</li>
+      </ol>
+      <p>Advisor management is <a href="http://127.0.0.1:3000/admin">http://127.0.0.1:3000/admin</a> after both of those are running. Logs are <code>admin/logs/frontend.log</code> and <code>admin/logs/backend.log</code>.</p>
+    </section>
+
     <section id="login" class="card login">
       <h1>Admin</h1>
       <p>This screen is port <code>3090</code>. It stays up when the frontend and backend are stopped.</p>

@@ -1,3 +1,4 @@
+import AgreementGate from '@/components/auth/AgreementGate';
 import AuthGuard from '@/components/auth/AuthGuard';
 import LocalBypassSession from '@/components/auth/LocalBypassSession';
 import AppLayout from '@/components/layout/AppLayout';
@@ -10,14 +11,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <div data-hustix-dashboard="open">
         <LocalBypassSession />
-        <AppLayout>{children}</AppLayout>
+        <AgreementGate>
+          <AppLayout>{children}</AppLayout>
+        </AgreementGate>
       </div>
     );
   }
 
   return (
-    <AuthGuard>
-      <AppLayout>{children}</AppLayout>
-    </AuthGuard>
+      <AuthGuard>
+        <AgreementGate>
+          <AppLayout>{children}</AppLayout>
+        </AgreementGate>
+      </AuthGuard>
   );
 }

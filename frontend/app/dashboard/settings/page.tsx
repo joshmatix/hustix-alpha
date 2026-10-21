@@ -302,7 +302,7 @@ export default function ProfilePage() {
               )}
               {quote?.promotion && (
                 <p className="mt-1 text-xs text-slate-400">
-                  {quote.promotion.label} ({quote.promotion.code})
+                  {quote.promotion.code}
                   {quote.promotion.percent_off != null ? ` · ${quote.promotion.percent_off}% off` : ''}
                   {quote.promotion.amount_off_cents != null
                     ? ` · ${money(quote.promotion.amount_off_cents)} off`

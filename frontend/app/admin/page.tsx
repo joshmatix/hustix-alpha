@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 
 type Plan = {
   code: string;
@@ -18,11 +18,46 @@ type Account = {
   last_seen: string;
 };
 
+type Advisor = {
+  id: string;
+  email: string;
+  full_name: string;
+  phone: string;
+  firm_name: string;
+  enabled: boolean;
+  plan_code: string;
+  promotion_code: string;
+  promotion_label: string;
+  percent_off: number | null;
+  amount_off_cents: number | null;
+  promotion_starts_on: string | null;
+  promotion_ends_on: string | null;
+  agreement_version: string;
+  agreement_signed_at: string | null;
+  last_seen: string | null;
+};
+
+type Promotion = {
+  code: string;
+  label: string;
+  percent_off: number | null;
+  amount_off_cents: number | null;
+  applies_to: string[];
+  active: boolean;
+  starts_at: string | null;
+  ends_at: string | null;
+};
+
 type AdminState = {
   plans: Plan[];
   accounts: Account[];
   accounts_error: string | null;
+  advisors: Advisor[];
+  promotions: Promotion[];
+  advisors_error: string | null;
 };
+
+const PLAN_CODES = ['free', 'pro', 'pro_plus', 'enterprise'] as const;
 
 function money(cents: number | null) {
   if (cents == null) return 'Not set';
@@ -34,6 +69,25 @@ function money(cents: number | null) {
   });
 }
 
+function StartGuide() {
+  return (
+    <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
+      <h2 className="text-lg font-semibold">How to start</h2>
+      <p className="mt-1 text-sm text-slate-400">The same notes are in admin/README.md.</p>
+      <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-300">
+        <li>From the hustix-alpha directory, run <code className="text-indigo-200">python3 admin/server.py</code>.</li>
+        <li>Open http://127.0.0.1:3090. That console is port 3090.</li>
+        <li>Sign in with ADMIN_PASSWORD from admin/.env. The first start writes that file.</li>
+        <li>Use Services there to start the frontend on port 3000 and the backend on port 8000.</li>
+      </ol>
+      <p className="mt-3 text-sm text-slate-400">
+        This page, http://127.0.0.1:3000/admin, manages advisors after both are running. It does not start them.
+        Logs are admin/logs/frontend.log and admin/logs/backend.log.
+      </p>
+    </section>
+  );
+}
+
 async function request(url: string, options?: RequestInit) {
   const response = await fetch(url, { credentials: 'same-origin', ...options });
   const body = await response.json().catch(() => ({}));
@@ -42,6 +96,418 @@ async function request(url: string, options?: RequestInit) {
     throw new Error(detail);
   }
   return body;
+}
+
+function promotionOpen(endsOn: string | null | undefined) {
+  if (!endsOn) return true;
+  return endsOn >= new Date().toISOString().slice(0, 10);
+}
+
+function applicablePromotions(planCode: string, promotions: Promotion[]) {
+  return promotions.filter((item) => item.active && promotionOpen(item.ends_at) && item.applies_to.includes(planCode));
+}
+
+function promotionLabel(item: {
+  code?: string;
+  promotion_code?: string;
+  percent_off: number | null;
+  amount_off_cents: number | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  promotion_starts_on?: string | null;
+  promotion_ends_on?: string | null;
+}) {
+  const code = item.code || item.promotion_code || '';
+  if (!code) return 'None';
+  const off = item.percent_off != null ? `${item.percent_off}% off` : money(item.amount_off_cents);
+  const starts = item.starts_at || item.promotion_starts_on;
+  const ends = item.ends_at || item.promotion_ends_on;
+  const range = starts && ends ? ` · ${starts} to ${ends}` : '';
+  return `${code} · ${off}${range}`;
+}
+
+function isoDate(day: Date) {
+  const month = String(day.getMonth() + 1).padStart(2, '0');
+  const date = String(day.getDate()).padStart(2, '0');
+  return `${day.getFullYear()}-${month}-${date}`;
+}
+
+function DatePicker({
+  value,
+  earliest,
+  onChange,
+}: {
+  value: string;
+  earliest: string;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const today = new Date(`${earliest}T00:00:00`);
+  const selected = value ? new Date(`${value}T00:00:00`) : null;
+  const [month, setMonth] = useState(() => new Date((selected ?? today).getFullYear(), (selected ?? today).getMonth(), 1));
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const firstWeekday = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const days = [
+    ...Array.from({ length: firstWeekday }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => new Date(month.getFullYear(), month.getMonth(), index + 1)),
+  ];
+  const label = selected
+    ? selected.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Choose a date';
+
+  return (
+    <div ref={root} className="relative mt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full items-center justify-between rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-left text-sm text-slate-100"
+      >
+        <span className={value ? '' : 'text-slate-500'}>{label}</span>
+        <svg viewBox="0 0 20 20" className="h-4 w-4 text-slate-300" aria-hidden="true">
+          <rect x="2.5" y="4" width="15" height="13" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M2.5 8h15M7 2.5v3M13 2.5v3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      </button>
+      {open ? (
+        <div className="absolute z-20 mt-2 w-64 rounded-lg border border-slate-700 bg-slate-950 p-3">
+          <div className="mb-2 flex items-center justify-between text-sm">
+            <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="px-2 py-1 text-slate-300" aria-label="Previous month">‹</button>
+            <span>{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+            <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="px-2 py-1 text-slate-300" aria-label="Next month">›</button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 text-center text-xs text-slate-500">
+            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((name) => <span key={name}>{name}</span>)}
+          </div>
+          <div className="mt-1 grid grid-cols-7 gap-1 text-center text-sm">
+            {days.map((day, index) => {
+              if (!day) return <span key={`empty-${index}`} />;
+              const past = day < today;
+              const chosen = value === isoDate(day);
+              return (
+                <button
+                  key={isoDate(day)}
+                  type="button"
+                  disabled={past}
+                  onClick={() => {
+                    onChange(isoDate(day));
+                    setOpen(false);
+                  }}
+                  className={`rounded py-1 ${chosen ? 'bg-indigo-600 text-white' : past ? 'text-slate-600' : 'text-slate-100 hover:bg-slate-800'}`}
+                >
+                  {day.getDate()}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PromotionList({ advisor, promotions }: { advisor: Advisor; promotions: Promotion[] }) {
+  const applicable = applicablePromotions(advisor.plan_code, promotions);
+  if (applicable.length === 0) {
+    return <p className="text-sm text-slate-400">None for this plan.</p>;
+  }
+  return (
+    <ul className="text-sm text-slate-200">
+      {applicable.map((item) => (
+        <li key={item.code}>
+          {promotionLabel(item)}
+          {item.code === advisor.promotion_code ? ' · applied' : ''}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function AdvisorSection({
+  state,
+  onDirectory,
+  onRefresh,
+}: {
+  state: AdminState;
+  onDirectory: (directory: { advisors: Advisor[]; promotions: Promotion[] }) => void;
+  onRefresh: () => void;
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [firm, setFirm] = useState('');
+  const [phone, setPhone] = useState('');
+  const [plan, setPlan] = useState('free');
+  const [promotion, setPromotion] = useState('');
+  const [message, setMessage] = useState('');
+  const [ok, setOk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoKind, setPromoKind] = useState<'percent' | 'amount'>('percent');
+  const [promoValue, setPromoValue] = useState('');
+  const [promoPlans, setPromoPlans] = useState<string[]>(['pro', 'pro_plus']);
+  const [promoStarts, setPromoStarts] = useState('');
+  const [promoEnds, setPromoEnds] = useState('');
+  const today = new Date().toISOString().slice(0, 10);
+
+  const selected = state.advisors.find((advisor) => advisor.id === selectedId) || null;
+
+  function choose(advisor: Advisor) {
+    setSelectedId(advisor.id);
+    setName(advisor.full_name);
+    setFirm(advisor.firm_name);
+    setPhone(advisor.phone);
+    setPlan(advisor.plan_code || 'free');
+    setPromotion(advisor.promotion_code);
+    setMessage('');
+  }
+
+  async function run(url: string, body: unknown) {
+    setBusy(true);
+    setMessage('');
+    try {
+      const directory = await request(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      onDirectory(directory);
+      setOk(true);
+      setMessage('Saved.');
+    } catch (error) {
+      setOk(false);
+      setMessage(error instanceof Error ? error.message : 'Could not save.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const signed = selected?.agreement_signed_at ? new Date(selected.agreement_signed_at) : null;
+  const seen = selected?.last_seen ? new Date(selected.last_seen) : null;
+
+  return (
+    <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Advisors</h2>
+        <button type="button" onClick={onRefresh} className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs">
+          Refresh
+        </button>
+      </div>
+      <p className="mt-1 text-sm text-slate-400">
+        Access, subscription, promotion, agreement, and contact details for every advisor.
+      </p>
+      {state.advisors_error ? <p className="mt-3 text-sm text-rose-300">{state.advisors_error}</p> : null}
+      {state.advisors.length === 0 && !state.advisors_error ? (
+        <p className="mt-3 text-sm text-slate-400">No advisors yet.</p>
+      ) : null}
+      {state.advisors.length > 0 ? (
+        <table className="mt-3 w-full text-left text-sm">
+          <thead className="text-xs text-slate-400">
+            <tr>
+              <th className="py-2 pr-3 font-medium">Name</th>
+              <th className="py-2 pr-3 font-medium">Email</th>
+              <th className="py-2 pr-3 font-medium">Plan</th>
+              <th className="py-2 pr-3 font-medium">Promotions</th>
+              <th className="py-2 pr-3 font-medium">Agreement</th>
+              <th className="py-2 font-medium">Access</th>
+            </tr>
+          </thead>
+          <tbody>
+            {state.advisors.map((advisor) => (
+              <tr
+                key={advisor.id}
+                className={`cursor-pointer border-t border-slate-800 ${advisor.id === selectedId ? 'bg-slate-800/60' : ''}`}
+                onClick={() => choose(advisor)}
+              >
+                <td className="py-2 pr-3">{advisor.full_name || '—'}</td>
+                <td className="py-2 pr-3">{advisor.email || '—'}</td>
+                <td className="py-2 pr-3">{advisor.plan_code || '—'}</td>
+                <td className="py-2 pr-3">
+                  <PromotionList advisor={advisor} promotions={state.promotions} />
+                </td>
+                <td className="py-2 pr-3">{advisor.agreement_version || 'None'}</td>
+                <td className="py-2">{advisor.enabled ? 'Enabled' : 'Disabled'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+
+      {selected ? (
+        <div className="mt-5 space-y-4 border-t border-slate-800 pt-4">
+          <p className="text-sm text-slate-300">
+            {selected.email || 'No email'}
+            {seen && !Number.isNaN(seen.getTime()) ? ` · last active ${seen.toLocaleString()}` : ''}
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="block text-xs text-slate-400">
+              Name
+              <input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+            </label>
+            <label className="block text-xs text-slate-400">
+              Firm
+              <input value={firm} onChange={(event) => setFirm(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+            </label>
+            <label className="block text-xs text-slate-400">
+              Phone
+              <input value={phone} onChange={(event) => setPhone(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
+            </label>
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void run('/api/admin/advisors/contact', { user_id: selected.id, full_name: name, firm_name: firm, phone })}
+            className="rounded-lg border border-slate-600 px-3 py-1.5 text-sm disabled:opacity-60"
+          >
+            Save contact
+          </button>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="block text-xs text-slate-400">
+              Subscription
+              <select value={plan} onChange={(event) => setPlan(event.target.value)} className="mt-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+                {PLAN_CODES.map((code) => (
+                  <option key={code} value={code}>{state.plans.find((item) => item.code === code)?.name || code}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void run('/api/admin/advisors/plan', { user_id: selected.id, plan_code: plan })}
+              className="rounded-lg border border-slate-600 px-3 py-2 text-sm disabled:opacity-60"
+            >
+              Save plan
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void run('/api/admin/advisors/access', { user_id: selected.id, enabled: !selected.enabled })}
+              className="rounded-lg border border-slate-600 px-3 py-2 text-sm disabled:opacity-60"
+            >
+              {selected.enabled ? 'Disable account' : 'Enable account'}
+            </button>
+          </div>
+
+          <div>
+            <p className="text-xs text-slate-400">Promotions for this plan</p>
+            <PromotionList advisor={selected} promotions={state.promotions} />
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="block text-xs text-slate-400">
+              Apply a promotion
+              <select value={promotion} onChange={(event) => setPromotion(event.target.value)} className="mt-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+                <option value="">None</option>
+                {applicablePromotions(selected.plan_code, state.promotions).map((item) => (
+                  <option key={item.code} value={item.code}>{promotionLabel(item)}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void run('/api/admin/advisors/promotion', { user_id: selected.id, code: promotion })}
+              className="rounded-lg border border-slate-600 px-3 py-2 text-sm disabled:opacity-60"
+            >
+              Apply promotion
+            </button>
+            <p className="pb-2 text-xs text-slate-400">Current: {promotionLabel(selected)}</p>
+          </div>
+
+          <p className="text-sm text-slate-300">
+            Agreement {selected.agreement_version || 'not accepted'}
+            {signed && !Number.isNaN(signed.getTime()) ? ` · signed ${signed.toLocaleString()}` : ''}
+          </p>
+          {message ? <p className={`text-sm ${ok ? 'text-emerald-300' : 'text-rose-300'}`}>{message}</p> : null}
+        </div>
+      ) : null}
+
+      <form
+        className="mt-5 space-y-3 border-t border-slate-800 pt-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const value = Number(promoValue);
+          if (!Number.isFinite(value) || value <= 0) {
+            setOk(false);
+            setMessage(promoKind === 'percent' ? 'Enter a percent from 1 to 100.' : 'Enter a dollar amount.');
+            return;
+          }
+          if (!promoStarts || !promoEnds) {
+            setOk(false);
+            setMessage('Choose a start date and an end date.');
+            return;
+          }
+          if (promoEnds < promoStarts) {
+            setOk(false);
+            setMessage('The end date must be on or after the start date.');
+            return;
+          }
+          void run('/api/admin/promotions', {
+            code: promoCode,
+            percent_off: promoKind === 'percent' ? Math.round(value) : null,
+            amount_off_cents: promoKind === 'amount' ? Math.round(value * 100) : null,
+            applies_to: promoPlans,
+            starts_on: promoStarts,
+            ends_on: promoEnds,
+          });
+        }}
+      >
+        <h3 className="text-sm font-semibold">New promotion</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <input value={promoCode} onChange={(event) => setPromoCode(event.target.value)} placeholder="SPRING20" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm sm:col-span-2" />
+          <label className="block text-xs text-slate-400">
+            Starts
+            <DatePicker
+              value={promoStarts}
+              earliest={today}
+              onChange={(next) => {
+                setPromoStarts(next);
+                if (promoEnds && promoEnds < next) setPromoEnds('');
+              }}
+            />
+          </label>
+          <label className="block text-xs text-slate-400">
+            Ends
+            <DatePicker value={promoEnds} earliest={promoStarts || today} onChange={setPromoEnds} />
+          </label>
+          <select value={promoKind} onChange={(event) => setPromoKind(event.target.value === 'amount' ? 'amount' : 'percent')} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+            <option value="percent">Percent off</option>
+            <option value="amount">Dollars off</option>
+          </select>
+          <input value={promoValue} onChange={(event) => setPromoValue(event.target.value)} inputMode="decimal" placeholder={promoKind === 'percent' ? '20' : '50'} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+        </div>
+        <div className="flex flex-wrap gap-3 text-xs text-slate-300">
+          {PLAN_CODES.map((code) => (
+            <label key={code} className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={promoPlans.includes(code)}
+                onChange={(event) => {
+                  setPromoPlans((current) => (
+                    event.target.checked ? [...current, code] : current.filter((item) => item !== code)
+                  ));
+                }}
+              />
+              {code}
+            </label>
+          ))}
+        </div>
+        <button type="submit" disabled={busy} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold disabled:opacity-60">
+          Save promotion
+        </button>
+      </form>
+    </section>
+  );
 }
 
 export default function CloudAdminPage() {
@@ -59,7 +525,14 @@ export default function CloudAdminPage() {
   function applyState(next: AdminState) {
     const plans = Array.isArray(next.plans) ? next.plans : [];
     const accounts = Array.isArray(next.accounts) ? next.accounts : [];
-    setState({ plans, accounts, accounts_error: next.accounts_error ?? null });
+    setState({
+      plans,
+      accounts,
+      accounts_error: next.accounts_error ?? null,
+      advisors: Array.isArray(next.advisors) ? next.advisors : [],
+      promotions: Array.isArray(next.promotions) ? next.promotions : [],
+      advisors_error: next.advisors_error ?? null,
+    });
     const fields: Record<string, { portfolio_limit: string; ticker_limit: string }> = {};
     for (const plan of plans) {
       fields[plan.code] = {
@@ -173,10 +646,12 @@ export default function CloudAdminPage() {
 
   return (
     <main className="flex-1 bg-slate-950 text-slate-100">
-      <div className="mx-auto max-w-3xl px-5 py-8">
+      <div className="mx-auto max-w-5xl px-5 py-8">
         {!ready ? <p className="text-sm text-slate-400">Loading admin...</p> : null}
 
         {ready && !signedIn ? (
+          <div className="space-y-5">
+          <StartGuide />
           <section className="max-w-sm rounded-xl border border-slate-800 bg-slate-900/70 p-5">
             <h1 className="text-2xl font-semibold">Admin</h1>
             <p className="mt-2 text-sm leading-relaxed text-slate-400">
@@ -201,6 +676,7 @@ export default function CloudAdminPage() {
               </button>
             </form>
           </section>
+          </div>
         ) : null}
 
         {ready && signedIn && !state ? (
@@ -223,10 +699,11 @@ export default function CloudAdminPage() {
 
         {ready && signedIn && state ? (
           <div className="space-y-5">
+            <StartGuide />
             <div className="flex items-end justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-semibold">Admin</h1>
-                <p className="mt-1 text-sm text-slate-400">Plan caps and signed-in advisors on the cloud database.</p>
+                <p className="mt-1 text-sm text-slate-400">Advisors, subscriptions, and plan caps on the cloud database.</p>
               </div>
               <button
                 type="button"
@@ -236,6 +713,12 @@ export default function CloudAdminPage() {
                 Sign out
               </button>
             </div>
+
+            <AdvisorSection
+              state={state}
+              onDirectory={(directory) => applyState({ ...state, ...directory, advisors_error: null })}
+              onRefresh={() => loadState().catch((error) => setLimitsMessage(error instanceof Error ? error.message : 'Could not refresh.'))}
+            />
 
             <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
               <div className="flex items-center justify-between gap-3">

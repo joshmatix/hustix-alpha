@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { ensureProfile } from '@/lib/ensureProfile';
-import { AGREEMENT_TITLE, AGREEMENT_VERSION } from '@/lib/agreement';
+import { acceptAgreement, fetchAgreement, hasAcceptedCurrentAgreement, type AgreementDocument } from '@/lib/agreement';
 import { hasVerifiedAuthenticator } from '@/lib/mfa';
-import { oauthErrorMessage, startOAuth, type OAuthProvider } from '@/lib/oauth';
+import { oauthErrorMessage, pathAfterSignIn, startOAuth, type OAuthProvider } from '@/lib/oauth';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import AuthenticatorEnroll from '@/components/auth/AuthenticatorEnroll';
 import { signupPlanDetail } from '@/lib/planLimits';
 import AgreementBody from '@/components/auth/AgreementBody';
+import AgreementScroll from '@/components/auth/AgreementScroll';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -41,12 +42,30 @@ export default function SignupPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [plansLoading, setPlansLoading] = useState(true);
+  const [read, setRead] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [agreement, setAgreement] = useState<AgreementDocument | null>(null);
+  const [agreementError, setAgreementError] = useState<string | null>(null);
   const [step, setStep] = useState<'account' | 'authenticator'>('account');
   const [oauthUserId, setOauthUserId] = useState<string | null>(null);
   const [activeEmail, setActiveEmail] = useState<string | null>(null);
   const router = useRouter();
   const selected = plans.find((option) => option.code === plan) || plans[0];
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAgreement().then((document) => {
+      if (cancelled) return;
+      if (!document) {
+        setAgreementError('The agreement could not be loaded.');
+        return;
+      }
+      setAgreement(document);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     supabase.rpc('plan_catalog').then(({ data, error: catalogError }) => {
@@ -69,10 +88,14 @@ export default function SignupPage() {
       const signedInEmail = session.user.email ?? null;
       const { data: profile } = await supabase
         .from('profiles')
-        .select('agreement_version, firm_name, full_name')
+        .select('firm_name, full_name')
         .eq('id', session.user.id)
         .maybeSingle();
-      if (!profile?.agreement_version) {
+      if (!(await hasAcceptedCurrentAgreement())) {
+        router.replace('/agreement/accept');
+        return;
+      }
+      if (!profile?.full_name?.trim() || !profile?.firm_name?.trim()) {
         setOauthUserId(session.user.id);
         if (signedInEmail) setEmail(signedInEmail);
         if (profile?.full_name) setFullName(profile.full_name);
@@ -97,6 +120,7 @@ export default function SignupPage() {
     setFullName('');
     setFirmName('');
     setPassword('');
+    setRead(false);
     setAgreed(false);
     setStep('account');
     setLoading(false);
@@ -120,6 +144,18 @@ export default function SignupPage() {
     setError(null);
     setNotice(null);
 
+    if (!agreement) {
+      setError(agreementError || 'The agreement could not be loaded.');
+      setLoading(false);
+      return;
+    }
+
+    if (!read) {
+      setError('Scroll to the end of the agreement before checking the box.');
+      setLoading(false);
+      return;
+    }
+
     if (!agreed) {
       setError('Check the box to accept the customer agreement.');
       setLoading(false);
@@ -140,7 +176,6 @@ export default function SignupPage() {
       return;
     }
 
-    const acceptedAt = new Date().toISOString();
     if (oauthUserId) {
       const profileError = await ensureProfile(oauthUserId);
       if (profileError) {
@@ -153,12 +188,16 @@ export default function SignupPage() {
         .update({
           full_name: name,
           firm_name: firm,
-          agreement_version: AGREEMENT_VERSION,
-          agreement_accepted_at: acceptedAt,
         })
         .eq('id', oauthUserId);
       if (updateError) {
         setError(updateError.message);
+        setLoading(false);
+        return;
+      }
+      const acceptanceError = await acceptAgreement(agreement.version);
+      if (acceptanceError) {
+        setError(acceptanceError);
         setLoading(false);
         return;
       }
@@ -177,8 +216,6 @@ export default function SignupPage() {
           plan,
           full_name: name,
           firm_name: firm,
-          agreement_version: AGREEMENT_VERSION,
-          agreement_accepted_at: acceptedAt,
         },
       },
     });
@@ -189,9 +226,8 @@ export default function SignupPage() {
       return;
     }
 
-    // Email confirmation leaves session null, so the auth.users trigger is the
-    // only writer until the user signs in. When a session exists, create the
-    // row here too — hosted projects often never installed that trigger.
+    // Email confirmation leaves session null. Acceptance is recorded from the
+    // signed-in request so the server can store that request's address.
     if (data.session && data.user) {
       const profileError = await ensureProfile(data.user.id);
       if (profileError) {
@@ -199,15 +235,24 @@ export default function SignupPage() {
         setLoading(false);
         return;
       }
-      await supabase
+      const { error: profileErrorUpdate } = await supabase
         .from('profiles')
         .update({
           full_name: name,
           firm_name: firm,
-          agreement_version: AGREEMENT_VERSION,
-          agreement_accepted_at: acceptedAt,
         })
         .eq('id', data.user.id);
+      if (profileErrorUpdate) {
+        setError(profileErrorUpdate.message);
+        setLoading(false);
+        return;
+      }
+      const acceptanceError = await acceptAgreement(agreement.version);
+      if (acceptanceError) {
+        setError(acceptanceError);
+        setLoading(false);
+        return;
+      }
       const { data: membership } = await supabase
         .from('firm_members')
         .select('firm_id')
@@ -285,7 +330,7 @@ export default function SignupPage() {
 
         {step === 'authenticator' ? (
           <>
-            <AuthenticatorEnroll onVerified={() => router.push('/dashboard')} />
+            <AuthenticatorEnroll onVerified={() => void pathAfterSignIn().then((path) => router.push(path))} />
             <button
               type="button"
               onClick={() => void startFreshAccount()}
@@ -407,23 +452,37 @@ export default function SignupPage() {
           </div>
           )}
 
-          <div className="rounded-lg border border-slate-800 bg-slate-950/70">
-            <div className="max-h-56 overflow-y-auto px-4 py-3">
-              <AgreementBody />
-            </div>
-          </div>
+          <AgreementScroll
+            active={agreement !== null}
+            read={read}
+            onRead={() => setRead(true)}
+            className="max-h-56 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/70 px-4 py-3"
+          >
+            {agreement ? (
+              <AgreementBody agreement={agreement} />
+            ) : (
+              <p className="text-xs text-slate-400">{agreementError || 'Loading the agreement...'}</p>
+            )}
+          </AgreementScroll>
 
-          <label className="flex items-start gap-3 text-xs leading-relaxed text-slate-300">
+          <label className={`flex items-start gap-3 text-xs leading-relaxed ${read ? 'text-slate-300' : 'text-slate-500'}`}>
             <input
               type="checkbox"
               checked={agreed}
-              onChange={(event) => setAgreed(event.target.checked)}
+              onChange={(event) => {
+                if (read) setAgreed(event.target.checked);
+              }}
               className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-950 text-indigo-600"
               required
+              disabled={!agreement || !read}
             />
             <span>
-              I have read and agree to the {AGREEMENT_TITLE} (version {AGREEMENT_VERSION}).{' '}
-              <Link href="/agreement" className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline">
+              I have read and agree to the{' '}
+              {agreement ? `${agreement.title} (version ${agreement.version})` : 'Hustix Macro Customer Agreement'}.{' '}
+              <Link
+                href={agreement ? `/agreement?version=${encodeURIComponent(agreement.version)}` : '/agreement'}
+                className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline"
+              >
                 Open the agreement
               </Link>
             </span>
@@ -431,7 +490,7 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={loading || fullName.trim() === '' || email.trim() === '' || (oauthUserId === null && password === '')}
+            disabled={loading || !agreement || !read || !agreed || fullName.trim() === '' || email.trim() === '' || (oauthUserId === null && password === '')}
             className="w-full py-3 mt-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white font-semibold rounded-lg text-sm transition shadow-lg shadow-indigo-600/20"
           >
             {loading ? 'Creating Account...' : oauthUserId ? 'I agree and continue' : 'I agree and create account'}
