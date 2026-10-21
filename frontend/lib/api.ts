@@ -21,6 +21,7 @@ export type Portfolio = {
   id: string;
   name: string;
   description?: string;
+  account_alias?: string;
   portfolio_value: number;
   asset_allocation: AssetAllocation;
   target_risk_profile?: string;

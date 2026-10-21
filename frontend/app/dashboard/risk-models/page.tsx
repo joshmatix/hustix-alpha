@@ -357,6 +357,10 @@ function RiskModelsPage() {
   const tickerRows = [...holdings].sort(
     (left, right) => Number(right.market_value || 0) - Number(left.market_value || 0),
   );
+  const selectedAccount = portfolios.find((item) => item.id === portfolioId)?.account_alias?.trim() || '';
+  const accountPortfolios = selectedAccount
+    ? portfolios.filter((item) => item.account_alias?.trim() === selectedAccount)
+    : portfolios;
   const yieldError = shock.yieldBps < -1000 || shock.yieldBps > 1000;
   const equityError = !shock.useWorstEquityWindow && (shock.equityPct < -80 || shock.equityPct > 100);
   const runDisabled =
@@ -387,7 +391,7 @@ function RiskModelsPage() {
             }`}
           >
             <option value="">Select a portfolio</option>
-            {portfolios.map((item) => (
+            {accountPortfolios.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name}
               </option>

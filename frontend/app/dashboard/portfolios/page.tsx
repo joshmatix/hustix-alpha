@@ -22,6 +22,7 @@ export default function PortfoliosPage() {
   const [error, setError] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [layout, setLayout] = useState<'cards' | 'list'>('cards');
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
   const [portfolioToDelete, setPortfolioToDelete] = useState<Portfolio | null>(null);
@@ -237,7 +238,7 @@ export default function PortfoliosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Portfolios</h1>
           <p className="mt-1 text-xs text-slate-400">
@@ -245,7 +246,31 @@ export default function PortfoliosPage() {
             {planLimits ? ` ${portfolioLimitSentence(planLimits.name, planLimits.portfolioLimit, planLimits.tickerLimit)}` : ''}
           </p>
         </div>
-        <Button onClick={() => setIsModalOpen(true)}>+ Create Portfolio</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg border border-slate-700 p-0.5" role="group" aria-label="Portfolio layout">
+            <button
+              type="button"
+              aria-pressed={layout === 'list'}
+              onClick={() => setLayout('list')}
+              className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${
+                layout === 'list' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-100'
+              }`}
+            >
+              List
+            </button>
+            <button
+              type="button"
+              aria-pressed={layout === 'cards'}
+              onClick={() => setLayout('cards')}
+              className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition ${
+                layout === 'cards' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-100'
+              }`}
+            >
+              Cards
+            </button>
+          </div>
+          <Button onClick={() => setIsModalOpen(true)}>+ Create Portfolio</Button>
+        </div>
       </div>
 
       <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-xs leading-relaxed text-slate-400">
@@ -291,20 +316,33 @@ export default function PortfoliosPage() {
         <p id="csv-format-help" className="sr-only">
           Column order is not significant. Required columns: ticker, asset_class, quantity, and current_price. Quantity is the number of shares. Optional columns: asset_name, duration_years, and beta. Class labels are Equity, Bond, Commodity, Gold, and Cash. A sample file is at /samples/holdings-sample.csv. Uploading replaces the holdings already in this portfolio.
         </p>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className={layout === 'cards' ? 'grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3' : 'overflow-visible rounded-xl border border-slate-800 bg-slate-900'}>
           {portfolios.map((portfolio) => (
             <div
               key={portfolio.id}
-              className="relative rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-sm hover:z-20 focus-within:z-20"
+              className={
+                layout === 'cards'
+                  ? 'relative rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-sm hover:z-20 focus-within:z-20'
+                  : 'relative flex flex-col gap-3 border-b border-slate-800 p-4 last:border-b-0 hover:z-20 focus-within:z-20 sm:flex-row sm:items-center'
+              }
             >
-              <h3 className="text-lg font-semibold text-white">{portfolio.name}</h3>
-              <p className="mt-2 text-sm text-slate-400">
-                {portfolio.description || 'No description provided.'}
-              </p>
-              <p className="mt-4 text-emerald-400 font-semibold">
-                ${Number(portfolio.portfolio_value || 0).toLocaleString()}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className={layout === 'cards' ? undefined : 'min-w-0 flex-1'}>
+                <h3 className={layout === 'cards' ? 'text-lg font-semibold text-white' : 'font-semibold text-white'}>
+                  {portfolio.name}
+                </h3>
+                <p className={`text-sm text-slate-400 ${layout === 'cards' ? 'mt-2' : 'mt-1 truncate'}`}>
+                  {portfolio.description || 'No description provided.'}
+                </p>
+                <p className={`font-semibold text-emerald-400 ${layout === 'cards' ? 'mt-4' : 'mt-1 sm:hidden'}`}>
+                  ${Number(portfolio.portfolio_value || 0).toLocaleString()}
+                </p>
+              </div>
+              {layout === 'list' && (
+                <p className="hidden shrink-0 font-semibold text-emerald-400 sm:block">
+                  ${Number(portfolio.portfolio_value || 0).toLocaleString()}
+                </p>
+              )}
+              <div className={layout === 'cards' ? 'mt-4 flex flex-wrap gap-2' : 'flex flex-wrap gap-2'}>
                 <Button size="sm" variant="secondary" onClick={() => loadHoldings(portfolio.id)}>
                   {selectedId === portfolio.id ? 'Holdings' : 'View holdings'}
                 </Button>
@@ -364,7 +402,7 @@ export default function PortfoliosPage() {
                   </div>
                 </div>
               </div>
-              <div className="mt-4 border-t border-slate-800 pt-3">
+              <div className={layout === 'cards' ? 'mt-4 border-t border-slate-800 pt-3' : 'sm:ml-1'}>
                 <button
                   type="button"
                   onClick={() => setPortfolioToDelete(portfolio)}

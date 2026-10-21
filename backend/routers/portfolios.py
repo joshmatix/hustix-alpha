@@ -15,6 +15,7 @@ class PortfolioListResponse(BaseModel):
     id: UUID
     name: str
     description: Optional[str] = None
+    account_alias: Optional[str] = None
     portfolio_value: float = 0
     asset_allocation: Dict[str, float] = Field(
         default_factory=lambda: {"equities": 60, "bonds": 25, "realAssets": 10, "cash": 5}
@@ -253,6 +254,7 @@ def _to_list_item(item: dict) -> dict:
         "id": item.get("id") or item.get("portfolio_id"),
         "name": name,
         "description": item.get("description") or item.get("target_risk_profile") or "",
+        "account_alias": (item.get("account_alias") or "").strip(),
         "portfolio_value": float(item.get("portfolio_value") or item.get("total_value") or 0),
         "asset_allocation": _normalize_allocation(item.get("asset_allocation") or item.get("weights")),
         "target_risk_profile": item.get("target_risk_profile") or "Balanced",
