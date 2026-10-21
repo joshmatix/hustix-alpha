@@ -19,8 +19,11 @@ __all__ = [
 
 
 def _vendor():
-    if selected_provider() == "eodhd":
+    provider = selected_provider()
+    if provider == "eodhd":
         from engine.market_data import eodhd as vendor
+    elif provider == "tiingo":
+        from engine.market_data import tiingo as vendor
     else:
         from engine.market_data import yahoo as vendor
     return vendor

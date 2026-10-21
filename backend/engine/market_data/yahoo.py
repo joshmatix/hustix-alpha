@@ -103,6 +103,41 @@ def fetch_daily_closes(symbol: str) -> dict[str, float]:
     return prices
 
 
+def fetch_dollar_closes() -> dict[str, float]:
+    """Completed daily closes for the ICE dollar index, DX-Y.NYB."""
+    response = requests.get(
+        "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB",
+        params={"interval": "1d", "range": "10d"},
+        headers=_HEADERS,
+        timeout=10,
+    )
+    if response.status_code != 200:
+        return {}
+    result = (response.json().get("chart") or {}).get("result") or []
+    if not result:
+        return {}
+    block = result[0]
+    meta = block.get("meta") or {}
+    timestamps = block.get("timestamp") or []
+    closes = ((block.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
+    pairs: list[tuple[str, float]] = []
+    for stamp, price in zip(timestamps, closes):
+        parsed = _positive_price(price)
+        if parsed is None:
+            continue
+        day = datetime.fromtimestamp(int(stamp), tz=timezone.utc).date().isoformat()
+        pairs.append((day, parsed))
+    state = str(meta.get("marketState") or "").upper()
+    regular = (meta.get("currentTradingPeriod") or {}).get("regular") or {}
+    start = regular.get("start")
+    if state == "REGULAR" and pairs and start is not None:
+        session_day = datetime.fromtimestamp(int(start), tz=timezone.utc).date().isoformat()
+        completed = [(day, price) for day, price in pairs if day < session_day]
+        if completed:
+            pairs = completed
+    return dict(pairs)
+
+
 def fetch_dollar_index() -> tuple[float | None, float | None]:
     """ICE US Dollar Index and its percent move from the prior close."""
     response = requests.get(

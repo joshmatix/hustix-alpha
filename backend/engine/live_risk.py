@@ -152,6 +152,7 @@ def _yield_decimal(tnx_level: float) -> float:
     """^TNX is a percent yield, or the index quote at ten times the yield.
 
     Yahoo and EODHD's TNX.INDX both use that index quote, near 40 when the yield is 4%.
+    Tiingo has no yield index, so its series is the FRED 10-year yield multiplied by 10.
     """
     percent = tnx_level / 10.0 if tnx_level > 20.0 else tnx_level
     return percent / 100.0

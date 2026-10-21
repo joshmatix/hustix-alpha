@@ -18,7 +18,8 @@ const sections = [
     paragraphs: [
       'Account information. When you register, we collect your email address, a password, and your firm name. Passwords are stored by our authentication provider in a form that we cannot read. We also store the date you accept the Customer Agreement and the agreement version you accepted.',
       'Security information. The service requires an authenticator app. We store the enrollment needed to verify sign-in codes. We do not receive the secret stored in your authenticator app.',
-      'Portfolio information. You may enter client names, portfolio labels, tickers, and allocations so the service can run stress tests and build reports. You decide what to upload.',
+      'Portfolio information. You may enter client names, portfolio labels, tickers, allocations, and an internal account number so the service can run stress tests and build reports. You decide what to upload. The RIA or advisor retains ownership of all uploaded portfolio data and client identifier data.',
+      'Government identifiers. Do not enter sensitive government identifiers in any free-text field. That includes Social Security numbers, tax identification numbers, and passport numbers.',
       'Questions. The public contact form collects the name, email address, and message you submit.',
       'Billing. If you choose a paid plan, payment is processed by Stripe. Stripe collects the payment details. We receive the plan, billing status, and related identifiers, not your full card number.',
       'Sign-in state. We use browser storage and cookies to keep you signed in, to protect the service, and to operate the admin console. We do not use them for advertising.',
@@ -28,14 +29,14 @@ const sections = [
     heading: '3. How we use information',
     paragraphs: [
       'We use information to create and secure your account, run the stress tests and reports you request, bill for a paid plan, reply to questions, and keep the service operating.',
-      'We also use it to investigate misuse, enforce our terms, and comply with law. We do not sell your information.',
+      'We also use it to investigate misuse, enforce our terms, and comply with law. Hustix Macro does not sell, market to, or aggregate end-client data for third-party monetization.',
     ],
   },
   {
     heading: '4. Who we share information with',
     paragraphs: [
       'Service providers process information for us. That includes our authentication and database host, Stripe when you pay, and email delivery used for account messages. They may use the information only to perform those services.',
-      'Market-data providers. To price a portfolio, we send tickers and related request details to providers such as Yahoo Finance. Those providers handle the request under their own terms.',
+      'Market-data providers. To price a portfolio, we send tickers and related request details to the market-data provider. That provider handles the request under its own terms.',
       'Legal and safety. We may disclose information if the law requires it, or if we believe disclosure is needed to protect Hustix, our users, or others.',
       'A firm account. People you authorize on a firm account can see the portfolios and reports stored in that account.',
     ],
@@ -92,7 +93,7 @@ export default function PrivacyPage() {
         <article className="space-y-4 text-sm leading-relaxed text-slate-300">
           <header className="space-y-1">
             <h1 className="text-lg font-semibold text-white">Privacy Policy</h1>
-            <p className="text-xs text-slate-500">Last updated October 19, 2026</p>
+            <p className="text-xs text-slate-500">Last updated October 20, 2026</p>
           </header>
           {sections.map((section) => (
             <section key={section.heading} className="space-y-2">

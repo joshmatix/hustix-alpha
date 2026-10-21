@@ -12,6 +12,7 @@ supabase/.temp/
 backend/.venv/
 **/.venv/
 backend/.env
+backend/data/dxy_multiplier.json
 frontend/.env.local
 frontend/.local-login-bypass
 .DS_Store

@@ -2,6 +2,7 @@
 
 The app stores tickers in canonical form: upper case, with a dot turned into a dash
 (BRK.B becomes BRK-B). EODHD wants an exchange suffix on top of that.
+Tiingo wants the canonical symbol in lower case, with no exchange suffix.
 """
 
 _EXCHANGES = {
@@ -46,3 +47,18 @@ def eodhd_symbol(ticker: str) -> str:
     if symbol.endswith("-USD"):
         return f"{symbol}.CC"
     return f"{symbol}.US"
+
+
+def tiingo_symbol(ticker: str) -> str:
+    """Tiingo equity ticker. Class shares stay hyphenated, as in brk-b."""
+    raw = str(ticker).strip().upper()
+    if raw in _DOLLAR_INDEX:
+        return "dxy"
+    symbol = canonical_symbol(raw)
+    if symbol in _DOLLAR_INDEX:
+        return "dxy"
+    if symbol.startswith("^"):
+        symbol = symbol[1:]
+    if symbol.endswith("-USD"):
+        return symbol.replace("-", "").lower()
+    return symbol.lower()
