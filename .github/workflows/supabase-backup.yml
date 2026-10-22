@@ -9,11 +9,11 @@ on:
 
 jobs:
   backup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Install PostgreSQL Client
       run: |
@@ -24,7 +24,7 @@ jobs:
       run: |
         # Generates a timestamped filename (e.g., supabase_backup_20261021_233900.sql.gz)
         FILENAME="supabase_backup_$(date +'%Y%m%d_%H%M%S').sql.gz"
-        echo "FILENAME=$FILENAME" >> $GITHUB_ENV
+        echo "FILENAME=$FILENAME" >> "$GITHUB_ENV"
         
         # Streams the database dump through gzip to maintain security boundaries
         PGPASSWORD="${{ secrets.SUPABASE_DB_PASSWORD }}" pg_dump \
@@ -34,18 +34,16 @@ jobs:
           -d postgres \
           -v | gzip > "$FILENAME"
 
-    - name: Configure AWS/S3 CLI for Cloudflare R2
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        # Cloudflare R2 requires the region parameter to be set to 'auto'
-        aws-region: auto
-
     - name: Upload Backup to Cloudflare R2 Bucket
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        AWS_DEFAULT_REGION: auto
       run: |
-        # Uploads the file securely to your designated R2 bucket
+        # R2 is not AWS STS. Passing region "auto" to the AWS login action
+        # looks up sts.auto.amazonaws.com, which does not exist.
         aws s3 cp "$FILENAME" "s3://${{ secrets.R2_BUCKET_NAME }}/$FILENAME" \
-          --endpoint-url "${{ secrets.R2_ENDPOINT_URL }}"
-          
+          --endpoint-url "${{ secrets.R2_ENDPOINT_URL }}" \
+          --region auto
+
         echo "Successfully uploaded $FILENAME to Cloudflare R2."
