@@ -39,11 +39,15 @@ jobs:
         AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         AWS_DEFAULT_REGION: auto
+        # Current AWS CLI sends a CRC64 checksum R2 rejects as Access Denied.
+        AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+        AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
       run: |
         # R2 is not AWS STS. Passing region "auto" to the AWS login action
         # looks up sts.auto.amazonaws.com, which does not exist.
         aws s3 cp "$FILENAME" "s3://${{ secrets.R2_BUCKET_NAME }}/$FILENAME" \
           --endpoint-url "${{ secrets.R2_ENDPOINT_URL }}" \
-          --region auto
+          --region auto \
+          --checksum-algorithm CRC32
 
         echo "Successfully uploaded $FILENAME to Cloudflare R2."
