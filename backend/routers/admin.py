@@ -55,7 +55,7 @@ class AdvisorPlanBody(BaseModel):
 
 class AdvisorPromotionBody(BaseModel):
     user_id: str
-    code: str = ""
+    codes: list[str] = Field(default_factory=list)
 
 
 class AdvisorContactBody(BaseModel):
@@ -312,7 +312,11 @@ def advisor_plan(body: AdvisorPlanBody, request: Request):
 def advisor_promotion(body: AdvisorPromotionBody, request: Request):
     _require_admin(request)
     _require_database()
-    return _mutate_directory("admin_set_advisor_promotion", {"target_user": body.user_id, "promo_code": body.code})
+    codes = [code.strip() for code in body.codes if code.strip()]
+    return _mutate_directory(
+        "admin_set_advisor_promotions",
+        {"target_user": body.user_id, "promo_codes": codes},
+    )
 
 
 @router.post("/advisors/contact")

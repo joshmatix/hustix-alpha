@@ -22,14 +22,22 @@ type FirmQuote = {
   portfolio_limit: number | null;
   ticker_limit: number | null;
   can_manage: boolean;
-  promotion: {
-    code: string;
-    label: string;
-    percent_off: number | null;
-    amount_off_cents: number | null;
-    ends_at: string | null;
-  } | null;
+  promotion: FirmPromotion | null;
+  promotions?: FirmPromotion[];
 };
+
+type FirmPromotion = {
+  code: string;
+  label: string;
+  percent_off: number | null;
+  amount_off_cents: number | null;
+  ends_at: string | null;
+};
+
+function quotePromotions(quote: FirmQuote) {
+  if (Array.isArray(quote.promotions)) return quote.promotions;
+  return quote.promotion ? [quote.promotion] : [];
+}
 
 function money(cents: number) {
   return (cents / 100).toLocaleString('en-US', {
@@ -300,18 +308,18 @@ export default function ProfilePage() {
                   {quote.seats} advisor seats. The first seat is {quote.plan_code === 'pro_plus' ? '$199' : '$119'} a month and each added seat is $99.
                 </p>
               )}
-              {quote?.promotion && (
-                <p className="mt-1 text-xs text-slate-400">
-                  {quote.promotion.code}
-                  {quote.promotion.percent_off != null ? ` · ${quote.promotion.percent_off}% off` : ''}
-                  {quote.promotion.amount_off_cents != null
-                    ? ` · ${money(quote.promotion.amount_off_cents)} off`
+              {quote && quotePromotions(quote).map((promotion) => (
+                <p key={promotion.code} className="mt-1 text-xs text-slate-400">
+                  {promotion.code}
+                  {promotion.percent_off != null ? ` · ${promotion.percent_off}% off` : ''}
+                  {promotion.amount_off_cents != null
+                    ? ` · ${money(promotion.amount_off_cents)} off`
                     : ''}
-                  {quote.promotion.ends_at
-                    ? ` through ${quote.promotion.ends_at.slice(0, 10)}`
+                  {promotion.ends_at
+                    ? ` through ${promotion.ends_at.slice(0, 10)}`
                     : ''}
                 </p>
-              )}
+              ))}
               {quote?.can_manage && (
                 <div className="mt-3 space-y-3">
                   <div className="flex flex-wrap items-center gap-3">

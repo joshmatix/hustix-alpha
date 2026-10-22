@@ -18,6 +18,14 @@ type Account = {
   last_seen: string;
 };
 
+type AppliedPromotion = {
+  code: string;
+  percent_off: number | null;
+  amount_off_cents: number | null;
+  starts_on: string | null;
+  ends_on: string | null;
+};
+
 type Advisor = {
   id: string;
   email: string;
@@ -26,12 +34,7 @@ type Advisor = {
   firm_name: string;
   enabled: boolean;
   plan_code: string;
-  promotion_code: string;
-  promotion_label: string;
-  percent_off: number | null;
-  amount_off_cents: number | null;
-  promotion_starts_on: string | null;
-  promotion_ends_on: string | null;
+  applied_promotions: AppliedPromotion[];
   agreement_version: string;
   agreement_signed_at: string | null;
   last_seen: string | null;
@@ -109,21 +112,38 @@ function applicablePromotions(planCode: string, promotions: Promotion[]) {
 
 function promotionLabel(item: {
   code?: string;
-  promotion_code?: string;
   percent_off: number | null;
   amount_off_cents: number | null;
   starts_at?: string | null;
   ends_at?: string | null;
-  promotion_starts_on?: string | null;
-  promotion_ends_on?: string | null;
+  starts_on?: string | null;
+  ends_on?: string | null;
 }) {
-  const code = item.code || item.promotion_code || '';
+  const code = item.code || '';
   if (!code) return 'None';
   const off = item.percent_off != null ? `${item.percent_off}% off` : money(item.amount_off_cents);
-  const starts = item.starts_at || item.promotion_starts_on;
-  const ends = item.ends_at || item.promotion_ends_on;
+  const starts = item.starts_at || item.starts_on;
+  const ends = item.ends_at || item.ends_on;
   const range = starts && ends ? ` · ${starts} to ${ends}` : '';
   return `${code} · ${off}${range}`;
+}
+
+function listedPromotions(advisor: Advisor, promotions: Promotion[]) {
+  const applicable = applicablePromotions(advisor.plan_code, promotions);
+  const known = new Set(applicable.map((item) => item.code));
+  const extras = (advisor.applied_promotions || [])
+    .filter((item) => item.code && !known.has(item.code))
+    .map((item) => ({
+      code: item.code,
+      label: item.code,
+      percent_off: item.percent_off,
+      amount_off_cents: item.amount_off_cents,
+      applies_to: [advisor.plan_code],
+      active: true,
+      starts_at: item.starts_on,
+      ends_at: item.ends_on,
+    }));
+  return [...applicable, ...extras];
 }
 
 function isoDate(day: Date) {
@@ -217,7 +237,8 @@ function DatePicker({
 }
 
 function PromotionList({ advisor, promotions }: { advisor: Advisor; promotions: Promotion[] }) {
-  const applicable = applicablePromotions(advisor.plan_code, promotions);
+  const applicable = listedPromotions(advisor, promotions);
+  const applied = new Set((advisor.applied_promotions || []).map((item) => item.code));
   if (applicable.length === 0) {
     return <p className="text-sm text-slate-400">None for this plan.</p>;
   }
@@ -226,7 +247,7 @@ function PromotionList({ advisor, promotions }: { advisor: Advisor; promotions: 
       {applicable.map((item) => (
         <li key={item.code}>
           {promotionLabel(item)}
-          {item.code === advisor.promotion_code ? ' · applied' : ''}
+          {applied.has(item.code) ? ' · applied' : ''}
         </li>
       ))}
     </ul>
@@ -247,7 +268,7 @@ function AdvisorSection({
   const [firm, setFirm] = useState('');
   const [phone, setPhone] = useState('');
   const [plan, setPlan] = useState('free');
-  const [promotion, setPromotion] = useState('');
+  const [chosen, setChosen] = useState<string[]>([]);
   const [message, setMessage] = useState('');
   const [ok, setOk] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -260,6 +281,11 @@ function AdvisorSection({
   const today = new Date().toISOString().slice(0, 10);
 
   const selected = state.advisors.find((advisor) => advisor.id === selectedId) || null;
+  const appliedKey = (selected?.applied_promotions || []).map((item) => item.code).sort().join('\n');
+
+  useEffect(() => {
+    setChosen(appliedKey ? appliedKey.split('\n') : []);
+  }, [selected?.id, appliedKey]);
 
   function choose(advisor: Advisor) {
     setSelectedId(advisor.id);
@@ -267,7 +293,6 @@ function AdvisorSection({
     setFirm(advisor.firm_name);
     setPhone(advisor.phone);
     setPlan(advisor.plan_code || 'free');
-    setPromotion(advisor.promotion_code);
     setMessage('');
   }
 
@@ -328,7 +353,11 @@ function AdvisorSection({
                 className={`cursor-pointer border-t border-slate-800 ${advisor.id === selectedId ? 'bg-slate-800/60' : ''}`}
                 onClick={() => choose(advisor)}
               >
-                <td className="py-2 pr-3">{advisor.full_name || '—'}</td>
+                <td className="py-2 pr-3">
+                  <button type="button" onClick={() => choose(advisor)} className="text-left font-medium text-indigo-200">
+                    {advisor.full_name || 'Unnamed advisor'}
+                  </button>
+                </td>
                 <td className="py-2 pr-3">{advisor.email || '—'}</td>
                 <td className="py-2 pr-3">{advisor.plan_code || '—'}</td>
                 <td className="py-2 pr-3">
@@ -340,6 +369,9 @@ function AdvisorSection({
             ))}
           </tbody>
         </table>
+      ) : null}
+      {!selected && state.advisors.length > 0 ? (
+        <p className="mt-3 text-sm text-slate-400">Select an advisor to apply a promotion.</p>
       ) : null}
 
       {selected ? (
@@ -398,30 +430,40 @@ function AdvisorSection({
             </button>
           </div>
 
-          <div>
-            <p className="text-xs text-slate-400">Promotions for this plan</p>
-            <PromotionList advisor={selected} promotions={state.promotions} />
-          </div>
-
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="block text-xs text-slate-400">
-              Apply a promotion
-              <select value={promotion} onChange={(event) => setPromotion(event.target.value)} className="mt-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
-                <option value="">None</option>
-                {applicablePromotions(selected.plan_code, state.promotions).map((item) => (
-                  <option key={item.code} value={item.code}>{promotionLabel(item)}</option>
+          <div className="space-y-2">
+            <p className="text-xs text-slate-400">Apply promotions</p>
+            {listedPromotions(selected, state.promotions).length === 0 ? (
+              <p className="text-sm text-slate-400">None for this plan. Save a promotion below, then check it here.</p>
+            ) : (
+              <ul className="space-y-1 text-sm text-slate-200">
+                {listedPromotions(selected, state.promotions).map((item) => (
+                  <li key={item.code}>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={chosen.includes(item.code)}
+                        onChange={(event) => {
+                          setChosen((current) => (
+                            event.target.checked
+                              ? [...current, item.code]
+                              : current.filter((code) => code !== item.code)
+                          ));
+                        }}
+                      />
+                      {promotionLabel(item)}
+                    </label>
+                  </li>
                 ))}
-              </select>
-            </label>
+              </ul>
+            )}
             <button
               type="button"
               disabled={busy}
-              onClick={() => void run('/api/admin/advisors/promotion', { user_id: selected.id, code: promotion })}
+              onClick={() => void run('/api/admin/advisors/promotion', { user_id: selected.id, codes: chosen })}
               className="rounded-lg border border-slate-600 px-3 py-2 text-sm disabled:opacity-60"
             >
-              Apply promotion
+              Apply promotions
             </button>
-            <p className="pb-2 text-xs text-slate-400">Current: {promotionLabel(selected)}</p>
           </div>
 
           <p className="text-sm text-slate-300">
@@ -431,6 +473,22 @@ function AdvisorSection({
           {message ? <p className={`text-sm ${ok ? 'text-emerald-300' : 'text-rose-300'}`}>{message}</p> : null}
         </div>
       ) : null}
+
+      <div className="mt-5 border-t border-slate-800 pt-4">
+        <h3 className="text-sm font-semibold">Saved promotions</h3>
+        {state.promotions.length === 0 ? (
+          <p className="mt-2 text-sm text-slate-400">No promotions saved.</p>
+        ) : (
+          <ul className="mt-2 space-y-1 text-sm text-slate-200">
+            {state.promotions.map((item) => (
+              <li key={item.code}>
+                {promotionLabel(item)}
+                {item.applies_to.length ? ` · ${item.applies_to.join(', ')}` : ''}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <form
         className="mt-5 space-y-3 border-t border-slate-800 pt-4"
@@ -452,8 +510,14 @@ function AdvisorSection({
             setMessage('The end date must be on or after the start date.');
             return;
           }
+          const code = promoCode.trim().toUpperCase();
+          if (!/^[A-Z0-9]{2,12}$/.test(code)) {
+            setOk(false);
+            setMessage(code ? 'Use 2 to 12 letters or numbers.' : 'Enter a promotion code.');
+            return;
+          }
           void run('/api/admin/promotions', {
-            code: promoCode,
+            code,
             percent_off: promoKind === 'percent' ? Math.round(value) : null,
             amount_off_cents: promoKind === 'amount' ? Math.round(value * 100) : null,
             applies_to: promoPlans,
@@ -464,7 +528,10 @@ function AdvisorSection({
       >
         <h3 className="text-sm font-semibold">New promotion</h3>
         <div className="grid gap-3 sm:grid-cols-2">
-          <input value={promoCode} onChange={(event) => setPromoCode(event.target.value)} placeholder="SPRING20" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm sm:col-span-2" />
+          <label className="block text-xs text-slate-400 sm:col-span-2">
+            Code
+            <input value={promoCode} onChange={(event) => setPromoCode(event.target.value.toUpperCase())} placeholder="S20" maxLength={12} aria-label="Code" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm uppercase" />
+          </label>
           <label className="block text-xs text-slate-400">
             Starts
             <DatePicker
@@ -529,7 +596,10 @@ export default function CloudAdminPage() {
       plans,
       accounts,
       accounts_error: next.accounts_error ?? null,
-      advisors: Array.isArray(next.advisors) ? next.advisors : [],
+      advisors: (Array.isArray(next.advisors) ? next.advisors : []).map((advisor) => ({
+        ...advisor,
+        applied_promotions: Array.isArray(advisor.applied_promotions) ? advisor.applied_promotions : [],
+      })),
       promotions: Array.isArray(next.promotions) ? next.promotions : [],
       advisors_error: next.advisors_error ?? null,
     });

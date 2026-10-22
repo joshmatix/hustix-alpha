@@ -2,6 +2,9 @@ import Link from 'next/link';
 import AgreementBody from '@/components/auth/AgreementBody';
 import { fetchAgreement } from '@/lib/agreement';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export const metadata = {
   title: 'Hustix Macro Customer Agreement',
   description: 'The agreement for a Hustix Macro advisor account.',

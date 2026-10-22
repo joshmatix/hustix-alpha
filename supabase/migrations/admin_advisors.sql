@@ -41,12 +41,7 @@ AS $$
         'firm_name', advisor.firm_name,
         'enabled', advisor.enabled,
         'plan_code', advisor.plan_code,
-        'promotion_code', advisor.promotion_code,
-        'promotion_label', advisor.promotion_label,
-        'percent_off', advisor.percent_off,
-        'amount_off_cents', advisor.amount_off_cents,
-        'promotion_starts_on', advisor.promotion_starts_on,
-        'promotion_ends_on', advisor.promotion_ends_on,
+        'applied_promotions', advisor.applied_promotions,
         'agreement_version', advisor.agreement_version,
         'agreement_signed_at', advisor.agreement_signed_at,
         'last_seen', advisor.last_seen
@@ -60,12 +55,20 @@ AS $$
           COALESCE(profile.firm_name, '') AS firm_name,
           profile.disabled_at IS NULL AS enabled,
           COALESCE(subscription.plan_code, profile.plan, 'free') AS plan_code,
-          COALESCE(promo.code, '') AS promotion_code,
-          COALESCE(promo.label, '') AS promotion_label,
-          promo.percent_off,
-          promo.amount_off_cents,
-          promo.starts_on AS promotion_starts_on,
-          promo.ends_on AS promotion_ends_on,
+          COALESCE((
+            SELECT json_agg(json_build_object(
+              'code', promotion.code,
+              'percent_off', promotion.percent_off,
+              'amount_off_cents', promotion.amount_off_cents,
+              'starts_on', to_char(promotion.starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
+              'ends_on', to_char(COALESCE(applied.ends_at, promotion.ends_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+            ) ORDER BY promotion.code)
+            FROM public.subscription_promotions AS applied
+            JOIN public.promotions AS promotion ON promotion.code = applied.promotion_code
+            WHERE applied.subscription_id = subscription.id
+              AND promotion.active
+              AND (applied.ends_at IS NULL OR applied.ends_at > timezone('utc'::text, now()))
+          ), '[]'::json) AS applied_promotions,
           COALESCE(acceptance.version, '') AS agreement_version,
           acceptance.signed_at AS agreement_signed_at,
           seen.last_seen
@@ -80,18 +83,6 @@ AS $$
         ) AS membership ON true
         LEFT JOIN public.subscriptions AS subscription
           ON subscription.firm_id = membership.firm_id
-        LEFT JOIN LATERAL (
-          SELECT promotion.code, promotion.label, promotion.percent_off, promotion.amount_off_cents,
-            to_char(promotion.starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS starts_on,
-            to_char(COALESCE(applied.ends_at, promotion.ends_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS ends_on
-          FROM public.subscription_promotions AS applied
-          JOIN public.promotions AS promotion ON promotion.code = applied.promotion_code
-          WHERE applied.subscription_id = subscription.id
-            AND promotion.active
-            AND (applied.ends_at IS NULL OR applied.ends_at > timezone('utc'::text, now()))
-          ORDER BY applied.applied_at DESC
-          LIMIT 1
-        ) AS promo ON true
         LEFT JOIN LATERAL (
           SELECT published.version, accepted.signed_at
           FROM public.agreement_acceptances AS accepted
@@ -207,7 +198,9 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.admin_set_advisor_promotion(target_user UUID, promo_code TEXT)
+DROP FUNCTION IF EXISTS public.admin_set_advisor_promotion(UUID, TEXT);
+
+CREATE OR REPLACE FUNCTION public.admin_set_advisor_promotions(target_user UUID, promo_codes TEXT[])
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -217,8 +210,7 @@ DECLARE
   target_firm UUID;
   chosen_subscription UUID;
   current_plan TEXT;
-  promo public.promotions%ROWTYPE;
-  normalized TEXT;
+  normalized TEXT[];
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = target_user) THEN
     RAISE EXCEPTION 'Unknown advisor';
@@ -238,32 +230,54 @@ BEGIN
     RAISE EXCEPTION 'No subscription found for this firm';
   END IF;
 
-  normalized := upper(btrim(COALESCE(promo_code, '')));
-  IF normalized = '' THEN
+  normalized := ARRAY(
+    SELECT DISTINCT upper(btrim(item))
+    FROM unnest(COALESCE(promo_codes, ARRAY[]::text[])) AS item
+    WHERE btrim(COALESCE(item, '')) <> ''
+  );
+
+  IF cardinality(normalized) = 0 THEN
     DELETE FROM public.subscription_promotions
     WHERE subscription_id = chosen_subscription;
     RETURN public.admin_directory();
   END IF;
 
-  SELECT * INTO promo
-  FROM public.promotions AS promotion
-  WHERE promotion.code = normalized;
-
-  IF promo.code IS NULL OR NOT promo.active THEN
+  IF EXISTS (
+    SELECT 1
+    FROM unnest(normalized) AS chosen(code)
+    LEFT JOIN public.promotions AS promotion ON promotion.code = chosen.code
+    WHERE promotion.code IS NULL OR NOT promotion.active
+  ) THEN
     RAISE EXCEPTION 'Unknown promotion';
   END IF;
-  IF promo.starts_at IS NOT NULL AND promo.starts_at > timezone('utc'::text, now()) THEN
-    RAISE EXCEPTION 'That promotion has not started';
-  END IF;
-  IF promo.ends_at IS NOT NULL AND promo.ends_at <= timezone('utc'::text, now()) THEN
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.promotions AS promotion
+    WHERE promotion.code = ANY (normalized)
+      AND promotion.ends_at IS NOT NULL
+      AND promotion.ends_at <= timezone('utc'::text, now())
+  ) THEN
     RAISE EXCEPTION 'That promotion has ended';
   END IF;
-  IF NOT (current_plan = ANY (promo.applies_to)) THEN
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.promotions AS promotion
+    WHERE promotion.code = ANY (normalized)
+      AND NOT (current_plan = ANY (promotion.applies_to))
+  ) THEN
     RAISE EXCEPTION 'That promotion does not apply to this plan';
   END IF;
 
+  DELETE FROM public.subscription_promotions
+  WHERE subscription_id = chosen_subscription
+    AND NOT (promotion_code = ANY (normalized));
+
   INSERT INTO public.subscription_promotions (subscription_id, promotion_code, ends_at)
-  VALUES (chosen_subscription, promo.code, promo.ends_at)
+  SELECT chosen_subscription, promotion.code, promotion.ends_at
+  FROM public.promotions AS promotion
+  WHERE promotion.code = ANY (normalized)
   ON CONFLICT (subscription_id, promotion_code) DO UPDATE
   SET applied_at = timezone('utc'::text, now()),
       ends_at = EXCLUDED.ends_at;
@@ -334,8 +348,11 @@ DECLARE
 BEGIN
   normalized := upper(btrim(COALESCE(promo_code, '')));
   clean_label := btrim(COALESCE(promo_label, ''));
-  IF normalized = '' OR normalized !~ '^[A-Z0-9_-]{2,32}$' THEN
-    RAISE EXCEPTION 'Use a short promotion code';
+  IF normalized = '' THEN
+    RAISE EXCEPTION 'Enter a promotion code';
+  END IF;
+  IF normalized !~ '^[A-Z0-9]{2,12}$' THEN
+    RAISE EXCEPTION 'Use 2 to 12 letters or numbers';
   END IF;
   IF clean_label = '' THEN
     clean_label := normalized;
@@ -396,7 +413,7 @@ ALTER FUNCTION public.admin_directory() OWNER TO postgres;
 ALTER FUNCTION public._admin_advisor_firm(UUID) OWNER TO postgres;
 ALTER FUNCTION public.admin_set_advisor_access(UUID, BOOLEAN) OWNER TO postgres;
 ALTER FUNCTION public.admin_set_advisor_plan(UUID, TEXT) OWNER TO postgres;
-ALTER FUNCTION public.admin_set_advisor_promotion(UUID, TEXT) OWNER TO postgres;
+ALTER FUNCTION public.admin_set_advisor_promotions(UUID, TEXT[]) OWNER TO postgres;
 ALTER FUNCTION public.admin_update_advisor_contact(UUID, TEXT, TEXT, TEXT) OWNER TO postgres;
 ALTER FUNCTION public.admin_upsert_promotion(TEXT, TEXT, INTEGER, INTEGER, TEXT[], DATE, DATE) OWNER TO postgres;
 
@@ -404,13 +421,13 @@ REVOKE ALL ON FUNCTION public.admin_directory() FROM PUBLIC, anon, authenticated
 REVOKE ALL ON FUNCTION public._admin_advisor_firm(UUID) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.admin_set_advisor_access(UUID, BOOLEAN) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.admin_set_advisor_plan(UUID, TEXT) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.admin_set_advisor_promotion(UUID, TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.admin_set_advisor_promotions(UUID, TEXT[]) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.admin_update_advisor_contact(UUID, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.admin_upsert_promotion(TEXT, TEXT, INTEGER, INTEGER, TEXT[], DATE, DATE) FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.admin_directory() TO service_role;
 GRANT EXECUTE ON FUNCTION public.admin_set_advisor_access(UUID, BOOLEAN) TO service_role;
 GRANT EXECUTE ON FUNCTION public.admin_set_advisor_plan(UUID, TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION public.admin_set_advisor_promotion(UUID, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.admin_set_advisor_promotions(UUID, TEXT[]) TO service_role;
 GRANT EXECUTE ON FUNCTION public.admin_update_advisor_contact(UUID, TEXT, TEXT, TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.admin_upsert_promotion(TEXT, TEXT, INTEGER, INTEGER, TEXT[], DATE, DATE) TO service_role;
