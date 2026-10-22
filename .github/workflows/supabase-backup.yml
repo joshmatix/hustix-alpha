@@ -22,17 +22,30 @@ jobs:
 
     - name: Run pg_dump and Compress Backup
       run: |
+        # The runner's shell is `bash -e` without pipefail, so a failing
+        # pg_dump in `pg_dump | gzip` still exits 0 and uploads an empty archive.
+        set -o pipefail
+
         # Generates a timestamped filename (e.g., supabase_backup_20261021_233900.sql.gz)
         FILENAME="supabase_backup_$(date +'%Y%m%d_%H%M%S').sql.gz"
         echo "FILENAME=$FILENAME" >> "$GITHUB_ENV"
-        
-        # Streams the database dump through gzip to maintain security boundaries
+
+        # SUPABASE_DB_HOST must be the session pooler (IPv4), not
+        # db.<project-ref>.supabase.co. That direct host is IPv6-only, and
+        # GitHub-hosted runners have no route to it. User is postgres.<project-ref>.
+        # Port 6543 is transaction mode and cannot run pg_dump.
         PGPASSWORD="${{ secrets.SUPABASE_DB_PASSWORD }}" pg_dump \
           -h "${{ secrets.SUPABASE_DB_HOST }}" \
           -U "${{ secrets.SUPABASE_DB_USER }}" \
           -p 5432 \
           -d postgres \
           -v | gzip > "$FILENAME"
+
+        # An empty stream compresses to a 20-byte gzip. Refuse to continue.
+        if [ "$(stat -c%s "$FILENAME")" -le 20 ]; then
+          echo "pg_dump produced an empty archive" >&2
+          exit 1
+        fi
 
     - name: Upload Backup to Cloudflare R2 Bucket
       env:
