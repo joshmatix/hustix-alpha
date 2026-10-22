@@ -17,8 +17,11 @@ jobs:
 
     - name: Install PostgreSQL Client
       run: |
+        # pg_dump must be at least the server major version. Supabase is 17;
+        # ubuntu-24.04's default postgresql-client is 16 and aborts the dump.
         sudo apt-get update
-        sudo apt-get install -y postgresql-client
+        sudo apt-get install -y postgresql-client-17
+        pg_dump --version
 
     - name: Run pg_dump and Compress Backup
       run: |
