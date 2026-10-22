@@ -1,0 +1,46 @@
+The upload step on the run that started at 10:24 AM succeeded, so the bucket should now have a file named like `supabase_backup_20261022_142451.sql.gz`. That file is a gzipped SQL dump of the `postgres` database. Restore it into a throwaway Postgres and query that. Leave the live Supabase database alone.
+
+Download it with the same R2 credentials the workflow uses:
+
+```bash
+export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+export AWS_DEFAULT_REGION=auto
+export AWS_REQUEST_CHECKSUM_CALCULATION=WHEN_REQUIRED
+export AWS_RESPONSE_CHECKSUM_VALIDATION=WHEN_REQUIRED
+
+aws s3 ls "s3://$R2_BUCKET_NAME/" \
+  --endpoint-url "$R2_ENDPOINT_URL" \
+  --region auto
+
+aws s3 cp "s3://$R2_BUCKET_NAME/supabase_backup_20261022_142521.sql.gz" ./backup.sql.gz \
+  --endpoint-url "$R2_ENDPOINT_URL" \
+  --region auto
+```
+
+Use the name from `aws s3 ls` if the timestamp differs. Then check the file and load it into a disposable database on port 5433:
+
+```bash
+gunzip -t backup.sql.gz
+
+docker run --name hustix-backup-test \
+  -e POSTGRES_PASSWORD=backup-test \
+  -p 5433:5432 -d postgres:17
+
+gunzip -c backup.sql.gz | psql "postgresql://postgres:backup-test@127.0.0.1:5433/postgres"
+```
+
+Some lines will error because the dump refers to Supabase roles such as `supabase_admin` and `authenticator`. Those errors are expected in a plain Postgres container. The test that matters is whether your tables and rows are there:
+
+```bash
+psql "postgresql://postgres:backup-test@127.0.0.1:5433/postgres" -c \
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';"
+```
+
+Pick one table you know has rows, such as `public.agreement_versions`, and `SELECT count(*)` from it. Compare that count with the live database. When the counts match, remove the throwaway container:
+
+```bash
+docker rm -f hustix-backup-test
+```
+
+A real restore uses the same `gunzip | psql` command against a new empty Supabase project. Run that only when you mean to replace that project.
