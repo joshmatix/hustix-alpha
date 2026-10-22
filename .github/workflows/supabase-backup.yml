@@ -1,0 +1,51 @@
+name: Automated Supabase Backup to Cloudflare R2
+
+on:
+  schedule:
+    # Runs everyday at 2:30 AM UTC
+    - cron: '30 2 * * *'
+  # Allows you to manually trigger the backup from the GitHub Actions UI tab
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install PostgreSQL Client
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client
+
+    - name: Run pg_dump and Compress Backup
+      run: |
+        # Generates a timestamped filename (e.g., supabase_backup_20261021_233900.sql.gz)
+        FILENAME="supabase_backup_$(date +'%Y%m%d_%H%M%S').sql.gz"
+        echo "FILENAME=$FILENAME" >> $GITHUB_ENV
+        
+        # Streams the database dump through gzip to maintain security boundaries
+        PGPASSWORD="${{ secrets.SUPABASE_DB_PASSWORD }}" pg_dump \
+          -h "${{ secrets.SUPABASE_DB_HOST }}" \
+          -U "${{ secrets.SUPABASE_DB_USER }}" \
+          -p 5432 \
+          -d postgres \
+          -v | gzip > "$FILENAME"
+
+    - name: Configure AWS/S3 CLI for Cloudflare R2
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        # Cloudflare R2 requires the region parameter to be set to 'auto'
+        aws-region: auto
+
+    - name: Upload Backup to Cloudflare R2 Bucket
+      run: |
+        # Uploads the file securely to your designated R2 bucket
+        aws s3 cp "$FILENAME" "s3://${{ secrets.R2_BUCKET_NAME }}/$FILENAME" \
+          --endpoint-url "${{ secrets.R2_ENDPOINT_URL }}"
+          
+        echo "Successfully uploaded $FILENAME to Cloudflare R2."
