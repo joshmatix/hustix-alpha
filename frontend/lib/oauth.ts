@@ -1,3 +1,4 @@
+import { hasAcceptedCurrentAgreement } from '@/lib/agreement';
 import { supabase } from '@/lib/supabaseClient';
 import { authenticatorStillRequired, hasVerifiedAuthenticator } from '@/lib/mfa';
 
@@ -35,9 +36,19 @@ export function oauthErrorMessage(message: string, provider: OAuthProvider) {
   return message;
 }
 
+export async function accountIsDisabled(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('account_disabled');
+  return !error && data === true;
+}
+
 /** Where a signed-in user should go after email, Google, or Microsoft sign-in. */
 export async function pathAfterSignIn() {
+  if (await accountIsDisabled()) {
+    await supabase.auth.signOut();
+    return '/login?disabled=1';
+  }
   if (await authenticatorStillRequired()) return '/login';
+  if (!(await hasAcceptedCurrentAgreement())) return '/agreement/accept';
   if (!(await hasVerifiedAuthenticator())) return '/signup';
   return '/dashboard';
 }

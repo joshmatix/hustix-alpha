@@ -9,7 +9,7 @@ const sections = [
   {
     heading: '1. These terms',
     paragraphs: [
-      'These terms govern your use of the Hustix Macro website and service at hustix.com. They are between you and Hustix. The version date is October 19, 2026.',
+      'These terms govern your use of the Hustix Macro website and service at hustix.com. They are between you and Hustix. The version date is October 21, 2026.',
       'By using the site, you agree to these terms. If you do not agree, do not use the site. If you create an account, you also agree to the Customer Agreement. For the subscribed service, the Customer Agreement controls if it conflicts with these terms.',
     ],
   },
@@ -17,6 +17,7 @@ const sections = [
     heading: '2. The service',
     paragraphs: [
       'Hustix Macro lets a wealth advisor build ticker-based portfolios and run scenario stress tests. Results are calculations from information you enter and from third-party market data.',
+      'During this phase, Hustix is an analytics and stress-testing tool. It is not an official system of record for books and records.',
       'Outputs, projections, and reports are illustrations and simulations. They are not predictions, guarantees, or a promise of how any portfolio or asset will perform.',
     ],
   },
@@ -38,7 +39,8 @@ const sections = [
     heading: '5. Your content',
     paragraphs: [
       'You keep the rights to the client and portfolio information you submit. You grant Hustix permission to host and process that information only to provide, secure, and support the service and to comply with law.',
-      'You represent that you have the rights and client consents needed to submit that information. The service is not an official books-and-records system. You remain responsible for your firm’s compliance records.',
+      'You represent that you have the rights and client consents needed to submit that information.',
+      'Advisors must maintain their own primary compliance archives elsewhere. Hustix does not keep the official copy of a firm’s books, client files, or regulatory records.',
     ],
   },
   {
@@ -64,6 +66,7 @@ const sections = [
     heading: '9. Disclaimers and liability',
     paragraphs: [
       'The site and service are provided “as is” and “as available,” without warranties of any kind. Hustix disclaims implied warranties of merchantability and fitness for a particular purpose, to the extent the law allows.',
+      'Hustix is not liable for any loss, penalty, or claim that results from treating the service as a system of record, or from a failure to keep primary compliance archives outside Hustix.',
       'To the maximum extent the law allows, Hustix is not liable for indirect, incidental, special, consequential, or punitive damages, including lost profits, lost assets under management, or harm to a client relationship.',
       'Hustix’s total liability for claims related to the service is limited to the fees you paid Hustix for the service during the twelve months before the claim.',
       'You will defend and indemnify Hustix and its suppliers against third-party claims that arise from your breach of these terms, your negligence, or advice or reports you give your clients.',
@@ -102,7 +105,7 @@ export default function TermsPage() {
         <article className="space-y-4 text-sm leading-relaxed text-slate-300">
           <header className="space-y-1">
             <h1 className="text-lg font-semibold text-white">Terms of Service</h1>
-            <p className="text-xs text-slate-500">Last updated October 19, 2026</p>
+            <p className="text-xs text-slate-500">Last updated October 21, 2026</p>
           </header>
           {sections.map((section) => (
             <section key={section.heading} className="space-y-2">

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 import { ensureProfile } from '@/lib/ensureProfile';
+import { hasAcceptedCurrentAgreement } from '@/lib/agreement';
+import { accountIsDisabled } from '@/lib/oauth';
 import { isLocalHost, tryLocalLoginBypass } from '@/lib/localLoginBypass';
 import { authenticatorStillRequired, hasVerifiedAuthenticator } from '@/lib/mfa';
 
@@ -79,6 +81,17 @@ export default function AuthGuard({ children, bypass = false }: AuthGuardProps) 
             } = await supabase.auth.getSession();
             if (session) {
               noteSession(session);
+              if (await accountIsDisabled()) {
+                setAuthenticated(false);
+                await supabase.auth.signOut();
+                router.push('/login?disabled=1');
+                return;
+              }
+              if (!(await hasAcceptedCurrentAgreement())) {
+                setAuthenticated(false);
+                router.push('/agreement/accept');
+                return;
+              }
               setAuthenticated(true);
               void ensureProfile(session.user.id);
               return;
@@ -95,6 +108,11 @@ export default function AuthGuard({ children, bypass = false }: AuthGuardProps) 
 
         if (!session || (await authenticatorStillRequired())) {
           router.push('/login');
+        } else if (await accountIsDisabled()) {
+          await supabase.auth.signOut();
+          router.push('/login?disabled=1');
+        } else if (!(await hasAcceptedCurrentAgreement())) {
+          router.push('/agreement/accept');
         } else if (!(await hasVerifiedAuthenticator())) {
           router.push('/signup');
         } else {
@@ -123,6 +141,17 @@ export default function AuthGuard({ children, bypass = false }: AuthGuardProps) 
           if (needsCode) {
             setAuthenticated(false);
             router.push('/login');
+            return;
+          }
+          if (await accountIsDisabled()) {
+            setAuthenticated(false);
+            await supabase.auth.signOut();
+            router.push('/login?disabled=1');
+            return;
+          }
+          if (!(await hasAcceptedCurrentAgreement())) {
+            setAuthenticated(false);
+            router.push('/agreement/accept');
             return;
           }
           if (!(await hasVerifiedAuthenticator())) {

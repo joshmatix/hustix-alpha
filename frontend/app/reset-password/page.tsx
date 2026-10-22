@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { pathAfterSignIn } from '@/lib/oauth';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -61,7 +62,7 @@ export default function ResetPasswordPage() {
       setSaving(false);
       return;
     }
-    router.push('/dashboard');
+    router.push(await pathAfterSignIn());
   };
 
   return (

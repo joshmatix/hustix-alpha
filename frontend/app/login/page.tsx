@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { authenticatorDigits, authenticatorStillRequired, hasVerifiedAuthenticator } from '@/lib/mfa';
+import { authenticatorDigits, authenticatorStillRequired } from '@/lib/mfa';
 import { tryLocalLoginBypass } from '@/lib/localLoginBypass';
-import { oauthErrorMessage, startOAuth, type OAuthProvider } from '@/lib/oauth';
+import { oauthErrorMessage, pathAfterSignIn, startOAuth, type OAuthProvider } from '@/lib/oauth';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -36,6 +36,9 @@ export default function LoginPage() {
   }
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('disabled') === '1') {
+      setNotice('This account is disabled.');
+    }
     if (sessionStorage.getItem('hustix_idle_signout') !== '1') return;
     sessionStorage.removeItem('hustix_idle_signout');
     setNotice('You were signed out after 15 minutes of inactivity.');
@@ -45,11 +48,17 @@ export default function LoginPage() {
     let cancelled = false;
     void (async () => {
       if (await tryLocalLoginBypass()) {
-        if (!cancelled) router.replace('/dashboard');
+        if (!cancelled) router.replace(await pathAfterSignIn());
         return;
       }
       if (cancelled) return;
-      if (await authenticatorStillRequired()) void beginAuthenticator();
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) return;
+      if (await authenticatorStillRequired()) {
+        void beginAuthenticator();
+        return;
+      }
+      if (!cancelled) router.replace(await pathAfterSignIn());
     })();
     return () => {
       cancelled = true;
@@ -87,12 +96,7 @@ export default function LoginPage() {
       return;
     }
 
-    if (!(await hasVerifiedAuthenticator())) {
-      router.push('/signup');
-      return;
-    }
-
-    router.push('/dashboard');
+    router.push(await pathAfterSignIn());
   };
 
   const verifyCode = async (raw: string) => {
@@ -112,7 +116,7 @@ export default function LoginPage() {
       codeLock.current = false;
       return;
     }
-    router.push('/dashboard');
+    router.push(await pathAfterSignIn());
   };
 
   const handleCode = (e: React.FormEvent) => {
@@ -260,10 +264,11 @@ export default function LoginPage() {
           </div>
 
           <p className="text-center text-xs text-slate-400">
-            By logging in, you agree to our{' '}
+            If this account has not accepted the current{' '}
             <Link href="/agreement" className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline">
               Customer Agreement
-            </Link>.
+            </Link>
+            , sign-in stops until it is accepted.
           </p>
 
           <button

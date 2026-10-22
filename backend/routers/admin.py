@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
+import re
 import time
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -38,6 +41,37 @@ class LimitsBody(BaseModel):
 
 class LoginBody(BaseModel):
     password: str = ""
+
+
+class AdvisorAccessBody(BaseModel):
+    user_id: str
+    enabled: bool
+
+
+class AdvisorPlanBody(BaseModel):
+    user_id: str
+    plan_code: str
+
+
+class AdvisorPromotionBody(BaseModel):
+    user_id: str
+    codes: list[str] = Field(default_factory=list)
+
+
+class AdvisorContactBody(BaseModel):
+    user_id: str
+    full_name: str = ""
+    firm_name: str = ""
+    phone: str = ""
+
+
+class PromotionBody(BaseModel):
+    code: str = ""
+    percent_off: int | None = None
+    amount_off_cents: int | None = None
+    applies_to: list[str] = Field(default_factory=list)
+    starts_on: str = ""
+    ends_on: str = ""
 
 
 def admin_password() -> str:
@@ -137,6 +171,48 @@ def _read_plans() -> list[dict]:
     return rows
 
 
+def _rpc_message(exc: Exception) -> str:
+    text = str(exc)
+    match = re.search(r"""["']message["']\s*:\s*["']([^"']+)["']""", text)
+    if match:
+        return match.group(1)
+    return "Could not update the advisor."
+
+
+def _directory_payload(data: object) -> dict:
+    if isinstance(data, str):
+        data = json.loads(data or "{}")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=503, detail="Could not read advisors.")
+    advisors = data.get("advisors")
+    promotions = data.get("promotions")
+    return {
+        "advisors": advisors if isinstance(advisors, list) else [],
+        "promotions": promotions if isinstance(promotions, list) else [],
+    }
+
+
+def _read_directory() -> tuple[dict, str | None]:
+    try:
+        result = supabase.rpc("admin_directory").execute()
+    except Exception as exc:
+        print(f"[admin] advisor list failed: {exc}")
+        return {"advisors": [], "promotions": []}, "Run supabase/migrations/admin_advisors.sql on this database, then refresh."
+    try:
+        return _directory_payload(result.data), None
+    except HTTPException:
+        return {"advisors": [], "promotions": []}, "Could not read advisors."
+
+
+def _mutate_directory(name: str, params: dict) -> dict:
+    try:
+        result = supabase.rpc(name, params).execute()
+    except Exception as exc:
+        print(f"[admin] {name} failed: {exc}")
+        raise HTTPException(status_code=400, detail=_rpc_message(exc)) from exc
+    return _directory_payload(result.data)
+
+
 def _read_accounts() -> tuple[list, str | None]:
     try:
         result = supabase.rpc("admin_open_accounts").execute()
@@ -205,7 +281,90 @@ def state(request: Request):
         print(f"[admin] plan list failed: {exc}")
         raise HTTPException(status_code=503, detail=_plan_read_error(exc)) from exc
     accounts, accounts_error = _read_accounts()
-    return {"plans": plans, "accounts": accounts, "accounts_error": accounts_error}
+    directory, advisors_error = _read_directory()
+    return {
+        "plans": plans,
+        "accounts": accounts,
+        "accounts_error": accounts_error,
+        "advisors": directory["advisors"],
+        "promotions": directory["promotions"],
+        "advisors_error": advisors_error,
+    }
+
+
+@router.post("/advisors/access")
+def advisor_access(body: AdvisorAccessBody, request: Request):
+    _require_admin(request)
+    _require_database()
+    return _mutate_directory("admin_set_advisor_access", {"target_user": body.user_id, "enabled": body.enabled})
+
+
+@router.post("/advisors/plan")
+def advisor_plan(body: AdvisorPlanBody, request: Request):
+    _require_admin(request)
+    _require_database()
+    if body.plan_code not in PLAN_CODES:
+        raise HTTPException(status_code=422, detail="Unknown plan.")
+    return _mutate_directory("admin_set_advisor_plan", {"target_user": body.user_id, "target_plan": body.plan_code})
+
+
+@router.post("/advisors/promotion")
+def advisor_promotion(body: AdvisorPromotionBody, request: Request):
+    _require_admin(request)
+    _require_database()
+    codes = [code.strip() for code in body.codes if code.strip()]
+    return _mutate_directory(
+        "admin_set_advisor_promotions",
+        {"target_user": body.user_id, "promo_codes": codes},
+    )
+
+
+@router.post("/advisors/contact")
+def advisor_contact(body: AdvisorContactBody, request: Request):
+    _require_admin(request)
+    _require_database()
+    return _mutate_directory(
+        "admin_update_advisor_contact",
+        {
+            "target_user": body.user_id,
+            "next_name": body.full_name,
+            "next_firm": body.firm_name,
+            "next_phone": body.phone,
+        },
+    )
+
+
+@router.post("/promotions")
+def save_promotion(body: PromotionBody, request: Request):
+    _require_admin(request)
+    _require_database()
+    if (body.percent_off is None) == (body.amount_off_cents is None):
+        raise HTTPException(status_code=422, detail="Set a percent off or an amount off.")
+    applies = [code for code in body.applies_to if code in PLAN_CODES]
+    if not applies:
+        raise HTTPException(status_code=422, detail="Choose at least one plan.")
+    try:
+        starts_on = date.fromisoformat(body.starts_on)
+        expires_on = date.fromisoformat(body.ends_on)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Choose a start date and an end date.") from None
+    today = datetime.now(timezone.utc).date()
+    if starts_on < today:
+        raise HTTPException(status_code=422, detail="The start date must be today or later.")
+    if expires_on < starts_on:
+        raise HTTPException(status_code=422, detail="The end date must be on or after the start date.")
+    return _mutate_directory(
+        "admin_upsert_promotion",
+        {
+            "promo_code": body.code,
+            "promo_label": body.code,
+            "percent_off": body.percent_off,
+            "amount_off_cents": body.amount_off_cents,
+            "applies_to": applies,
+            "starts_on": starts_on.isoformat(),
+            "expires_on": expires_on.isoformat(),
+        },
+    )
 
 
 @router.post("/limits")

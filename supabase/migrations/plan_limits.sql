@@ -238,11 +238,8 @@ DECLARE
   price_cents INTEGER;
   plan_row public.plans%ROWTYPE;
   subscription_row public.subscriptions%ROWTYPE;
-  promo_code TEXT;
-  promo_label TEXT;
-  promo_percent INTEGER;
-  promo_amount INTEGER;
-  promo_ends TIMESTAMP WITH TIME ZONE;
+  applied jsonb;
+  promo record;
 BEGIN
   target_firm := public.advisor_firm_id(false);
   IF target_firm IS NULL THEN
@@ -274,26 +271,41 @@ BEGIN
       + GREATEST(seat_count - 1, 0) * COALESCE(plan_row.additional_seat_cents, 0);
   END IF;
 
-  SELECT promotion.code, promotion.label, promotion.percent_off, promotion.amount_off_cents, applied.ends_at
-  INTO promo_code, promo_label, promo_percent, promo_amount, promo_ends
-  FROM public.subscription_promotions AS applied
-  JOIN public.promotions AS promotion ON promotion.code = applied.promotion_code
-  WHERE applied.subscription_id = subscription_row.id
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'code', promotion.code,
+    'label', promotion.label,
+    'percent_off', promotion.percent_off,
+    'amount_off_cents', promotion.amount_off_cents,
+    'ends_at', COALESCE(applied_row.ends_at, promotion.ends_at)
+  ) ORDER BY promotion.code), '[]'::jsonb)
+  INTO applied
+  FROM public.subscription_promotions AS applied_row
+  JOIN public.promotions AS promotion ON promotion.code = applied_row.promotion_code
+  WHERE applied_row.subscription_id = subscription_row.id
     AND promotion.active
     AND subscription_row.plan_code = ANY (promotion.applies_to)
     AND (promotion.starts_at IS NULL OR promotion.starts_at <= timezone('utc'::text, now()))
     AND (promotion.ends_at IS NULL OR promotion.ends_at > timezone('utc'::text, now()))
-    AND (applied.ends_at IS NULL OR applied.ends_at > timezone('utc'::text, now()))
-  ORDER BY applied.applied_at DESC
-  LIMIT 1;
+    AND (applied_row.ends_at IS NULL OR applied_row.ends_at > timezone('utc'::text, now()));
 
   price_cents := list_cents;
-  IF list_cents IS NOT NULL AND promo_code IS NOT NULL THEN
-    IF promo_percent IS NOT NULL THEN
-      price_cents := (list_cents * (100 - promo_percent)) / 100;
-    ELSE
-      price_cents := GREATEST(list_cents - promo_amount, 0);
-    END IF;
+  IF list_cents IS NOT NULL THEN
+    FOR promo IN
+      SELECT item
+      FROM jsonb_array_elements(applied) AS item
+      WHERE item->>'percent_off' IS NOT NULL
+      ORDER BY item->>'code'
+    LOOP
+      price_cents := (price_cents * (100 - (promo.item->>'percent_off')::integer)) / 100;
+    END LOOP;
+    FOR promo IN
+      SELECT item
+      FROM jsonb_array_elements(applied) AS item
+      WHERE item->>'amount_off_cents' IS NOT NULL
+      ORDER BY item->>'code'
+    LOOP
+      price_cents := GREATEST(price_cents - (promo.item->>'amount_off_cents')::integer, 0);
+    END LOOP;
   END IF;
 
   RETURN jsonb_build_object(
@@ -307,15 +319,10 @@ BEGIN
     'ticker_limit', plan_row.ticker_limit,
     'can_manage', owns,
     'promotion', CASE
-      WHEN promo_code IS NULL THEN NULL
-      ELSE jsonb_build_object(
-        'code', promo_code,
-        'label', promo_label,
-        'percent_off', promo_percent,
-        'amount_off_cents', promo_amount,
-        'ends_at', promo_ends
-      )
-    END
+      WHEN jsonb_array_length(applied) = 0 THEN NULL
+      ELSE applied->0
+    END,
+    'promotions', applied
   );
 END;
 $$;
