@@ -49,7 +49,7 @@ export default function AssetAllocationChart({
     : `${selectedCount} of ${availableCount} portfolios`;
   const summary = selectedCount === 0
     ? 'Select portfolios in the table to pool their allocation.'
-    : `Weighted share of ${formatMoney(totalValue)} across ${scope}.`;
+    : `Dollar-weighted share of ${formatMoney(totalValue)} across ${scope}.`;
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
