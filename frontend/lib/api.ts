@@ -21,7 +21,8 @@ export type Portfolio = {
   id: string;
   name: string;
   description?: string;
-  internal_account_number?: string | null;
+  account_number?: string | null;
+  sub_account_number?: string | null;
   tax_status?: string | null;
   portfolio_value: number;
   asset_allocation: AssetAllocation;
@@ -59,6 +60,45 @@ export async function apiFetch(path: string, init: RequestInit = {}, json = true
   const headers = await authHeaders(init.headers, json);
   const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
   return response;
+}
+
+export type PooledAllocation = {
+  allocation: AssetAllocation;
+  dollars: AssetAllocation;
+  totalValue: number;
+  count: number;
+};
+
+/** Dollar-weight each portfolio, then express every asset class as a share of the combined book. */
+export function poolAssetAllocation(
+  portfolios: Array<{ portfolio_value: number; asset_allocation?: AssetAllocation | null }>
+): PooledAllocation {
+  const dollars: AssetAllocation = { equities: 0, bonds: 0, realAssets: 0, cash: 0 };
+  let totalValue = 0;
+
+  for (const portfolio of portfolios) {
+    const value = Math.max(0, Number(portfolio.portfolio_value) || 0);
+    totalValue += value;
+    const allocation = portfolio.asset_allocation;
+    if (!allocation || value === 0) continue;
+    dollars.equities += (value * Number(allocation.equities || 0)) / 100;
+    dollars.bonds += (value * Number(allocation.bonds || 0)) / 100;
+    dollars.realAssets += (value * Number(allocation.realAssets || 0)) / 100;
+    dollars.cash += (value * Number(allocation.cash || 0)) / 100;
+  }
+
+  const share = (amount: number) => (totalValue > 0 ? (amount / totalValue) * 100 : 0);
+  return {
+    allocation: {
+      equities: share(dollars.equities),
+      bonds: share(dollars.bonds),
+      realAssets: share(dollars.realAssets),
+      cash: share(dollars.cash),
+    },
+    dollars,
+    totalValue,
+    count: portfolios.length,
+  };
 }
 
 export function allocationToEngineWeights(allocation: AssetAllocation) {

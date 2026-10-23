@@ -373,9 +373,9 @@ function RiskModelsPage() {
   const tickerRows = [...holdings].sort(
     (left, right) => Number(right.market_value || 0) - Number(left.market_value || 0),
   );
-  const selectedAccount = portfolios.find((item) => item.id === portfolioId)?.internal_account_number?.trim() || '';
+  const selectedAccount = portfolios.find((item) => item.id === portfolioId)?.account_number?.trim() || '';
   const accountPortfolios = selectedAccount
-    ? portfolios.filter((item) => item.internal_account_number?.trim() === selectedAccount)
+    ? portfolios.filter((item) => item.account_number?.trim() === selectedAccount)
     : portfolios;
   const yieldError = shock.yieldBps < -1000 || shock.yieldBps > 1000;
   const equityError = !shock.useWorstEquityWindow && (shock.equityPct < -80 || shock.equityPct > 100);
@@ -409,7 +409,9 @@ function RiskModelsPage() {
             <option value="">Select a portfolio</option>
             {accountPortfolios.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.name}
+                {item.sub_account_number?.trim()
+                  ? `${item.name} · ${item.sub_account_number.trim()}`
+                  : item.name}
               </option>
             ))}
           </select>

@@ -100,7 +100,8 @@ def apply_plan_change(change: dict) -> bool:
         print(f"[stripe] no subscription row for firm {firm_id}")
         return False
     fields = {
-        "plan_code": change["plan"],
+        # Phase 1 keeps every firm on Pro+ even when Stripe reports another plan.
+        "plan_code": "pro_plus",
         "status": change["status"],
         "ends_at": None if change["status"] == "active" else datetime.now(timezone.utc).isoformat(),
     }

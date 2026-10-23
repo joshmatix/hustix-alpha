@@ -70,7 +70,10 @@ export default function VersionAlert({ className = '' }: { className?: string })
       <span className="sr-only">A new version is available.</span>
       <button
         type="button"
-        onClick={() => window.location.reload()}
+        onClick={() => {
+          dismiss();
+          window.location.reload();
+        }}
         className="rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-indigo-500"
       >
         New Version

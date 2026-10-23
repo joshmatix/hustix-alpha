@@ -9,12 +9,18 @@ import Button from '@/components/ui/Button';
 import { PortfolioListSkeleton, SkeletonFade } from '@/components/ui/Skeleton';
 import { apiFetch, type Holding, type Portfolio } from '@/lib/api';
 import { portfolioLimitSentence } from '@/lib/planLimits';
-import { TAX_STATUSES, taxStatusLabel } from '@/lib/taxStatus';
 import { supabase } from '@/lib/supabaseClient';
 import { createCheckoutSession } from '@/lib/stripeCheckout';
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const PORTFOLIO_VIEW_KEY = 'hustix-portfolio-view';
+
+function portfolioAccountLine(portfolio: Portfolio) {
+  return [
+    portfolio.account_number?.trim() ? `Client Master ID ${portfolio.account_number.trim()}` : '',
+    portfolio.sub_account_number?.trim() ? `Sub-Account ${portfolio.sub_account_number.trim()}` : '',
+  ].filter(Boolean).join(' · ');
+}
 
 type PortfolioView = 'cards' | 'list';
 
@@ -115,11 +121,8 @@ export default function PortfoliosPage() {
   } | null>(null);
   const [portfolioView, setPortfolioView] = useState<PortfolioView>('cards');
   const [accountFilter, setAccountFilter] = useState('');
-  const [taxFilter, setTaxFilter] = useState<string[]>([]);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [taxMenuOpen, setTaxMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
-  const taxMenuRef = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState<{
     message: string;
     detail: string;
@@ -162,7 +165,7 @@ export default function PortfoliosPage() {
   const accountIds = Array.from(
     new Set(
       portfolios
-        .map((portfolio) => (portfolio.internal_account_number || '').trim())
+        .map((portfolio) => (portfolio.account_number || '').trim())
         .filter(Boolean)
     )
   ).sort((left, right) => left.localeCompare(right));
@@ -170,23 +173,19 @@ export default function PortfoliosPage() {
   useEffect(() => {
     if (!accountFilter) return;
     const stillThere = portfolios.some(
-      (portfolio) => (portfolio.internal_account_number || '').trim() === accountFilter
+      (portfolio) => (portfolio.account_number || '').trim() === accountFilter
     );
     if (!stillThere) setAccountFilter('');
   }, [portfolios, accountFilter]);
 
   useEffect(() => {
-    if (!accountMenuOpen && !taxMenuOpen) return;
+    if (!accountMenuOpen) return;
     const onPointer = (event: MouseEvent) => {
       const target = event.target as Node;
       if (!accountMenuRef.current?.contains(target)) setAccountMenuOpen(false);
-      if (!taxMenuRef.current?.contains(target)) setTaxMenuOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setAccountMenuOpen(false);
-        setTaxMenuOpen(false);
-      }
+      if (event.key === 'Escape') setAccountMenuOpen(false);
     };
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
@@ -194,35 +193,18 @@ export default function PortfoliosPage() {
       document.removeEventListener('mousedown', onPointer);
       document.removeEventListener('keydown', onKey);
     };
-  }, [accountMenuOpen, taxMenuOpen]);
+  }, [accountMenuOpen]);
 
   const chooseAccount = (accountId: string) => {
     setAccountFilter(accountId);
     setAccountMenuOpen(false);
   };
 
-  const chooseTaxStatus = (status: string) => {
-    setTaxFilter((current) => {
-      if (!status) return [];
-      return current.includes(status)
-        ? current.filter((item) => item !== status)
-        : [...current, status];
-    });
-  };
-
   const visiblePortfolios = portfolios.filter((portfolio) => {
-    if (accountFilter && (portfolio.internal_account_number || '').trim() !== accountFilter) return false;
-    if (taxFilter.length && !taxFilter.includes(portfolio.tax_status || '')) return false;
+    if (accountFilter && (portfolio.account_number || '').trim() !== accountFilter) return false;
     return true;
   });
-  const taxFilterLabel = taxFilter.length
-    ? TAX_STATUSES.filter((status) => taxFilter.includes(status.value)).map((status) => status.label).join(', ')
-    : '';
-  const emptyFilterMessage = accountFilter && taxFilter.length
-    ? 'No portfolios match that client and tax status.'
-    : taxFilter.length
-      ? 'No portfolios match that tax status.'
-      : 'No portfolios match that client.';
+  const emptyFilterMessage = 'No portfolios match that client.';
 
   if (selectedId && !visiblePortfolios.some((portfolio) => portfolio.id === selectedId)) {
     setSelectedId(null);
@@ -273,8 +255,8 @@ export default function PortfoliosPage() {
   const handleCreatePortfolio = async (data: {
     name: string;
     description: string;
-    internalAccountNumber: string;
-    taxStatus: string;
+    accountNumber: string;
+    subAccountNumber: string;
     file: File | null;
   }) => {
     const res = await apiFetch('/api/portfolios/create', {
@@ -282,8 +264,8 @@ export default function PortfoliosPage() {
       body: JSON.stringify({
         name: data.name,
         description: data.description,
-        internal_account_number: data.internalAccountNumber,
-        tax_status: data.taxStatus,
+        account_number: data.accountNumber,
+        sub_account_number: data.subAccountNumber,
         account_alias: data.name,
         target_risk_profile: 'Balanced',
         portfolio_value: 0,
@@ -514,10 +496,7 @@ export default function PortfoliosPage() {
             type="button"
             aria-haspopup="listbox"
             aria-expanded={accountMenuOpen}
-            onClick={() => {
-              setTaxMenuOpen(false);
-              setAccountMenuOpen((open) => !open);
-            }}
+            onClick={() => setAccountMenuOpen((open) => !open)}
             className="flex w-full items-center justify-between rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-left text-sm focus:border-indigo-500 focus:outline-none"
           >
             <span className={accountFilter ? 'text-slate-100' : 'text-slate-400'}>
@@ -528,7 +507,7 @@ export default function PortfoliosPage() {
           {accountMenuOpen && (
             <ul
               role="listbox"
-              aria-label="Internal account numbers"
+              aria-label="Client Master IDs"
               className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-md border border-slate-700 bg-slate-950 py-1 shadow-lg"
             >
               <li>
@@ -545,7 +524,7 @@ export default function PortfoliosPage() {
                 </button>
               </li>
               {accountIds.length === 0 ? (
-                <li className="px-3 py-2 text-sm text-slate-500">No internal account numbers yet.</li>
+                <li className="px-3 py-2 text-sm text-slate-500">No Client Master IDs yet.</li>
               ) : (
                 accountIds.map((accountId) => (
                   <li key={accountId}>
@@ -568,67 +547,6 @@ export default function PortfoliosPage() {
             </ul>
           )}
         </div>
-        <div ref={taxMenuRef} className="relative w-full max-w-xs">
-          <button
-            type="button"
-            aria-haspopup="listbox"
-            aria-expanded={taxMenuOpen}
-            onClick={() => {
-              setAccountMenuOpen(false);
-              setTaxMenuOpen((open) => !open);
-            }}
-            className="flex w-full items-center justify-between rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-left text-sm focus:border-indigo-500 focus:outline-none"
-          >
-            <span className={`truncate ${taxFilter.length ? 'text-slate-100' : 'text-slate-400'}`}>
-              {taxFilterLabel || 'All tax statuses'}
-            </span>
-            <span aria-hidden="true" className="text-slate-500">▾</span>
-          </button>
-          {taxMenuOpen && (
-            <ul
-              role="listbox"
-              aria-multiselectable="true"
-              aria-label="Tax statuses"
-              className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-md border border-slate-700 bg-slate-950 py-1 shadow-lg"
-            >
-              <li role="option" aria-selected={taxFilter.length === 0}>
-                <label
-                  className={`flex cursor-pointer items-center gap-2 px-3 py-2 text-sm ${
-                    taxFilter.length ? 'text-slate-300 hover:bg-slate-800' : 'bg-slate-800 text-white'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={taxFilter.length === 0}
-                    onChange={() => chooseTaxStatus('')}
-                    className="h-4 w-4 accent-indigo-500"
-                  />
-                  All tax statuses
-                </label>
-              </li>
-              {TAX_STATUSES.map((status) => {
-                const checked = taxFilter.includes(status.value);
-                return (
-                  <li key={status.value} role="option" aria-selected={checked}>
-                    <label
-                      className={`flex cursor-pointer items-center gap-2 px-3 py-2 text-sm ${
-                        checked ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => chooseTaxStatus(status.value)}
-                        className="h-4 w-4 accent-indigo-500"
-                      />
-                      {status.label}
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
         </div>
         {visiblePortfolios.length === 0 ? (
           <p className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-8 text-center text-sm text-slate-400">
@@ -642,15 +560,8 @@ export default function PortfoliosPage() {
               className="relative rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-sm hover:z-20 focus-within:z-20"
             >
               <h3 className="text-lg font-semibold text-white">{portfolio.name}</h3>
-              {(portfolio.internal_account_number || taxStatusLabel(portfolio.tax_status)) && (
-                <p className="mt-1 text-xs text-slate-500">
-                  {[
-                    portfolio.internal_account_number
-                      ? `Internal account ${portfolio.internal_account_number}`
-                      : '',
-                    taxStatusLabel(portfolio.tax_status),
-                  ].filter(Boolean).join(' · ')}
-                </p>
+              {portfolioAccountLine(portfolio) && (
+                <p className="mt-1 text-xs text-slate-500">{portfolioAccountLine(portfolio)}</p>
               )}
               <p className="mt-2 text-sm text-slate-400">
                 {portfolio.description || 'No description provided.'}
@@ -659,8 +570,13 @@ export default function PortfoliosPage() {
                 ${Number(portfolio.portfolio_value || 0).toLocaleString()}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <Button size="sm" variant="secondary" onClick={() => loadHoldings(portfolio.id)}>
-                  {selectedId === portfolio.id ? 'Holdings' : 'View holdings'}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  aria-pressed={selectedId === portfolio.id}
+                  onClick={() => loadHoldings(portfolio.id)}
+                >
+                  View holdings
                 </Button>
                 <Button
                   size="sm"
@@ -696,15 +612,8 @@ export default function PortfoliosPage() {
             <div key={portfolio.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold text-white">{portfolio.name}</p>
-                {(portfolio.internal_account_number || taxStatusLabel(portfolio.tax_status)) && (
-                  <p className="truncate text-xs text-slate-500">
-                    {[
-                      portfolio.internal_account_number
-                        ? `Internal account ${portfolio.internal_account_number}`
-                        : '',
-                      taxStatusLabel(portfolio.tax_status),
-                    ].filter(Boolean).join(' · ')}
-                  </p>
+                {portfolioAccountLine(portfolio) && (
+                  <p className="truncate text-xs text-slate-500">{portfolioAccountLine(portfolio)}</p>
                 )}
                 <p className="truncate text-xs text-slate-400">
                   {portfolio.description || 'No description provided.'}
@@ -714,8 +623,13 @@ export default function PortfoliosPage() {
                 ${Number(portfolio.portfolio_value || 0).toLocaleString()}
               </p>
               <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" variant="secondary" onClick={() => loadHoldings(portfolio.id)}>
-                  {selectedId === portfolio.id ? 'Holdings' : 'View holdings'}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  aria-pressed={selectedId === portfolio.id}
+                  onClick={() => loadHoldings(portfolio.id)}
+                >
+                  View holdings
                 </Button>
                 <Button
                   size="sm"

@@ -267,7 +267,6 @@ function AdvisorSection({
   const [name, setName] = useState('');
   const [firm, setFirm] = useState('');
   const [phone, setPhone] = useState('');
-  const [plan, setPlan] = useState('free');
   const [chosen, setChosen] = useState<string[]>([]);
   const [message, setMessage] = useState('');
   const [ok, setOk] = useState(false);
@@ -292,7 +291,6 @@ function AdvisorSection({
     setName(advisor.full_name);
     setFirm(advisor.firm_name);
     setPhone(advisor.phone);
-    setPlan(advisor.plan_code || 'free');
     setMessage('');
   }
 
@@ -406,20 +404,11 @@ function AdvisorSection({
           <div className="flex flex-wrap items-end gap-3">
             <label className="block text-xs text-slate-400">
               Subscription
-              <select value={plan} onChange={(event) => setPlan(event.target.value)} className="mt-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
-                {PLAN_CODES.map((code) => (
-                  <option key={code} value={code}>{state.plans.find((item) => item.code === code)?.name || code}</option>
-                ))}
+              <select value="pro_plus" disabled className="mt-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:opacity-70">
+                <option value="pro_plus">Pro+</option>
               </select>
             </label>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void run('/api/admin/advisors/plan', { user_id: selected.id, plan_code: plan })}
-              className="rounded-lg border border-slate-600 px-3 py-2 text-sm disabled:opacity-60"
-            >
-              Save plan
-            </button>
+            <p className="pb-2 text-xs text-slate-500">During this phase every account is Pro+.</p>
             <button
               type="button"
               disabled={busy}

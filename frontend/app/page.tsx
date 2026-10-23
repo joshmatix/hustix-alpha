@@ -131,7 +131,7 @@ export default function HomePage() {
           Get Started Free
         </Link>
         <p className="text-sm text-slate-400">
-          Create your advisor profile, build up to 3 custom ticker-based portfolios, and run unlimited baseline recession stress-tests. No credit card required.
+          Create your advisor profile. During this phase every account is Pro+, with no portfolio cap, and you can run unlimited baseline recession stress-tests. No credit card required.
         </p>
       </section>
 

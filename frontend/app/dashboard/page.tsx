@@ -4,16 +4,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PortfolioTable from '@/components/dashboard/PortfolioTable';
 import AssetAllocationChart from '@/components/dashboard/AssetAllocationChart';
+import ClientAccountSelect, {
+  clientAccountKey,
+  clientAccountLabel,
+} from '@/components/dashboard/ClientAccountSelect';
 import RiskGauge from '@/components/dashboard/RiskGauge';
 import { DashboardSkeleton, SkeletonFade } from '@/components/ui/Skeleton';
-import { apiFetch, type Portfolio } from '@/lib/api';
+import { apiFetch, poolAssetAllocation, type Portfolio } from '@/lib/api';
 
 const emptyAllocation = { equities: 0, bonds: 0, realAssets: 0, cash: 0 };
 
 export default function DashboardPage() {
   const router = useRouter();
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [excludedAccounts, setExcludedAccounts] = useState<Set<string>>(new Set());
+  const [excludedPortfolios, setExcludedPortfolios] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -27,7 +32,6 @@ export default function DashboardPage() {
         }
         const data: Portfolio[] = await res.json();
         setPortfolios(data);
-        setSelectedId(data[0]?.id ?? null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load dashboard data.');
       } finally {
@@ -37,18 +41,83 @@ export default function DashboardPage() {
     load();
   }, []);
 
-  const selected = useMemo(
-    () => portfolios.find((p) => p.id === selectedId) || portfolios[0],
-    [portfolios, selectedId]
+  const accounts = useMemo(() => {
+    const ids = new Set(portfolios.map((portfolio) => clientAccountKey(portfolio.account_number)));
+    return Array.from(ids)
+      .sort((left, right) => {
+        if (!left) return 1;
+        if (!right) return -1;
+        return left.localeCompare(right);
+      })
+      .map((id) => ({ id, label: clientAccountLabel(id) }));
+  }, [portfolios]);
+
+  const visiblePortfolios = useMemo(
+    () => portfolios.filter((portfolio) => !excludedAccounts.has(clientAccountKey(portfolio.account_number))),
+    [portfolios, excludedAccounts]
   );
 
-  const tableRows = portfolios.map((p) => ({
-    id: p.id,
-    client_name: p.name,
-    portfolio_value: Number(p.portfolio_value || 0),
-    asset_allocation: p.asset_allocation || emptyAllocation,
-    created_at: p.created_at,
+  const pooledPortfolios = useMemo(
+    () => visiblePortfolios.filter((portfolio) => !excludedPortfolios.has(portfolio.id)),
+    [visiblePortfolios, excludedPortfolios]
+  );
+
+  const pooled = useMemo(
+    () => poolAssetAllocation(pooledPortfolios),
+    [pooledPortfolios]
+  );
+
+  const tableRows = visiblePortfolios.map((portfolio) => ({
+    id: portfolio.id,
+    client_name: portfolio.name,
+    account_number: portfolio.account_number,
+    sub_account_number: portfolio.sub_account_number,
+    portfolio_value: Number(portfolio.portfolio_value || 0),
+    asset_allocation: portfolio.asset_allocation || emptyAllocation,
+    created_at: portfolio.created_at,
+    selected: !excludedPortfolios.has(portfolio.id),
   }));
+
+  const toggleAccount = (accountId: string) => {
+    setExcludedAccounts((current) => {
+      const next = new Set(current);
+      if (next.has(accountId)) next.delete(accountId);
+      else next.add(accountId);
+      return next;
+    });
+  };
+
+  const toggleAllAccounts = () => {
+    setExcludedAccounts((current) => {
+      const allSelected = accounts.length === 0 || accounts.every((account) => !current.has(account.id));
+      if (allSelected) return new Set(accounts.map((account) => account.id));
+      return new Set();
+    });
+  };
+
+  const togglePortfolio = (portfolioId: string) => {
+    setExcludedPortfolios((current) => {
+      const next = new Set(current);
+      if (next.has(portfolioId)) next.delete(portfolioId);
+      else next.add(portfolioId);
+      return next;
+    });
+  };
+
+  const toggleVisiblePortfolios = (selected: boolean) => {
+    setExcludedPortfolios((current) => {
+      const next = new Set(current);
+      for (const portfolio of visiblePortfolios) {
+        if (selected) next.delete(portfolio.id);
+        else next.add(portfolio.id);
+      }
+      return next;
+    });
+  };
+
+  const emptyMessage = portfolios.length === 0
+    ? 'Add a client portfolio to begin stress testing.'
+    : 'No portfolios match the selected clients.';
 
   return (
     <div className="space-y-6">
@@ -66,23 +135,46 @@ export default function DashboardPage() {
       )}
 
       <SkeletonFade loading={loading} skeleton={<DashboardSkeleton />}>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <PortfolioTable
-              portfolios={tableRows}
-              onSelectPortfolio={(row) => {
-                setSelectedId(row.id);
-                router.push(`/dashboard/risk-models?portfolio=${row.id}`);
-              }}
+        <div className="space-y-4">
+          <div className="max-w-xs">
+            <label className="mb-1 block text-xs font-medium text-slate-400" htmlFor="client-filter">
+              Client
+            </label>
+            <ClientAccountSelect
+              id="client-filter"
+              accounts={accounts}
+              excludedIds={excludedAccounts}
+              onToggle={toggleAccount}
+              onToggleAll={toggleAllAccounts}
             />
           </div>
-          <div className="space-y-4">
-            <RiskGauge
-              score={selected ? Math.min(100, Math.round(Number(selected.portfolio_value) / 25000)) : 0}
-              label="Portfolio Concentration Proxy"
-              projectedLoss={selected ? Math.round(Number(selected.portfolio_value) * 0.08) : 0}
-            />
-            <AssetAllocationChart allocation={selected?.asset_allocation || emptyAllocation} />
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <PortfolioTable
+                portfolios={tableRows}
+                emptyMessage={emptyMessage}
+                onTogglePortfolio={togglePortfolio}
+                onToggleAll={toggleVisiblePortfolios}
+                onSelectPortfolio={(row) => {
+                  router.push(`/dashboard/risk-models?portfolio=${row.id}`);
+                }}
+              />
+            </div>
+            <div className="space-y-4">
+              <RiskGauge
+                score={pooled.totalValue > 0 ? Math.min(100, Math.round(pooled.totalValue / 25000)) : 0}
+                label="Portfolio Concentration Proxy"
+                projectedLoss={pooled.totalValue > 0 ? Math.round(pooled.totalValue * 0.08) : 0}
+              />
+              <AssetAllocationChart
+                allocation={pooled.allocation}
+                dollars={pooled.dollars}
+                totalValue={pooled.totalValue}
+                selectedCount={pooled.count}
+                availableCount={portfolios.length}
+              />
+            </div>
           </div>
         </div>
       </SkeletonFade>

@@ -5,7 +5,9 @@ export const revalidate = 0;
 
 /** Live deployment id. Kept off /api because that prefix is routed to the Python service. */
 export function GET() {
-  const id = process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA || 'local-preview';
+  // Same value inlined into the client bundle by next.config. A different
+  // fallback here makes the alert survive a reload.
+  const id = process.env.NEXT_PUBLIC_DEPLOYMENT_ID || 'local';
 
   return NextResponse.json(
     { id },

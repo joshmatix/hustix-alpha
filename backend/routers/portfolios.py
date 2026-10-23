@@ -16,7 +16,8 @@ class PortfolioListResponse(BaseModel):
     id: UUID
     name: str
     description: Optional[str] = None
-    internal_account_number: Optional[str] = None
+    account_number: Optional[str] = None
+    sub_account_number: Optional[str] = None
     tax_status: Optional[str] = None
     portfolio_value: float = 0
     asset_allocation: Dict[str, float] = Field(
@@ -29,7 +30,8 @@ class PortfolioListResponse(BaseModel):
 class PortfolioCreateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    internal_account_number: Optional[str] = None
+    account_number: Optional[str] = None
+    sub_account_number: Optional[str] = None
     tax_status: Optional[str] = None
     account_alias: Optional[str] = None
     target_risk_profile: Optional[str] = "Balanced"
@@ -73,10 +75,19 @@ class HoldingListItem(BaseModel):
     beta: float = 1
 
 
+def _required_account_code(value: Optional[str], label: str) -> str:
+    text = (value or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail=f"{label} is required.")
+    if len(text) > 64:
+        raise HTTPException(status_code=422, detail=f"{label} must be 64 characters or fewer.")
+    return text
+
+
 DEFAULT_ALLOCATION = {"equities": 60, "bonds": 25, "realAssets": 10, "cash": 5}
 TAX_STATUSES = {"taxable", "tax_deferred", "tax_exempt"}
 PORTFOLIO_COLUMNS = (
-    "id,name,description,internal_account_number,tax_status,account_alias,target_risk_profile,"
+    "id,name,description,account_number,sub_account_number,tax_status,account_alias,target_risk_profile,"
     "portfolio_value,asset_allocation,created_at,firm_id,created_by"
 )
 
@@ -128,18 +139,8 @@ def _parsed_portfolio_message(ticker_count: int, value: float) -> str:
 
 
 def _plan_code(db, firm_id: str | None) -> str:
-    if not firm_id:
-        return "free"
-    result = (
-        db.table("subscriptions")
-        .select("plan_code")
-        .eq("firm_id", firm_id)
-        .limit(1)
-        .execute()
-    )
-    if not result.data:
-        return "free"
-    return result.data[0].get("plan_code") or "free"
+    # Phase 1 grants every firm Pro+, including firms with no subscription row yet.
+    return "pro_plus"
 
 
 def _plan_cap(db, firm_id: str | None) -> dict:
@@ -259,7 +260,8 @@ def _to_list_item(item: dict) -> dict:
         "id": item.get("id") or item.get("portfolio_id"),
         "name": name,
         "description": item.get("description") or item.get("target_risk_profile") or "",
-        "internal_account_number": (item.get("internal_account_number") or "").strip() or None,
+        "account_number": (item.get("account_number") or "").strip() or None,
+        "sub_account_number": (item.get("sub_account_number") or "").strip() or None,
         "tax_status": item.get("tax_status") if item.get("tax_status") in TAX_STATUSES else None,
         "portfolio_value": float(item.get("portfolio_value") or item.get("total_value") or 0),
         "asset_allocation": _normalize_allocation(item.get("asset_allocation") or item.get("weights")),
@@ -388,14 +390,11 @@ async def create_portfolio(
     name = (portfolio_data.name or portfolio_data.account_alias or "").strip()
     if not name:
         raise HTTPException(status_code=422, detail="Portfolio name is required.")
-    internal_account_number = (portfolio_data.internal_account_number or "").strip()
-    if not internal_account_number:
-        raise HTTPException(status_code=422, detail="Internal account number is required.")
-    if len(internal_account_number) > 64:
-        raise HTTPException(status_code=422, detail="Internal account number must be 64 characters or fewer.")
-    tax_status = (portfolio_data.tax_status or "").strip()
-    if tax_status not in TAX_STATUSES:
-        raise HTTPException(status_code=422, detail="Tax status must be taxable, tax-deferred, or tax-exempt.")
+    account_number = _required_account_code(portfolio_data.account_number, "Client Master ID")
+    sub_account_number = _required_account_code(portfolio_data.sub_account_number, "Sub-Account")
+    tax_status = (portfolio_data.tax_status or "").strip() or None
+    if tax_status is not None and tax_status not in TAX_STATUSES:
+        tax_status = None
     firm_id = _firm_for_new_portfolio(firm_ids, portfolio_data.firm_id)
     portfolio_count = len(_assigned_portfolio_ids(user_id, db))
     blocked = _limit_block(db, firm_id, "portfolios", portfolio_count + 1)
@@ -407,7 +406,8 @@ async def create_portfolio(
         "created_by": user_id,
         "name": name,
         "description": portfolio_data.description or "",
-        "internal_account_number": internal_account_number,
+        "account_number": account_number,
+        "sub_account_number": sub_account_number,
         "tax_status": tax_status,
         "account_alias": portfolio_data.account_alias or name,
         "target_risk_profile": portfolio_data.target_risk_profile or "Balanced",

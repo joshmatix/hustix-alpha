@@ -82,7 +82,7 @@ export default function HelpPage() {
             Download the sample CSV
           </a>
           . The duration and beta values in that file are illustrations, not live figures. The
-          sample has five holdings, which fits the Free plan. Before the equity close replaces
+          sample has five holdings. Before the equity close replaces
           the VTI price, it is about 30% equities, 55% bonds, and 15% real assets.
         </p>
 

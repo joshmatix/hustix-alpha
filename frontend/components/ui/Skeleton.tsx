@@ -60,7 +60,12 @@ export function SkeletonFade({
 
 export function DashboardSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3" aria-busy="true" aria-label="Loading portfolios">
+    <div className="space-y-4" aria-busy="true" aria-label="Loading portfolios">
+      <div className="max-w-xs">
+        <Bar className="h-3 w-12" />
+        <Bar className="mt-1 h-10 w-full rounded-md" />
+      </div>
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900 lg:col-span-2">
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
           <Bar className="h-6 w-56" />
@@ -69,6 +74,7 @@ export function DashboardSkeleton() {
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-800 bg-slate-950/50 text-xs">
             <tr>
+              <th className="w-12 px-4 py-3.5"><Bar className="h-4 w-4" /></th>
               <th className="px-6 py-3.5"><Bar className="h-4 w-20" /></th>
               <th className="px-6 py-3.5"><Bar className="h-4 w-24" /></th>
               <th className="px-6 py-3.5"><Bar className="h-4 w-28" /></th>
@@ -78,6 +84,7 @@ export function DashboardSkeleton() {
           <tbody className="divide-y divide-slate-800/60">
             {Array.from({ length: 3 }, (_, index) => (
               <tr key={index}>
+                <td className="px-4 py-4"><Bar className="h-4 w-4" /></td>
                 <td className="px-6 py-4"><Bar className="h-5 w-28" /></td>
                 <td className="px-6 py-4"><Bar className="h-5 w-24" /></td>
                 <td className="px-6 py-4"><Bar className="h-4 w-36" /></td>
@@ -116,6 +123,7 @@ export function DashboardSkeleton() {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }

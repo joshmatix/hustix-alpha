@@ -8,7 +8,6 @@ import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { portfolioLimitSentence } from '@/lib/planLimits';
 import { createCheckoutSession } from '@/lib/stripeCheckout';
-import AuthenticatorCard from '@/components/auth/AuthenticatorCard';
 
 type Status = { text: string; type: 'success' | 'error' } | null;
 type PlanCode = 'free' | 'pro' | 'pro_plus' | 'enterprise';
@@ -22,6 +21,7 @@ type FirmQuote = {
   portfolio_limit: number | null;
   ticker_limit: number | null;
   can_manage: boolean;
+  phase?: number;
   promotion: FirmPromotion | null;
   promotions?: FirmPromotion[];
 };
@@ -320,7 +320,10 @@ export default function ProfilePage() {
                     : ''}
                 </p>
               ))}
-              {quote?.can_manage && (
+              {quote?.phase === 1 && (
+                <p className="mt-3 text-xs text-slate-400">During this phase every account is Pro+.</p>
+              )}
+              {quote?.can_manage && quote.phase !== 1 && (
                 <div className="mt-3 space-y-3">
                   <div className="flex flex-wrap items-center gap-3">
                     {quote.plan_code === 'free' && (
@@ -440,8 +443,6 @@ export default function ProfilePage() {
           </div>
         </form>
       </Card>
-
-      <AuthenticatorCard />
 
       <Card
         title="Report header"

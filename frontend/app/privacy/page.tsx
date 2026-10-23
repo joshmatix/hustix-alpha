@@ -18,7 +18,7 @@ const sections = [
     paragraphs: [
       'Account information. When you register, we collect your email address, a password, and your firm name. Passwords are stored by our authentication provider in a form that we cannot read. Each time you accept a Customer Agreement, we store the version, the time, and the IP address of that acceptance.',
       'Security information. The service requires an authenticator app. We store the enrollment needed to verify sign-in codes. We do not receive the secret stored in your authenticator app.',
-      'Portfolio information. You may enter client names, portfolio labels, tickers, allocations, and an internal account number so the service can run stress tests and build reports. You decide what to upload. The RIA or advisor retains ownership of all uploaded portfolio data and client identifier data.',
+      'Portfolio information. You may enter client names, portfolio labels, tickers, allocations, a Client Master ID, and a Sub-Account so the service can run stress tests and build reports. You decide what to upload. The RIA or advisor retains ownership of all uploaded portfolio data and client identifier data.',
       'Government identifiers. Do not enter sensitive government identifiers in any free-text field. That includes Social Security numbers, tax identification numbers, and passport numbers.',
       'Questions. The public contact form collects the name, email address, and message you submit.',
       'Billing. If you choose a paid plan, payment is processed by Stripe. Stripe collects the payment details. We receive the plan, billing status, and related identifiers, not your full card number.',

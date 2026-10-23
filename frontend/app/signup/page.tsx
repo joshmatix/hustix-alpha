@@ -8,40 +8,19 @@ import { hasVerifiedAuthenticator } from '@/lib/mfa';
 import { oauthErrorMessage, pathAfterSignIn, startOAuth, type OAuthProvider } from '@/lib/oauth';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import AuthenticatorEnroll from '@/components/auth/AuthenticatorEnroll';
-import { signupPlanDetail } from '@/lib/planLimits';
 import AgreementBody from '@/components/auth/AgreementBody';
 import AgreementScroll from '@/components/auth/AgreementScroll';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-
-type CatalogPlan = {
-  code: string;
-  name: string;
-  monthly_cents: number;
-  portfolio_limit: number | null;
-  ticker_limit: number | null;
-};
-
-function money(cents: number) {
-  return (cents / 100).toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState('');
   const [firmName, setFirmName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [plans, setPlans] = useState<CatalogPlan[]>([]);
-  const [plan, setPlan] = useState('free');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [plansLoading, setPlansLoading] = useState(true);
   const [read, setRead] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [agreement, setAgreement] = useState<AgreementDocument | null>(null);
@@ -52,7 +31,6 @@ export default function SignupPage() {
   const [oauthUserId, setOauthUserId] = useState<string | null>(null);
   const [activeEmail, setActiveEmail] = useState<string | null>(null);
   const router = useRouter();
-  const selected = plans.find((option) => option.code === plan) || plans[0];
 
   useEffect(() => {
     let cancelled = false;
@@ -70,20 +48,6 @@ export default function SignupPage() {
   }, []);
 
   useEffect(() => {
-    supabase.rpc('plan_catalog').then(({ data, error: catalogError }) => {
-      const rows = Array.isArray(data) ? (data as CatalogPlan[]) : [];
-      setPlans(rows);
-      if (rows.some((row) => row.code === 'free')) {
-        setPlan('free');
-      } else if (rows[0]) {
-        setPlan(rows[0].code);
-      }
-      if (catalogError) {
-        setError(catalogError.message);
-      }
-      setPlansLoading(false);
-    });
-
     void supabase.auth.getSession().then(async ({ data }) => {
       const session = data.session;
       if (!session) return;
@@ -216,7 +180,7 @@ export default function SignupPage() {
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
         data: {
-          plan,
+          plan: 'pro_plus',
           full_name: name,
           firm_name: firm,
         },
@@ -378,46 +342,9 @@ export default function SignupPage() {
         )}
         <form onSubmit={handleSignup} className="space-y-5">
           {oauthUserId === null && (
-          <fieldset className="space-y-2">
-            <legend className="block text-xs font-medium text-slate-300 mb-2 leading-none">
-              Account
-            </legend>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {plansLoading && <p className="text-xs text-slate-400">Loading plans...</p>}
-              {plans.map((option) => {
-                const chosen = plan === option.code;
-                return (
-                  <label
-                    key={option.code}
-                    className={`cursor-pointer rounded-lg border px-4 py-3 transition ${
-                      chosen
-                        ? 'border-indigo-500 bg-indigo-500/10 ring-2 ring-indigo-500/40'
-                        : 'border-slate-800 bg-slate-950/70 hover:border-slate-700'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="plan"
-                      value={option.code}
-                      checked={chosen}
-                      onChange={() => setPlan(option.code)}
-                      className="sr-only"
-                    />
-                    <span className="flex items-baseline justify-between gap-2">
-                      <span className="text-sm font-semibold text-white">{option.name}</span>
-                      <span className="text-sm font-semibold text-indigo-300">{money(option.monthly_cents)}</span>
-                    </span>
-                    <span className="mt-1 block text-xs text-slate-400">
-                      {signupPlanDetail(option.monthly_cents, option.portfolio_limit, option.ticker_limit)}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            <p className="text-[11px] text-slate-500">
-              Choosing a paid plan records that monthly price. This screen does not charge a card.
-            </p>
-          </fieldset>
+          <p className="text-xs text-slate-400">
+            During this phase every account is Pro+. This screen does not charge a card.
+          </p>
           )}
 
           <div className="flex flex-col">
