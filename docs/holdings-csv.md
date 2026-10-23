@@ -64,7 +64,6 @@ TLT,iShares 20+ Year Treasury Bond,5034,79.46,16.5,0.3,Bond
 IEI,iShares 3-7 Year Treasury Bond,1316,114,4.5,0.2,Bond
 DBC,Invesco DB Commodity Tracking,2227,33.68,0,0.3,Commodity
 GLD,SPDR Gold Trust,198,379.69,0,0.1,Gold
-CASH,US Dollar,10000,1,0,0,Cash
 ```
 
-That file is about 30% equities, 55% bonds, 15% real assets, and 1% cash, before the equity close replaces the VTI price in the file.
+That file has five holdings, so it fits the Free plan. It is about 30% equities, 55% bonds, and 15% real assets, before the equity close replaces the VTI price in the file.

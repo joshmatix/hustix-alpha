@@ -46,7 +46,9 @@ export default function SignupPage() {
   const [agreed, setAgreed] = useState(false);
   const [agreement, setAgreement] = useState<AgreementDocument | null>(null);
   const [agreementError, setAgreementError] = useState<string | null>(null);
-  const [step, setStep] = useState<'account' | 'authenticator'>('account');
+  const [step, setStep] = useState<'account' | 'authenticator' | 'confirm'>('account');
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [localMail, setLocalMail] = useState(false);
   const [oauthUserId, setOauthUserId] = useState<string | null>(null);
   const [activeEmail, setActiveEmail] = useState<string | null>(null);
   const router = useRouter();
@@ -91,15 +93,15 @@ export default function SignupPage() {
         .select('firm_name, full_name')
         .eq('id', session.user.id)
         .maybeSingle();
-      if (!(await hasAcceptedCurrentAgreement())) {
-        router.replace('/agreement/accept');
-        return;
-      }
       if (!profile?.full_name?.trim() || !profile?.firm_name?.trim()) {
         setOauthUserId(session.user.id);
         if (signedInEmail) setEmail(signedInEmail);
         if (profile?.full_name) setFullName(profile.full_name);
         if (profile?.firm_name) setFirmName(profile.firm_name);
+        return;
+      }
+      if (!(await hasAcceptedCurrentAgreement())) {
+        router.replace('/agreement/accept');
         return;
       }
       setActiveEmail(signedInEmail);
@@ -212,6 +214,7 @@ export default function SignupPage() {
       email,
       password,
       options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
         data: {
           plan,
           full_name: name,
@@ -268,7 +271,10 @@ export default function SignupPage() {
       return;
     }
 
-    setNotice('You are not signed in. Sign in if this address already has an account. A new address gets a confirmation message before sign-in. The authenticator app is required before the dashboard opens.');
+    const host = window.location.hostname;
+    setLocalMail(host === '127.0.0.1' || host === 'localhost');
+    setPendingEmail(email);
+    setStep('confirm');
     setLoading(false);
   };
 
@@ -293,14 +299,16 @@ export default function SignupPage() {
             <span className="text-xs font-bold tracking-wider text-slate-400 uppercase">Hustix Macro</span>
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-white">
-            {step === 'authenticator' ? 'Authenticator app' : 'Create Account'}
+            {step === 'authenticator' ? 'Authenticator app' : step === 'confirm' ? 'Confirm your email' : 'Create Account'}
           </h2>
           <p className="text-xs text-slate-400">
             {step === 'authenticator'
               ? 'Add an authenticator app to finish this account.'
-              : oauthUserId
-                ? 'Confirm your name and firm, then accept the agreement to finish this sign-in.'
-                : 'Register as a wealth advisor to start running scenario analytics.'}
+              : step === 'confirm'
+                ? `Open the confirmation link sent to ${pendingEmail}, then continue.`
+                : oauthUserId
+                  ? 'Confirm your name and firm, then accept the agreement to finish this sign-in.'
+                  : 'Register as a wealth advisor to start running scenario analytics.'}
           </p>
         </div>
 
@@ -339,6 +347,30 @@ export default function SignupPage() {
               Create an account with another email
             </button>
           </>
+        ) : step === 'confirm' ? (
+          <div className="space-y-4 text-sm text-slate-300">
+            <p>
+              The account for <span className="font-semibold text-white">{pendingEmail}</span> is waiting on email confirmation. Open the confirmation link, then this site continues to the agreement and authenticator app.
+            </p>
+            {localMail && (
+              <p>
+                On this computer that message stays in the{' '}
+                <a
+                  href="http://127.0.0.1:54324"
+                  className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline"
+                >
+                  local mail viewer
+                </a>
+                . Open the newest message to {pendingEmail} and choose Confirm email address.
+              </p>
+            )}
+            <Link
+              href="/login"
+              className="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 py-3 text-sm font-semibold text-white hover:bg-indigo-500"
+            >
+              Sign in after confirming
+            </Link>
+          </div>
         ) : (
         <>
         {oauthUserId === null && (

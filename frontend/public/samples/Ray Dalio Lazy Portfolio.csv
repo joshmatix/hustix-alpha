@@ -1,0 +1,6 @@
+ quantity, ticker, current_price, currency, asset_name, asset_class
+	799, VTI, 375.54,	USD,		Vanguard Total Stock Market,	Equity
+	5034, TLT, 79.46,	USD,		iShares 20+ Year Treasury Bond,	Bond
+	1316, IEI, 114,	        USD,		iShares 3-7 Year Treasury Bond,	Bond
+	2227, DBC, 33.68,	USD,		Invesco DB Commodity Tracking,	Commodity
+	198, GLD,  379.69,	USD,		SPDR Gold Trust	Commodity, Gold

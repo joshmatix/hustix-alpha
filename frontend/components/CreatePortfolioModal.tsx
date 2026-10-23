@@ -167,16 +167,25 @@ export default function CreatePortfolioModal({
             <label htmlFor="portfolioCsv" className="block text-sm font-medium text-slate-300">
               Upload CSV file
             </label>
-            <input
-              ref={fileRef}
-              id="portfolioCsv"
-              type="file"
-              accept=".csv,.CSV,text/csv"
-              onChange={handleCsv}
-              className="mt-1 block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-indigo-500"
-            />
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <input
+                ref={fileRef}
+                id="portfolioCsv"
+                type="file"
+                accept=".csv,.CSV,text/csv"
+                onChange={handleCsv}
+                className="min-w-0 text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-indigo-500"
+              />
+              <a
+                href="/samples/holdings-sample.csv"
+                download="holdings-sample.csv"
+                className="inline-flex shrink-0 items-center rounded-md border border-indigo-400 px-3 py-1.5 text-xs font-semibold text-indigo-200 hover:bg-indigo-500/20"
+              >
+                Download sample CSV
+              </a>
+            </div>
             <p className="mt-1 text-xs text-slate-500">
-              The file name becomes the portfolio name and description. You can edit both before creating.
+              Download the sample, then choose that file. Its name becomes the portfolio name and description. You can edit both before creating.
             </p>
           </div>
           <div>

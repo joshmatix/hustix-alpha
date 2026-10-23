@@ -18,6 +18,79 @@ const PORTFOLIO_VIEW_KEY = 'hustix-portfolio-view';
 
 type PortfolioView = 'cards' | 'list';
 
+function PortfolioCsvActions({
+  portfolioName,
+  uploading,
+  onFile,
+}: {
+  portfolioName: string;
+  uploading: boolean;
+  onFile: (file: File) => void;
+}) {
+  return (
+    <>
+      <div className="group relative inline-flex">
+        <label className="relative inline-flex rounded-lg focus-within:ring-2 focus-within:ring-amber-500 focus-within:ring-offset-2 focus-within:ring-offset-slate-950">
+          <span className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-amber-500/70 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100 group-hover:bg-amber-500/25">
+            {uploading ? 'Uploading...' : 'Upload CSV'}
+          </span>
+          <input
+            type="file"
+            accept=".csv,.CSV,text/csv"
+            aria-label={`Upload CSV for ${portfolioName}`}
+            aria-describedby="csv-format-help"
+            disabled={uploading}
+            className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed focus:outline-none"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onFile(file);
+              e.target.value = '';
+            }}
+          />
+        </label>
+        <div
+          role="tooltip"
+          aria-hidden="true"
+          className="absolute bottom-full left-0 z-30 w-64 pb-2 invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+        >
+          <div className="rounded-lg border border-slate-700 bg-slate-950 p-3 text-left text-xs font-normal leading-relaxed text-slate-300 shadow-xl">
+            <p className="font-semibold text-slate-100">CSV columns</p>
+            <p className="mt-1">Column order is not significant.</p>
+            <p className="mt-2 text-slate-400">Required</p>
+            <p>ticker, asset_class, quantity, current_price</p>
+            <p className="mt-2 text-slate-400">Optional</p>
+            <p>asset_name, duration_years, beta</p>
+            <p className="mt-2 text-slate-400">
+              Quantity is the share count. Equity prices are replaced with the market-data close. Schwab, Fidelity, LPL, BNY Mellon, and Raymond James position exports are accepted. Uploading replaces the holdings already in this portfolio.
+            </p>
+            <a
+              href="/samples/holdings-sample.csv"
+              download="holdings-sample.csv"
+              className="mt-2 inline-block font-semibold text-indigo-300 hover:text-indigo-200"
+            >
+              Download sample CSV
+            </a>
+            <Link
+              href="/dashboard/help#holdings-csv"
+              className="mt-1 block font-semibold text-indigo-300 hover:text-indigo-200"
+            >
+              Format guide
+            </Link>
+          </div>
+        </div>
+      </div>
+      <a
+        href="/samples/holdings-sample.csv"
+        download="holdings-sample.csv"
+        className="text-xs font-semibold text-indigo-300 hover:text-indigo-200"
+      >
+        Download sample CSV
+      </a>
+      <p className="text-xs font-medium text-amber-300">Replaces existing holdings</p>
+    </>
+  );
+}
+
 export default function PortfoliosPage() {
   const router = useRouter();
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
@@ -237,7 +310,10 @@ export default function PortfoliosPage() {
     const created = await res.json().catch(() => ({}));
     await fetchPortfolios();
     if (data.file && created.portfolio_id) {
-      await handleCsvUpload(String(created.portfolio_id), data.file);
+      const uploadError = await handleCsvUpload(String(created.portfolio_id), data.file);
+      if (uploadError) {
+        throw new Error(`${uploadError} ${data.name} was created without those holdings.`);
+      }
     }
   };
 
@@ -268,25 +344,31 @@ export default function PortfoliosPage() {
       );
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(body.detail || 'CSV upload failed.');
+        const message = body.detail || 'CSV upload failed.';
+        setError(message);
+        return message;
       }
       if (body.status === 'upgrade_required') {
+        const message = body.detail || body.message || 'This file has more tickers than the current plan allows.';
         setNotice({
-          message: body.message,
-          detail: body.detail || '',
+          message: 'Holdings were not saved.',
+          detail: [message, body.message].filter((part, index, parts) => part && parts.indexOf(part) === index).join(' '),
           offerUpgrade: Boolean(body.upgrade_code),
           upgradeTarget: body.upgrade_code,
           upgradeName: body.upgrade_name,
           file,
           portfolioId,
         });
-        return;
+        return message;
       }
       setNotice(null);
       await fetchPortfolios(true);
       await loadHoldings(portfolioId);
+      return null;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'CSV upload failed.');
+      const message = err instanceof Error ? err.message : 'CSV upload failed.';
+      setError(message);
+      return message;
     } finally {
       setUploadingId(null);
     }
@@ -588,63 +670,17 @@ export default function PortfoliosPage() {
                 </Button>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <div className="group relative inline-flex">
-                  <label className="relative inline-flex rounded-lg focus-within:ring-2 focus-within:ring-amber-500 focus-within:ring-offset-2 focus-within:ring-offset-slate-950">
-                    <span className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-amber-500/70 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100 group-hover:bg-amber-500/25">
-                      {uploadingId === portfolio.id ? 'Uploading...' : 'Upload CSV'}
-                    </span>
-                    <input
-                      type="file"
-                      accept=".csv,.CSV,text/csv"
-                      aria-label={`Upload CSV for ${portfolio.name}`}
-                      aria-describedby="csv-format-help"
-                      disabled={uploadingId === portfolio.id}
-                      className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed focus:outline-none"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setCsvReplace({
-                            portfolioId: portfolio.id,
-                            portfolioName: portfolio.name,
-                            file,
-                          });
-                        }
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
-                  <div
-                    role="tooltip"
-                    aria-hidden="true"
-                    className="absolute bottom-full left-0 z-30 w-64 pb-2 invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
-                  >
-                    <div className="rounded-lg border border-slate-700 bg-slate-950 p-3 text-left text-xs font-normal leading-relaxed text-slate-300 shadow-xl">
-                      <p className="font-semibold text-slate-100">CSV columns</p>
-                      <p className="mt-1">Column order is not significant.</p>
-                      <p className="mt-2 text-slate-400">Required</p>
-                      <p>ticker, asset_class, quantity, current_price</p>
-                      <p className="mt-2 text-slate-400">Optional</p>
-                      <p>asset_name, duration_years, beta</p>
-                      <p className="mt-2 text-slate-400">
-                        Quantity is the share count. Equity prices are replaced with the market-data close. Schwab, Fidelity, LPL, BNY Mellon, and Raymond James position exports are accepted. Uploading replaces the holdings already in this portfolio.
-                      </p>
-                      <a
-                        href="/samples/holdings-sample.csv"
-                        download="holdings-sample.csv"
-                        className="mt-2 inline-block font-semibold text-indigo-300 hover:text-indigo-200"
-                      >
-                        Download sample CSV
-                      </a>
-                      <Link
-                        href="/dashboard/help#holdings-csv"
-                        className="mt-1 block font-semibold text-indigo-300 hover:text-indigo-200"
-                      >
-                        Format guide
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs font-medium text-amber-300">Replaces existing holdings</p>
+                <PortfolioCsvActions
+                  portfolioName={portfolio.name}
+                  uploading={uploadingId === portfolio.id}
+                  onFile={(file) =>
+                    setCsvReplace({
+                      portfolioId: portfolio.id,
+                      portfolioName: portfolio.name,
+                      file,
+                    })
+                  }
+                />
               </div>
               <div className="mt-4 border-t border-slate-800 pt-3">
                 <button
@@ -687,31 +723,17 @@ export default function PortfoliosPage() {
                 >
                   Analyze Risk
                 </Button>
-                <label className="relative inline-flex rounded-lg focus-within:ring-2 focus-within:ring-amber-500 focus-within:ring-offset-2 focus-within:ring-offset-slate-950">
-                  <span className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-amber-500/70 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-500/25">
-                    {uploadingId === portfolio.id ? 'Uploading...' : 'Upload CSV'}
-                  </span>
-                  <input
-                    type="file"
-                    accept=".csv,.CSV,text/csv"
-                    aria-label={`Upload CSV for ${portfolio.name}`}
-                    title="Replaces existing holdings"
-                    aria-describedby="csv-format-help"
-                    disabled={uploadingId === portfolio.id}
-                    className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed focus:outline-none"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        setCsvReplace({
-                          portfolioId: portfolio.id,
-                          portfolioName: portfolio.name,
-                          file,
-                        });
-                      }
-                      e.target.value = '';
-                    }}
-                  />
-                </label>
+                <PortfolioCsvActions
+                  portfolioName={portfolio.name}
+                  uploading={uploadingId === portfolio.id}
+                  onFile={(file) =>
+                    setCsvReplace({
+                      portfolioId: portfolio.id,
+                      portfolioName: portfolio.name,
+                      file,
+                    })
+                  }
+                />
                 <button
                   type="button"
                   onClick={() => setPortfolioToDelete(portfolio)}

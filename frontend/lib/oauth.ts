@@ -41,6 +41,20 @@ export async function accountIsDisabled(): Promise<boolean> {
   return !error && data === true;
 }
 
+/** A Google or Microsoft account still needs a name and firm on the register screen. */
+export async function registrationStillRequired() {
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user.id;
+  if (!userId) return false;
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .select('full_name, firm_name')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error || !profile) return true;
+  return !profile.full_name?.trim() || !profile.firm_name?.trim();
+}
+
 /** Where a signed-in user should go after email, Google, or Microsoft sign-in. */
 export async function pathAfterSignIn() {
   if (await accountIsDisabled()) {
@@ -48,6 +62,7 @@ export async function pathAfterSignIn() {
     return '/login?disabled=1';
   }
   if (await authenticatorStillRequired()) return '/login';
+  if (await registrationStillRequired()) return '/signup';
   if (!(await hasAcceptedCurrentAgreement())) return '/agreement/accept';
   if (!(await hasVerifiedAuthenticator())) return '/signup';
   return '/dashboard';

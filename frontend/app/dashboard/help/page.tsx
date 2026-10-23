@@ -28,8 +28,7 @@ VTI,Vanguard Total Stock Market,799,375.54,0,1,Equity
 TLT,iShares 20+ Year Treasury Bond,5034,79.46,16.5,0.3,Bond
 IEI,iShares 3-7 Year Treasury Bond,1316,114,4.5,0.2,Bond
 DBC,Invesco DB Commodity Tracking,2227,33.68,0,0.3,Commodity
-GLD,SPDR Gold Trust,198,379.69,0,0.1,Gold
-CASH,US Dollar,10000,1,0,0,Cash`;
+GLD,SPDR Gold Trust,198,379.69,0,0.1,Gold`;
 
 function Section({
   id,
@@ -82,9 +81,9 @@ export default function HelpPage() {
           >
             Download the sample CSV
           </a>
-          . The duration and beta values in that file are illustrations, not live figures. Before
-          the equity close replaces the VTI price, the sample is about 30% equities, 55% bonds,
-          15% real assets, and 1% cash.
+          . The duration and beta values in that file are illustrations, not live figures. The
+          sample has five holdings, which fits the Free plan. Before the equity close replaces
+          the VTI price, it is about 30% equities, 55% bonds, and 15% real assets.
         </p>
 
         <div>
