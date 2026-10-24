@@ -33,6 +33,10 @@ DB_CONTAINER = "supabase_db_my-macro-app"
 HOST = "0.0.0.0"
 PORT = 3090
 PLAN_CODES = ("free", "pro", "pro_plus", "enterprise")
+FIRM_ID = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 SERVICES = {
     "frontend": {
         "label": "Frontend",
@@ -326,6 +330,163 @@ def _read_plans() -> list[dict]:
     return json.loads(raw or "[]")
 
 
+def _read_firms() -> list[dict]:
+    raw = _psql(
+        """
+        SELECT COALESCE(json_agg(row ORDER BY row.name), '[]'::json)::text
+        FROM (
+          SELECT
+            firm.id::text AS id,
+            firm.name,
+            COALESCE(subscription.plan_code, 'free') AS plan_code,
+            COALESCE(subscription.status, '') AS subscription_status,
+            (firm.disabled_at IS NULL) AS enabled,
+            (
+              SELECT count(*)::int
+              FROM public.firm_members AS member
+              WHERE member.firm_id = firm.id
+            ) AS member_count,
+            (
+              SELECT count(*)::int
+              FROM public.portfolios AS portfolio
+              WHERE portfolio.firm_id = firm.id
+            ) AS portfolio_count,
+            to_char(firm.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS created_on
+          FROM public.firms AS firm
+          LEFT JOIN public.subscriptions AS subscription
+            ON subscription.firm_id = firm.id
+        ) AS row;
+        """
+    )
+    return json.loads(raw or "[]")
+
+
+def _parse_firm_id(value: str) -> str:
+    if not FIRM_ID.fullmatch(value or ""):
+        raise ValueError("Invalid firm id.")
+    return value.lower()
+
+
+def _parse_user_id(value: str) -> str:
+    return _parse_firm_id(value)
+
+
+def _set_firm_access(firm_id: str, enabled: bool) -> None:
+    fid = _parse_firm_id(firm_id)
+    flag = "true" if enabled else "false"
+    _psql(f"SELECT public.admin_set_firm_access('{fid}'::uuid, {flag});")
+
+
+def _set_advisor_access(user_id: str, enabled: bool) -> None:
+    uid = _parse_user_id(user_id)
+    flag = "true" if enabled else "false"
+    _psql(f"SELECT public.admin_set_advisor_access('{uid}'::uuid, {flag});")
+
+
+def _sql_json_literal(payload: object) -> str:
+    blob = json.dumps(payload, separators=(",", ":"))
+    return "'" + blob.replace("'", "''") + "'::jsonb"
+
+
+def _load_firm(payload: object) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid request.")
+    raw = _psql(f"SELECT public.admin_load_firm({_sql_json_literal(payload)})::text;")
+    result = json.loads(raw or "{}")
+    firm_id = result.get("firm_id")
+    if not firm_id:
+        raise RuntimeError("Firm was not created.")
+    detail = _read_firm_detail(str(firm_id))
+    if detail is None:
+        raise RuntimeError("Firm was created but could not be loaded.")
+    return {"ok": True, "firm_id": firm_id, "firm": detail, "firms": _read_firms()}
+
+
+def _read_firm_detail(firm_id: str) -> dict | None:
+    fid = _parse_firm_id(firm_id)
+    raw = _psql(
+        f"""
+        SELECT row_to_json(detail)::text
+        FROM (
+          SELECT
+            firm.id::text AS id,
+            firm.name,
+            to_char(firm.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS created_on,
+            COALESCE(subscription.plan_code, 'free') AS plan_code,
+            COALESCE(subscription.status, 'active') AS subscription_status,
+            (firm.disabled_at IS NULL) AS enabled,
+            plan.portfolio_limit,
+            plan.ticker_limit,
+            (
+              SELECT COALESCE(sum(portfolio.portfolio_value), 0)::float8
+              FROM public.portfolios AS portfolio
+              WHERE portfolio.firm_id = firm.id
+            ) AS total_aum,
+            (
+              SELECT count(*)::int
+              FROM public.firm_members AS member
+              WHERE member.firm_id = firm.id
+            ) AS advisor_count,
+            (
+              SELECT count(*)::int
+              FROM public.portfolios AS portfolio
+              WHERE portfolio.firm_id = firm.id
+            ) AS portfolio_count,
+            (
+              SELECT COALESCE(json_agg(advisor ORDER BY advisor.full_name, advisor.email), '[]'::json)
+              FROM (
+                SELECT
+                  account_user.id::text AS user_id,
+                  COALESCE(NULLIF(btrim(profile.full_name), ''), account_user.email) AS full_name,
+                  account_user.email,
+                  member.role,
+                  (profile.disabled_at IS NULL) AS enabled
+                FROM public.firm_members AS member
+                JOIN auth.users AS account_user ON account_user.id = member.user_id
+                LEFT JOIN public.profiles AS profile ON profile.id = account_user.id
+                WHERE member.firm_id = firm.id
+                  AND account_user.deleted_at IS NULL
+              ) AS advisor
+            ) AS advisors,
+            (
+              SELECT COALESCE(json_agg(portfolio_row ORDER BY portfolio_row.name), '[]'::json)
+              FROM (
+                SELECT
+                  portfolio.id::text AS id,
+                  portfolio.name,
+                  COALESCE(portfolio.portfolio_value, 0)::float8 AS portfolio_value,
+                  (
+                    SELECT COALESCE(
+                      json_agg(
+                        json_build_object(
+                          'user_id', assignment.user_id::text,
+                          'full_name', COALESCE(NULLIF(btrim(assignee_profile.full_name), ''), assignee.email)
+                        )
+                        ORDER BY assignee_profile.full_name, assignee.email
+                      ),
+                      '[]'::json
+                    )
+                    FROM public.portfolio_advisors AS assignment
+                    JOIN auth.users AS assignee ON assignee.id = assignment.user_id
+                    LEFT JOIN public.profiles AS assignee_profile ON assignee_profile.id = assignee.id
+                    WHERE assignment.portfolio_id = portfolio.id
+                  ) AS advisors
+                FROM public.portfolios AS portfolio
+                WHERE portfolio.firm_id = firm.id
+              ) AS portfolio_row
+            ) AS portfolios
+          FROM public.firms AS firm
+          LEFT JOIN public.subscriptions AS subscription ON subscription.firm_id = firm.id
+          LEFT JOIN public.plans AS plan ON plan.code = COALESCE(subscription.plan_code, 'free')
+          WHERE firm.id = '{fid}'::uuid
+        ) AS detail;
+        """
+    )
+    if not raw:
+        return None
+    return json.loads(raw)
+
+
 def _write_limits(plans: object) -> list[dict]:
     if not isinstance(plans, list) or not plans:
         raise ValueError("Send one row per plan.")
@@ -398,10 +559,32 @@ class Handler(BaseHTTPRequestHandler):
             if not self._require_auth():
                 return
             try:
-                payload = {"plans": _read_plans(), "accounts": _read_accounts(), **_service_status()}
+                payload = {
+                    "plans": _read_plans(),
+                    "firms": _read_firms(),
+                    "accounts": _read_accounts(),
+                    **_service_status(),
+                }
                 self._send(*_json_bytes(payload), "application/json")
             except RuntimeError as exc:
                 self._send(*_json_bytes({"detail": str(exc)}, 503), "application/json")
+            return
+        if path.startswith("/api/firms/"):
+            if not self._require_auth():
+                return
+            firm_id = path.removeprefix("/api/firms/").strip("/")
+            try:
+                detail = _read_firm_detail(firm_id)
+            except ValueError as exc:
+                self._send(*_json_bytes({"detail": str(exc)}, 400), "application/json")
+                return
+            except RuntimeError as exc:
+                self._send(*_json_bytes({"detail": str(exc)}, 503), "application/json")
+                return
+            if detail is None:
+                self._send(*_json_bytes({"detail": "Firm not found."}, 404), "application/json")
+                return
+            self._send(*_json_bytes(detail), "application/json")
             return
         self._send(404, b"Not found", "text/plain; charset=utf-8")
 
@@ -426,6 +609,37 @@ class Handler(BaseHTTPRequestHandler):
             self._send(*_json_bytes({"detail": str(exc) or "Invalid request."}, 400), "application/json")
             return
         try:
+            if path == "/api/firms/load":
+                result = _load_firm(payload)
+                self._send(*_json_bytes(result), "application/json")
+                return
+            firm_access = re.fullmatch(r"/api/firms/([0-9a-f-]{36})/access", path, re.IGNORECASE)
+            if firm_access:
+                if not isinstance(payload, dict) or "enabled" not in payload:
+                    raise ValueError("Send enabled: true or false.")
+                firm_id = firm_access.group(1)
+                _set_firm_access(firm_id, bool(payload["enabled"]))
+                detail = _read_firm_detail(firm_id)
+                self._send(
+                    *_json_bytes({"ok": True, "firm": detail, "firms": _read_firms()}),
+                    "application/json",
+                )
+                return
+            advisor_access = re.fullmatch(r"/api/advisors/([0-9a-f-]{36})/access", path, re.IGNORECASE)
+            if advisor_access:
+                if not isinstance(payload, dict) or "enabled" not in payload:
+                    raise ValueError("Send enabled: true or false.")
+                user_id = advisor_access.group(1)
+                _set_advisor_access(user_id, bool(payload["enabled"]))
+                detail = None
+                refresh_firm = payload.get("firm_id") if isinstance(payload, dict) else None
+                if isinstance(refresh_firm, str) and FIRM_ID.fullmatch(refresh_firm):
+                    detail = _read_firm_detail(refresh_firm)
+                self._send(
+                    *_json_bytes({"ok": True, "firm": detail, "firms": _read_firms()}),
+                    "application/json",
+                )
+                return
             if path == "/api/limits":
                 plans = _write_limits(payload.get("plans") if isinstance(payload, dict) else None)
                 self._send(*_json_bytes({"plans": plans}), "application/json")

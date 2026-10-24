@@ -48,6 +48,11 @@ class AdvisorAccessBody(BaseModel):
     enabled: bool
 
 
+class FirmAccessBody(BaseModel):
+    firm_id: str
+    enabled: bool
+
+
 class AdvisorPlanBody(BaseModel):
     user_id: str
     plan_code: str
@@ -297,6 +302,22 @@ def advisor_access(body: AdvisorAccessBody, request: Request):
     _require_admin(request)
     _require_database()
     return _mutate_directory("admin_set_advisor_access", {"target_user": body.user_id, "enabled": body.enabled})
+
+
+@router.post("/firms/access")
+def firm_access(body: FirmAccessBody, request: Request):
+    _require_admin(request)
+    _require_database()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database is not configured.")
+    try:
+        supabase.rpc(
+            "admin_set_firm_access",
+            {"target_firm": body.firm_id, "enabled": body.enabled},
+        ).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"ok": True}
 
 
 @router.post("/advisors/plan")
