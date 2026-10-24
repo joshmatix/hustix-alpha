@@ -122,6 +122,10 @@ def create_inquiry(body: Inquiry, request: Request):
             emailed = True
         except Exception:
             log.exception("contact inquiry email was not sent")
+    else:
+        log.warning(
+            "contact inquiry saved but not emailed: set SMTP_HOST (e.g. smtp.resend.com) on the API service"
+        )
     if not inquiry_accepted(stored, emailed):
         raise HTTPException(status_code=503, detail="Questions cannot be sent right now.")
     return {"ok": True, "emailed": emailed}
