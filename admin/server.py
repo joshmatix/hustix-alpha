@@ -54,6 +54,23 @@ _sessions: set[str] = set()
 _login_failures: list[float] = []
 
 
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_env_file(BACKEND_DIR / ".env")
+
+
 def _load_password() -> str:
     existing = ""
     if ENV_PATH.exists():
@@ -251,7 +268,15 @@ def _psql(sql: str) -> str:
     )
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or "Database update failed.").strip()
-        raise RuntimeError(detail.splitlines()[-1])
+        lines = [line.strip() for line in detail.splitlines() if line.strip()]
+        error_line = next((line for line in lines if line.startswith("ERROR:")), None)
+        detail_line = next((line for line in lines if line.startswith("DETAIL:")), None)
+        if error_line:
+            message = error_line.split(":", 1)[1].strip()
+            if detail_line:
+                message = f"{message} {detail_line.split(':', 1)[1].strip()}"
+            raise RuntimeError(message)
+        raise RuntimeError(lines[-1] if lines else "Database update failed.")
     return completed.stdout.strip()
 
 
@@ -371,10 +396,28 @@ def _parse_user_id(value: str) -> str:
     return _parse_firm_id(value)
 
 
+def _set_holdings_classification_source(firm_id: str, source: str) -> None:
+    fid = _parse_firm_id(firm_id)
+    normalized = str(source or "").strip().lower()
+    if normalized not in {"csv", "authoritative"}:
+        raise ValueError("Source must be csv or authoritative.")
+    _psql(
+        f"UPDATE public.firms SET holdings_classification_source = '{normalized}' "
+        f"WHERE id = '{fid}'::uuid;"
+    )
+
+
 def _set_firm_access(firm_id: str, enabled: bool) -> None:
     fid = _parse_firm_id(firm_id)
     flag = "true" if enabled else "false"
     _psql(f"SELECT public.admin_set_firm_access('{fid}'::uuid, {flag});")
+
+
+def _delete_firm(firm_id: str) -> dict:
+    fid = _parse_firm_id(firm_id)
+    raw = _psql(f"SELECT public.admin_delete_firm('{fid}'::uuid)::text;")
+    deleted = json.loads(raw or "{}")
+    return {"ok": True, "deleted": deleted, "firms": _read_firms()}
 
 
 def _set_advisor_access(user_id: str, enabled: bool) -> None:
@@ -388,10 +431,123 @@ def _sql_json_literal(payload: object) -> str:
     return "'" + blob.replace("'", "''") + "'::jsonb"
 
 
+def _normalize_load_firm_payload(payload: dict) -> dict:
+    """Accept Wealth Advisors Group JSON or the older form-shaped payload."""
+    firm_name = str(payload.get("firm_name") or payload.get("firm") or "").strip()
+    plan_code = str(payload.get("plan_code") or "pro_plus").strip() or "pro_plus"
+    advisors_in = payload.get("advisors")
+    portfolios_in = payload.get("portfolios")
+    if not isinstance(advisors_in, list):
+        raise ValueError("Advisors must be an array.")
+    advisors: list[dict] = []
+    seen_emails: set[str] = set()
+    for row in advisors_in:
+        if not isinstance(row, dict):
+            raise ValueError("Each advisor must be an object.")
+        email = str(row.get("email") or row.get("advisor_email") or "").strip().lower()
+        full_name = str(row.get("full_name") or row.get("advisor_name") or "").strip()
+        role = str(row.get("role") or "advisor").strip() or "advisor"
+        portfolio_ids = row.get("portfolio_ids") or []
+        if not isinstance(portfolio_ids, list):
+            raise ValueError("portfolio_ids must be an array.")
+        lead_ids = row.get("lead_portfolio_ids") or []
+        if lead_ids and not isinstance(lead_ids, list):
+            raise ValueError("lead_portfolio_ids must be an array.")
+        if email in seen_emails:
+            # Merge portfolio assignments onto the first row with this email.
+            for existing in advisors:
+                if existing["email"] == email:
+                    merged = list(existing["portfolio_ids"])
+                    for pid in portfolio_ids:
+                        if pid not in merged:
+                            merged.append(pid)
+                    existing["portfolio_ids"] = merged
+                    if role == "owner":
+                        existing["role"] = "owner"
+                    if full_name and not existing["full_name"]:
+                        existing["full_name"] = full_name
+                        existing["advisor_name"] = full_name
+                    break
+            continue
+        seen_emails.add(email)
+        advisors.append(
+            {
+                "email": email,
+                "advisor_email": email,
+                "full_name": full_name,
+                "advisor_name": full_name,
+                "role": role,
+                "portfolio_ids": portfolio_ids,
+                "lead_portfolio_ids": lead_ids if isinstance(lead_ids, list) else [],
+            }
+        )
+    portfolios: list[dict] = []
+    if isinstance(portfolios_in, list):
+        for row in portfolios_in:
+            if not isinstance(row, dict):
+                raise ValueError("Each portfolio must be an object.")
+            name = str(row.get("name") or row.get("portfolio_name") or "").strip()
+            portfolio_id = row.get("portfolio_id", row.get("import_id", ""))
+            portfolios.append(
+                {
+                    "name": name,
+                    "portfolio_name": name,
+                    "portfolio_id": portfolio_id,
+                    "account_number": str(row.get("account_number") or "").strip(),
+                    "sub_account_number": str(row.get("sub_account_number") or "").strip(),
+                    "portfolio_value": row.get("portfolio_value", 0),
+                    "advisor_emails": row.get("advisor_emails") or [],
+                    "description": row.get("description") or "",
+                    "target_risk_profile": row.get("target_risk_profile") or "Balanced",
+                    "asset_allocation": row.get("asset_allocation"),
+                }
+            )
+    return {
+        "firm": firm_name,
+        "firm_name": firm_name,
+        "plan_code": plan_code,
+        "advisors": advisors,
+        "portfolios": portfolios,
+    }
+
+
+def _send_firm_invites(firm_name: str, invited_emails: list[str], advisors: list[dict]) -> dict:
+    """Email unsigned advisors to sign up. Returns counts for the UI."""
+    names = {
+        str(row.get("email") or row.get("advisor_email") or "").strip().lower(): str(
+            row.get("full_name") or row.get("advisor_name") or ""
+        )
+        for row in advisors
+        if isinstance(row, dict)
+    }
+    emailed = 0
+    failed: list[str] = []
+    try:
+        import sys
+
+        if str(BACKEND_DIR) not in sys.path:
+            sys.path.insert(0, str(BACKEND_DIR))
+        from mailer import send_firm_invite_email  # type: ignore
+    except Exception as exc:  # noqa: BLE001
+        return {"emailed": 0, "failed": invited_emails, "detail": str(exc)}
+
+    for email in invited_emails:
+        address = str(email or "").strip().lower()
+        if not address:
+            continue
+        try:
+            send_firm_invite_email(firm_name, names.get(address, ""), address)
+            emailed += 1
+        except Exception:  # noqa: BLE001
+            failed.append(address)
+    return {"emailed": emailed, "failed": failed}
+
+
 def _load_firm(payload: object) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Invalid request.")
-    raw = _psql(f"SELECT public.admin_load_firm({_sql_json_literal(payload)})::text;")
+    normalized = _normalize_load_firm_payload(payload)
+    raw = _psql(f"SELECT public.admin_load_firm({_sql_json_literal(normalized)})::text;")
     result = json.loads(raw or "{}")
     firm_id = result.get("firm_id")
     if not firm_id:
@@ -399,7 +555,109 @@ def _load_firm(payload: object) -> dict:
     detail = _read_firm_detail(str(firm_id))
     if detail is None:
         raise RuntimeError("Firm was created but could not be loaded.")
-    return {"ok": True, "firm_id": firm_id, "firm": detail, "firms": _read_firms()}
+    invited_emails = result.get("invited_emails") or []
+    if not isinstance(invited_emails, list):
+        invited_emails = []
+    invite_mail = {"emailed": 0, "failed": []}
+    if invited_emails:
+        invite_mail = _send_firm_invites(
+            str(normalized.get("firm_name") or ""),
+            [str(item) for item in invited_emails],
+            list(normalized.get("advisors") or []),
+        )
+    return {
+        "ok": True,
+        "firm_id": firm_id,
+        "firm": detail,
+        "firms": _read_firms(),
+        "invited_count": result.get("invited_count") or len(invited_emails),
+        "invite_mail": invite_mail,
+    }
+
+
+def _add_firm_advisor(firm_id: str, payload: object) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid request.")
+    fid = _parse_firm_id(firm_id)
+    email = str(payload.get("email") or payload.get("advisor_email") or "").strip()
+    full_name = str(payload.get("full_name") or payload.get("advisor_name") or "").strip()
+    role = str(payload.get("role") or "advisor").strip() or "advisor"
+    if not email:
+        raise ValueError("Advisor email is required.")
+    raw = _psql(
+        "SELECT public.admin_add_firm_advisor("
+        f"'{fid}'::uuid, {_sql_text_literal(email)}, {_sql_text_literal(full_name)}, {_sql_text_literal(role)}"
+        ")::text;"
+    )
+    created = json.loads(raw or "{}")
+    detail = _read_firm_detail(fid)
+    pending = bool(created.get("pending"))
+    invite_mail = {"emailed": 0, "failed": []}
+    if pending:
+        firm_name = (detail or {}).get("name") or ""
+        invite_mail = _send_firm_invites(
+            firm_name,
+            [str(created.get("email") or email)],
+            [{"email": email, "full_name": full_name}],
+        )
+    return {
+        "ok": True,
+        "firm": detail,
+        "firms": _read_firms(),
+        "pending": pending,
+        "invite_mail": invite_mail,
+    }
+
+
+def _sql_text_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _assign_portfolio_advisor(portfolio_id: str, payload: object) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid request.")
+    pid = _parse_firm_id(portfolio_id)
+    user_id = str(payload.get("user_id") or "").strip()
+    if not FIRM_ID.fullmatch(user_id):
+        raise ValueError("Invalid user id.")
+    make_lead = bool(payload.get("is_lead"))
+    flag = "true" if make_lead else "false"
+    _psql(
+        "SELECT public.admin_assign_portfolio_advisor("
+        f"'{pid}'::uuid, '{user_id.lower()}'::uuid, {flag}"
+        ")::text;"
+    )
+    firm_id = payload.get("firm_id")
+    detail = _read_firm_detail(str(firm_id)) if isinstance(firm_id, str) and FIRM_ID.fullmatch(firm_id) else None
+    if detail is None:
+        firm_id = _firm_id_for_portfolio(pid)
+        detail = _read_firm_detail(firm_id) if firm_id else None
+    return {"ok": True, "firm": detail, "firms": _read_firms()}
+
+
+def _remove_portfolio_advisor(portfolio_id: str, user_id: str, firm_id: str | None = None) -> dict:
+    pid = _parse_firm_id(portfolio_id)
+    uid = _parse_user_id(user_id)
+    _psql(
+        "SELECT public.admin_remove_portfolio_advisor("
+        f"'{pid}'::uuid, '{uid}'::uuid"
+        ")::text;"
+    )
+    detail = None
+    if firm_id and FIRM_ID.fullmatch(firm_id):
+        detail = _read_firm_detail(firm_id)
+    if detail is None:
+        resolved = _firm_id_for_portfolio(pid)
+        detail = _read_firm_detail(resolved) if resolved else None
+    return {"ok": True, "firm": detail, "firms": _read_firms()}
+
+
+def _firm_id_for_portfolio(portfolio_id: str) -> str | None:
+    raw = _psql(
+        f"SELECT firm_id::text FROM public.portfolios WHERE id = '{portfolio_id}'::uuid LIMIT 1;"
+    )
+    value = (raw or "").strip()
+    return value or None
 
 
 def _read_firm_detail(firm_id: str) -> dict | None:
@@ -411,6 +669,7 @@ def _read_firm_detail(firm_id: str) -> dict | None:
           SELECT
             firm.id::text AS id,
             firm.name,
+            firm.holdings_classification_source,
             to_char(firm.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS created_on,
             COALESCE(subscription.plan_code, 'free') AS plan_code,
             COALESCE(subscription.status, 'active') AS subscription_status,
@@ -440,7 +699,8 @@ def _read_firm_detail(firm_id: str) -> dict | None:
                   COALESCE(NULLIF(btrim(profile.full_name), ''), account_user.email) AS full_name,
                   account_user.email,
                   member.role,
-                  (profile.disabled_at IS NULL) AS enabled
+                  (profile.disabled_at IS NULL) AS enabled,
+                  false AS pending
                 FROM public.firm_members AS member
                 JOIN auth.users AS account_user ON account_user.id = member.user_id
                 LEFT JOIN public.profiles AS profile ON profile.id = account_user.id
@@ -448,6 +708,37 @@ def _read_firm_detail(firm_id: str) -> dict | None:
                   AND account_user.deleted_at IS NULL
               ) AS advisor
             ) AS advisors,
+            (
+              SELECT COALESCE(json_agg(invite ORDER BY invite.full_name, invite.email), '[]'::json)
+              FROM (
+                SELECT
+                  pending.id::text AS invite_id,
+                  pending.full_name,
+                  pending.email,
+                  pending.role,
+                  true AS pending,
+                  to_char(pending.invited_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS invited_on,
+                  (
+                    SELECT COALESCE(
+                      json_agg(
+                        json_build_object(
+                          'portfolio_id', link.portfolio_id::text,
+                          'name', portfolio.name,
+                          'is_lead', link.is_lead
+                        )
+                        ORDER BY link.is_lead DESC, portfolio.name
+                      ),
+                      '[]'::json
+                    )
+                    FROM public.firm_advisor_invite_portfolios AS link
+                    JOIN public.portfolios AS portfolio ON portfolio.id = link.portfolio_id
+                    WHERE link.invite_id = pending.id
+                  ) AS portfolios
+                FROM public.firm_advisor_invites AS pending
+                WHERE pending.firm_id = firm.id
+                  AND pending.accepted_at IS NULL
+              ) AS invite
+            ) AS pending_advisors,
             (
               SELECT COALESCE(json_agg(portfolio_row ORDER BY portfolio_row.name), '[]'::json)
               FROM (
@@ -460,9 +751,10 @@ def _read_firm_detail(firm_id: str) -> dict | None:
                       json_agg(
                         json_build_object(
                           'user_id', assignment.user_id::text,
-                          'full_name', COALESCE(NULLIF(btrim(assignee_profile.full_name), ''), assignee.email)
+                          'full_name', COALESCE(NULLIF(btrim(assignee_profile.full_name), ''), assignee.email),
+                          'is_lead', assignment.is_lead
                         )
-                        ORDER BY assignee_profile.full_name, assignee.email
+                        ORDER BY assignment.is_lead DESC, assignee_profile.full_name, assignee.email
                       ),
                       '[]'::json
                     )
@@ -613,6 +905,20 @@ class Handler(BaseHTTPRequestHandler):
                 result = _load_firm(payload)
                 self._send(*_json_bytes(result), "application/json")
                 return
+            firm_class = re.fullmatch(
+                r"/api/firms/([0-9a-f-]{36})/holdings-classification", path, re.IGNORECASE
+            )
+            if firm_class:
+                if not isinstance(payload, dict) or "source" not in payload:
+                    raise ValueError("Send source: csv or authoritative.")
+                firm_id = firm_class.group(1)
+                _set_holdings_classification_source(firm_id, str(payload["source"]))
+                detail = _read_firm_detail(firm_id)
+                self._send(
+                    *_json_bytes({"ok": True, "firm": detail, "firms": _read_firms()}),
+                    "application/json",
+                )
+                return
             firm_access = re.fullmatch(r"/api/firms/([0-9a-f-]{36})/access", path, re.IGNORECASE)
             if firm_access:
                 if not isinstance(payload, dict) or "enabled" not in payload:
@@ -640,6 +946,18 @@ class Handler(BaseHTTPRequestHandler):
                     "application/json",
                 )
                 return
+            firm_advisors = re.fullmatch(r"/api/firms/([0-9a-f-]{36})/advisors", path, re.IGNORECASE)
+            if firm_advisors:
+                result = _add_firm_advisor(firm_advisors.group(1), payload)
+                self._send(*_json_bytes(result), "application/json")
+                return
+            portfolio_advisors = re.fullmatch(
+                r"/api/portfolios/([0-9a-f-]{36})/advisors", path, re.IGNORECASE
+            )
+            if portfolio_advisors:
+                result = _assign_portfolio_advisor(portfolio_advisors.group(1), payload)
+                self._send(*_json_bytes(result), "application/json")
+                return
             if path == "/api/limits":
                 plans = _write_limits(payload.get("plans") if isinstance(payload, dict) else None)
                 self._send(*_json_bytes({"plans": plans}), "application/json")
@@ -659,9 +977,55 @@ class Handler(BaseHTTPRequestHandler):
             self._send(*_json_bytes({"detail": str(exc)}, 422), "application/json")
             return
         except RuntimeError as exc:
-            self._send(*_json_bytes({"detail": str(exc)}, 503), "application/json")
+            detail = str(exc)
+            status = 422 if "ERROR:" in detail or "exception" in detail.lower() else 503
+            # Strip psql ERROR: prefix for the UI.
+            if detail.startswith("ERROR:"):
+                detail = detail.split(":", 1)[1].strip()
+            self._send(*_json_bytes({"detail": detail}, status), "application/json")
             return
         self._send(404, b"Not found", "text/plain; charset=utf-8")
+
+    def do_DELETE(self) -> None:
+        path = urlparse(self.path).path
+        if not _same_origin(self):
+            self._send(*_json_bytes({"detail": "Origin was rejected."}, 403), "application/json")
+            return
+        if not self._require_auth():
+            return
+        firm_delete = re.fullmatch(r"/api/firms/([0-9a-f-]{36})", path, re.IGNORECASE)
+        if firm_delete:
+            try:
+                result = _delete_firm(firm_delete.group(1))
+                self._send(*_json_bytes(result), "application/json")
+            except ValueError as exc:
+                self._send(*_json_bytes({"detail": str(exc)}, 422), "application/json")
+            except RuntimeError as exc:
+                detail = str(exc)
+                if detail.startswith("ERROR:"):
+                    detail = detail.split(":", 1)[1].strip()
+                self._send(*_json_bytes({"detail": detail}, 422), "application/json")
+            return
+        match = re.fullmatch(
+            r"/api/portfolios/([0-9a-f-]{36})/advisors/([0-9a-f-]{36})",
+            path,
+            re.IGNORECASE,
+        )
+        if not match:
+            self._send(404, b"Not found", "text/plain; charset=utf-8")
+            return
+        query = parse_qs(urlparse(self.path).query)
+        firm_id = (query.get("firm_id") or [None])[0]
+        try:
+            result = _remove_portfolio_advisor(match.group(1), match.group(2), firm_id)
+            self._send(*_json_bytes(result), "application/json")
+        except ValueError as exc:
+            self._send(*_json_bytes({"detail": str(exc)}, 422), "application/json")
+        except RuntimeError as exc:
+            detail = str(exc)
+            if detail.startswith("ERROR:"):
+                detail = detail.split(":", 1)[1].strip()
+            self._send(*_json_bytes({"detail": detail}, 422), "application/json")
 
     def _login(self) -> None:
         length = int(self.headers.get("Content-Length", "0") or "0")

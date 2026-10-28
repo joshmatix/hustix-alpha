@@ -1,0 +1,40 @@
+{
+  "firm": "Wealth Advisors Group",
+  "plan_code": "pro_plus",
+  "portfolios": [
+    { "portfolio_id": 1, "portfolio_name": "Lazy Portfolio" },
+    { "portfolio_id": 2, "portfolio_name": "The 60/40 Portfolio" },
+    { "portfolio_id": 3, "portfolio_name": "The All Weather Portfolio" },
+    { "portfolio_id": 4, "portfolio_name": "The Permanent Portfolio" },
+    { "portfolio_id": 5, "portfolio_name": "The Bogleheads Three-Fund Portfolio" },
+    { "portfolio_id": 6, "portfolio_name": "The Large-Cap Blue-Chip Portfolio" }
+  ],
+  "advisors": [
+    {
+      "advisor_name": "Alaina Brooks",
+      "advisor_email": "alaina.brooks@example.com",
+      "portfolio_ids": [1, 2, 3]
+    },
+    {
+      "advisor_name": "Eleanor Vance",
+      "advisor_email": "eleanor.vance@example.com",
+      "portfolio_ids": [4]
+    },
+    {
+      "advisor_name": "Marcus Sterling",
+      "advisor_email": "marcus.sterling@example.com",
+      "portfolio_ids": [5, 6]
+    },
+    {
+      "advisor_name": "Sarah Jenkins",
+      "advisor_email": "sarah.jenkins@example.com",
+      "role": "owner",
+      "portfolio_ids": []
+    },
+    {
+      "advisor_name": "David Cho",
+      "advisor_email": "david.cho@example.com",
+      "portfolio_ids": []
+    }
+  ]
+}

@@ -26,21 +26,96 @@ The console listens on port **3090**. It stays up when the site and the API are 
 
 ## Two admin screens
 
-Port 3090 starts and stops the frontend and the backend, lists firms on the main screen, opens a **Firm console** overlay for the three-column view (firm list, firm details, advisor/portfolio map), loads new firms with advisors and portfolio assignments, enables or disables firms and advisors, and edits plan caps.
+Port 3090 starts and stops the frontend and the backend, lists firms on the main screen, opens a **Firm console** overlay for the three-column view (firm list, firm details, advisor/portfolio map), loads new firms from JSON (or CSV), enables or disables firms and advisors, assigns advisors to portfolios (one lead per portfolio), and edits plan caps.
 
-### Load firm CSV
+Disabling a firm disables all of its advisors; re-enabling a firm does not re-enable advisors. Logs are `admin/logs/frontend.log` and `admin/logs/backend.log`.
 
-On **Load firm**, use **Choose CSV…** with a file that has a `record_type` column:
+http://127.0.0.1:3000/admin manages advisors: access, subscription, discounts, the agreement version they accepted, and contact details. It also edits plan caps. The frontend must be on port 3000 and the API on port 8000. That screen does not start those processes.
+
+### Load firm JSON (preferred)
+
+On **Load firm**, use **Choose JSON…**. Example: `admin/examples/wealth-advisors-group.load-firm.json`.
+
+```json
+{
+  "firm": "Wealth Advisors Group",
+  "plan_code": "pro_plus",
+  "portfolios": [
+    { "portfolio_id": 1, "portfolio_name": "Lazy Portfolio" }
+  ],
+  "advisors": [
+    {
+      "advisor_name": "Alaina Brooks",
+      "advisor_email": "alaina@example.com",
+      "portfolio_ids": [1, 2, 3]
+    }
+  ]
+}
+```
+
+Rules:
+- `advisor_email` is required. If the address is not in auth yet, a **pending invite** is stored and a **firm invite** email is sent via app SMTP (`backend/.env` → Resend when configured).
+- After signup with that email, `claim_firm_invites` attaches firm membership and portfolio assignments automatically (no solo shadow firm).
+
+### Two different emails (invite vs confirm)
+
+| Message | Who sends it | Where it shows up locally | Purpose |
+| --- | --- | --- | --- |
+| **You're invited to … on Hustix Macro** | Admin console → [`backend/mailer.py`](../backend/mailer.py) (Resend SMTP) | Resend dashboard | Link to `/signup?email=…` |
+| **Confirm your email for Hustix Macro** | Supabase Auth | [Mailpit](http://127.0.0.1:54324) (not Resend) | Required before password login for self-serve signups |
+
+**Invited advisors** (pending row in `firm_advisor_invites`): after migration `invite_signup_auto_confirm.sql`, signup with that email is **auto-confirmed**—no second mail step.
+
+**Self-serve signup** (no invite): the user must open the Supabase confirmation link before login works.
+
+**If login says “Email not confirmed”**
+
+- **Local:** open http://127.0.0.1:54324 → newest **Confirm your email** message → confirm link → `/auth/callback`.
+- **Hosted:** Supabase Dashboard → **Authentication → Users** → confirm user, or configure **Project Settings → Authentication → SMTP** (Resend) so confirmation mail reaches Gmail. App contact/invite SMTP on Vercel does not replace Auth SMTP.
+
+Apply the auto-confirm migration:
+
+```bash
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/invite_signup_auto_confirm.sql
+```
+- First advisor becomes firm owner unless someone has `"role": "owner"`.
+- Portfolio shells only: account numbers are auto-generated. **No default asset mix**—`asset_allocation` stays null until holdings CSV upload or you set `asset_allocation` in JSON. Upload holdings on the site when ready.
+- First advisor listed for a portfolio is the lead unless `"lead_portfolio_ids"` is set on an advisor.
+
+### Load firm CSV (legacy)
 
 | record_type | Use these columns |
 | --- | --- |
 | `firm` | `firm_name`, `plan_code` (optional, default `pro_plus`) |
 | `portfolio` | `portfolio_id`, `name`, `client_master_id`, `sub_account`, `portfolio_value` (optional) |
-| `advisor` | `full_name`, `email`, `role` (`owner` or `advisor`), `portfolio_ids` (e.g. `1,2,3` matching `portfolio_id`) |
+| `advisor` | `full_name`, `email`, `role` (`owner` or `advisor`), `portfolio_ids` (e.g. `1,2,3`) |
 
-Advisors must already exist in auth (sign up first). Replace placeholder emails and account ids in `admin/examples/wealth-advisors-group.load-firm.csv` before importing. Disabling a firm disables all of its advisors; re-enabling a firm does not re-enable advisors. Logs are `admin/logs/frontend.log` and `admin/logs/backend.log`.
+### Firm console ops
 
-http://127.0.0.1:3000/admin manages advisors: access, subscription, discounts, the agreement version they accepted, and contact details. It also edits plan caps. The frontend must be on port 3000 and the API on port 8000. That screen does not start those processes.
+| Action | Where |
+| --- | --- |
+| Enable / disable firm | Firm detail pane |
+| Delete firm | Firm detail pane → **Delete firm** (type firm name to confirm) |
+| Add advisor | By advisors → **Add advisor** |
+| Enable / disable advisor | By advisors |
+| Assign advisor to portfolio | By portfolios → **Assign** |
+| Set lead advisor | By portfolios → **Set lead** |
+| Remove advisor from portfolio | By portfolios → **Remove** |
+
+Apply local DB migrations when needed:
+
+```bash
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/portfolio_advisor_lead.sql
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/firm_advisor_invites.sql
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/admin_load_firm_invites.sql
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/admin_delete_firm.sql
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/invite_signup_auto_confirm.sql
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/invite_signup_auto_confirm_after.sql
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/portfolio_allocation_null_default.sql
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/holdings_classification_source.sql
+```
+
+**Holdings CSV asset class:** firms default to **CSV** (asset_class from the file). In the firm console or Profile → Holdings import, set **Tiingo (authoritative)** so uploads classify ETFs via Tiingo (`MARKET_DATA_PROVIDER=tiingo` on the API).
 
 ## Start the site without the console
 
