@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { ensureProfile } from '@/lib/ensureProfile';
 import { acceptAgreement, fetchAgreement, hasAcceptedCurrentAgreement, type AgreementDocument } from '@/lib/agreement';
@@ -13,7 +13,7 @@ import AgreementScroll from '@/components/auth/AgreementScroll';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function SignupPage() {
+function SignupPageContent() {
   const [fullName, setFullName] = useState('');
   const [firmName, setFirmName] = useState('');
   const [email, setEmail] = useState('');
@@ -517,5 +517,19 @@ export default function SignupPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+          <p className="text-sm text-slate-400">Loading signup...</p>
+        </main>
+      }
+    >
+      <SignupPageContent />
+    </Suspense>
   );
 }
