@@ -430,6 +430,9 @@ function SignupPageContent() {
               className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition read-only:text-slate-400"
               placeholder="advisor@example.com"
             />
+            <p className="mt-1.5 text-xs text-slate-500">
+              Use an email for this firm only. To work with another firm on Hustix Macro, sign up again with a different address.
+            </p>
           </div>
 
           {oauthUserId === null && (

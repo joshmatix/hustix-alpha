@@ -55,6 +55,12 @@ Or paste migration files in the Supabase SQL Editor in your usual order.
 
 ## Two admin screens
 
+### Firm tenancy (product policy)
+
+Hustix Macro’s relationship is with the **firm** (subscription, portfolios, firm enable/disable, load-firm JSON)—not with individual advisors in their personal capacity.
+
+Each advisor **sign-in email** belongs to **one** firm on the service. There is no firm switcher on a single login. If the same person works with two firms, use **two email addresses** and two accounts (for example `jane@firm-a.com` and `jane@firm-b.com`). When loading a firm from JSON, each `advisor_email` should be unique to that firm; see **Load firm JSON** below.
+
 Port 3090 starts and stops the frontend and the backend, lists firms on the main screen, opens a **Firm console** overlay for the three-column view (firm list, firm details, advisor/portfolio map), loads new firms from JSON (or CSV), enables or disables firms and advisors, assigns advisors to portfolios (one lead per portfolio), and edits plan caps.
 
 Disabling a firm disables all of its advisors; re-enabling a firm does not re-enable advisors. Logs are `admin/logs/frontend.log` and `admin/logs/backend.log`.
@@ -142,7 +148,9 @@ docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/
 docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/invite_signup_auto_confirm_after.sql
 docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/portfolio_allocation_null_default.sql
 docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/holdings_classification_source.sql
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/firm_disabled.sql
 docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/admin_firm_read.sql
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/user_agreement_firm_tenancy.sql
 ```
 
 **Holdings CSV asset class:** firms default to **CSV** (asset_class from the file). In the firm console or Profile → Holdings import, set **Tiingo (authoritative)** so uploads classify ETFs via Tiingo (`MARKET_DATA_PROVIDER=tiingo` on the API).

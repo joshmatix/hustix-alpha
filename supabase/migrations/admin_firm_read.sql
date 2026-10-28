@@ -1,4 +1,8 @@
 -- Hosted admin: list firms and read firm detail (mirrors admin/server.py).
+-- Firm enable/disable uses firms.disabled_at (full behavior in firm_disabled.sql).
+
+ALTER TABLE public.firms
+  ADD COLUMN IF NOT EXISTS disabled_at TIMESTAMP WITH TIME ZONE;
 
 CREATE OR REPLACE FUNCTION public.admin_firms_list()
 RETURNS json
@@ -155,3 +159,44 @@ REVOKE ALL ON FUNCTION public.admin_firms_list() FROM PUBLIC, anon, authenticate
 REVOKE ALL ON FUNCTION public.admin_firm_detail(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_firms_list() TO postgres, service_role;
 GRANT EXECUTE ON FUNCTION public.admin_firm_detail(uuid) TO postgres, service_role;
+
+CREATE OR REPLACE FUNCTION public.admin_set_firm_access(target_firm UUID, enabled BOOLEAN)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.firms WHERE id = target_firm) THEN
+    RAISE EXCEPTION 'Unknown firm';
+  END IF;
+
+  UPDATE public.firms
+  SET disabled_at = CASE
+    WHEN enabled THEN NULL
+    ELSE timezone('utc'::text, now())
+  END
+  WHERE id = target_firm;
+
+  IF NOT enabled THEN
+    UPDATE public.profiles AS profile
+    SET disabled_at = timezone('utc'::text, now())
+    FROM public.firm_members AS member
+    WHERE member.firm_id = target_firm
+      AND member.user_id = profile.id
+      AND profile.disabled_at IS NULL;
+
+    UPDATE auth.users AS account_user
+    SET banned_until = timezone('utc'::text, now()) + interval '100 years'
+    FROM public.firm_members AS member
+    WHERE member.firm_id = target_firm
+      AND member.user_id = account_user.id;
+  END IF;
+END;
+$$;
+
+ALTER FUNCTION public.admin_set_firm_access(UUID, BOOLEAN) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.admin_set_firm_access(UUID, BOOLEAN) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_set_firm_access(UUID, BOOLEAN) TO service_role, postgres;
+
+NOTIFY pgrst, 'reload schema';

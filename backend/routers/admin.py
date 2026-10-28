@@ -365,7 +365,10 @@ def firm_access(body: FirmAccessBody, request: Request):
             {"target_firm": body.firm_id, "enabled": body.enabled},
         ).execute()
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        detail = str(exc)
+        if "admin_set_firm_access" in detail and "PGRST202" in detail:
+            detail = "Run supabase/migrations/firm_disabled.sql or re-run admin_firm_read.sql on this database."
+        raise HTTPException(status_code=422, detail=detail) from exc
     return {"ok": True}
 
 

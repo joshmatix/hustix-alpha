@@ -16,6 +16,8 @@ Open http://127.0.0.1:8000/docs for OpenAPI.
 
 The admin console on port **3090** can start/stop this process; see [admin/README.md](../admin/README.md) for ports, Supabase, and firm load workflows.
 
+**Firm tenancy:** Subscriptions, portfolio limits, and RLS-scoped data are tied to the **firm**, not to individual advisors. One login email maps to one firm; multi-firm advisors need separate email addresses. See [admin/README.md — Firm tenancy](../admin/README.md#firm-tenancy-product-policy).
+
 ## Environment
 
 Copy [`.env.example`](.env.example) to `.env`. Common variables:
