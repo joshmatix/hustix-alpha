@@ -12,7 +12,36 @@ Open http://127.0.0.1:3090
 
 The password is `ADMIN_PASSWORD` in `admin/.env`. The first start writes that file when it is missing. The site admin at http://127.0.0.1:3000/admin uses the same value. On the hosted API, set `ADMIN_PASSWORD` in the service environment.
 
-The console listens on port **3090**. It stays up when the site and the API are stopped, so those processes can be started from its Services section.
+The console listens on port **3090**. It stays up when the site and the API are stopped, so those processes can be started from its Services section (local Docker Postgres only).
+
+## Cloud database from your laptop (:3090)
+
+To run the full firm console (portfolio map, delete firm, raw SQL parity) against **hosted Supabase Postgres** without exposing port 3090 on the public site:
+
+1. In Supabase Dashboard → **Database** → **Connection string**, copy the URI (pooler port **6543** or direct **5432**). Use the database password from project settings.
+2. Add to `admin/.env` (gitignored), not committed:
+
+   ```bash
+   ADMIN_DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+   ```
+
+3. Start the console as usual: `python3 admin/server.py`. The UI shows **Connected to hosted database** and hides **Services** (start/stop only applies to local dev).
+4. Align the app when testing end-to-end against that data: `backend/.env` must use the **same** hosted `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and anon key—not `127.0.0.1:54321`.
+
+**Security**
+
+- Treat `ADMIN_DATABASE_URL` like root DB access. Never commit it or put it on Vercel.
+- Prefer the pooler with SSL (`PGSSLMODE=require` is the default when using the URL mode).
+- Use Supabase **network restrictions** / IP allowlisting on the project when available.
+- Use the same `ADMIN_PASSWORD` as production admin; anyone with the password and the URL can change all data.
+
+Apply hosted migrations with the same URL when needed:
+
+```bash
+psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/admin_firm_read.sql
+```
+
+Or paste migration files in the Supabase SQL Editor in your usual order.
 
 ## Ports
 
@@ -30,7 +59,7 @@ Port 3090 starts and stops the frontend and the backend, lists firms on the main
 
 Disabling a firm disables all of its advisors; re-enabling a firm does not re-enable advisors. Logs are `admin/logs/frontend.log` and `admin/logs/backend.log`.
 
-http://127.0.0.1:3000/admin manages advisors: access, subscription, discounts, the agreement version they accepted, and contact details. It also edits plan caps. The frontend must be on port 3000 and the API on port 8000. That screen does not start those processes.
+http://127.0.0.1:3000/admin manages advisors and **hosted firm tasks** (list, detail, load JSON, enable/disable, holdings classification source). Portfolio assign, delete firm, and the three-column firm console stay on local **:3090** with `ADMIN_DATABASE_URL` for cloud data. The frontend must be on port 3000 and the API on port 8000. That screen does not start those processes.
 
 ### Load firm JSON (preferred)
 
@@ -113,6 +142,7 @@ docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/
 docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/invite_signup_auto_confirm_after.sql
 docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/portfolio_allocation_null_default.sql
 docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/holdings_classification_source.sql
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/admin_firm_read.sql
 ```
 
 **Holdings CSV asset class:** firms default to **CSV** (asset_class from the file). In the firm console or Profile → Holdings import, set **Tiingo (authoritative)** so uploads classify ETFs via Tiingo (`MARKET_DATA_PROVIDER=tiingo` on the API).

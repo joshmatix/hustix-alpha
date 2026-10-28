@@ -243,15 +243,16 @@
     </section>
 
     <section id="app" class="hidden">
+      <p id="cloud-db-banner" class="banner ok hidden">Connected to hosted database. Services are hidden because start/stop only applies to local dev.</p>
       <div style="display:flex;justify-content:space-between;align-items:end;gap:16px;">
         <div>
           <h1>Admin</h1>
-          <p>Port <code>3090</code>. Frontend is <code>3000</code>. Backend is <code>8000</code>.</p>
+          <p id="app-subtitle">Port <code>3090</code>. Frontend is <code>3000</code>. Backend is <code>8000</code>.</p>
         </div>
         <button id="sign-out" class="secondary" type="button">Sign out</button>
       </div>
 
-      <section class="card">
+      <section id="services-section" class="card">
         <h2>Services</h2>
         <div id="services"></div>
         <p id="service-message" class="banner"></p>
@@ -469,6 +470,8 @@
     const plansBody = document.querySelector('#plans');
     const serviceMessage = document.querySelector('#service-message');
     const limitsMessage = document.querySelector('#limits-message');
+    const cloudDbBanner = document.querySelector('#cloud-db-banner');
+    const servicesSection = document.querySelector('#services-section');
 
     function money(cents) {
       if (cents == null) return 'Not set';
@@ -1260,9 +1263,20 @@
       }
     }
 
+    function applyCloudMode(cloudMode) {
+      const hosted = Boolean(cloudMode);
+      cloudDbBanner.classList.toggle('hidden', !hosted);
+      servicesSection.classList.toggle('hidden', hosted);
+      if (hosted) {
+        services.replaceChildren();
+        serviceMessage.textContent = '';
+      }
+    }
+
     async function loadState() {
       const state = await request('/api/state');
-      renderServices(state.services);
+      applyCloudMode(state.cloud_mode);
+      if (!state.cloud_mode) renderServices(state.services);
       renderFirms(state.firms || []);
       renderAccounts(state.accounts || []);
       renderPlans(state.plans);

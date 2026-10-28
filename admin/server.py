@@ -69,6 +69,15 @@ def _load_env_file(path: Path) -> None:
 
 
 _load_env_file(BACKEND_DIR / ".env")
+_load_env_file(ENV_PATH)
+
+
+def _admin_database_url() -> str:
+    return (os.getenv("ADMIN_DATABASE_URL") or "").strip()
+
+
+def _cloud_database_mode() -> bool:
+    return bool(_admin_database_url())
 
 
 def _load_password() -> str:
@@ -255,17 +264,30 @@ def _start_service(name: str) -> dict:
 
 
 def _psql(sql: str) -> str:
-    completed = subprocess.run(
-        [
-            "docker", "exec", "-i", DB_CONTAINER,
-            "psql", "-U", "postgres", "-d", "postgres",
-            "-v", "ON_ERROR_STOP=1", "-t", "-A",
-        ],
-        input=sql,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    db_url = _admin_database_url()
+    if db_url:
+        env = os.environ.copy()
+        env.setdefault("PGSSLMODE", "require")
+        completed = subprocess.run(
+            ["psql", db_url, "-v", "ON_ERROR_STOP=1", "-t", "-A"],
+            input=sql,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=env,
+        )
+    else:
+        completed = subprocess.run(
+            [
+                "docker", "exec", "-i", DB_CONTAINER,
+                "psql", "-U", "postgres", "-d", "postgres",
+                "-v", "ON_ERROR_STOP=1", "-t", "-A",
+            ],
+            input=sql,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or "Database update failed.").strip()
         lines = [line.strip() for line in detail.splitlines() if line.strip()]
@@ -855,6 +877,7 @@ class Handler(BaseHTTPRequestHandler):
                     "plans": _read_plans(),
                     "firms": _read_firms(),
                     "accounts": _read_accounts(),
+                    "cloud_mode": _cloud_database_mode(),
                     **_service_status(),
                 }
                 self._send(*_json_bytes(payload), "application/json")
@@ -963,6 +986,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(*_json_bytes({"plans": plans}), "application/json")
                 return
             if path == "/api/service":
+                if _cloud_database_mode():
+                    raise ValueError("Services are disabled when ADMIN_DATABASE_URL is set.")
                 if not isinstance(payload, dict):
                     raise ValueError("Invalid request.")
                 name = payload.get("name")
