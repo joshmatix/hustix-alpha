@@ -71,6 +71,19 @@ def asset_bucket(asset_class: str) -> str:
     text = str(asset_class).strip().lower().replace(",", " ")
     if text in CLASS_MAP:
         return CLASS_MAP[text]
+    bond_hints = (
+        "bond",
+        "treasury",
+        "fixed income",
+        "municipal",
+        "aggregate bond",
+        "total bond",
+        "tips",
+        "mortgage",
+        "note due",
+    )
+    if any(hint in text for hint in bond_hints):
+        return "Bonds"
     for word in text.split():
         if word in CLASS_MAP:
             return CLASS_MAP[word]

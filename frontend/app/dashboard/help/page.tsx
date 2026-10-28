@@ -9,7 +9,11 @@ const columns = [
   ['ticker', 'Yes', 'Exchange symbol. BRK.B is stored as BRK-B.'],
   ['asset_class', 'Yes', 'Slice of the portfolio mix. See the class labels below.'],
   ['quantity', 'Yes', 'Number of shares or units, not a dollar amount.'],
-  ['current_price', 'Yes', 'Price per share, in the portfolio currency.'],
+  [
+    'current_price',
+    'Yes*',
+    'Price per share. Aliases: Price_Est, Share Price, market_value ÷ quantity. Listed tickers (including bond/commodity ETFs) can omit price and the upload uses the last market close; cash still needs a price or market_value.',
+  ],
   ['asset_name', 'No', 'Display name. The ticker is used when this is blank.'],
   ['duration_years', 'No', 'Bond duration used for rate shocks. Use 0 for everything else.'],
   ['beta', 'No', 'Market beta used in the factor table. Defaults to 1 when omitted.'],
@@ -69,6 +73,14 @@ export default function HelpPage() {
           holding already in that portfolio.
         </p>
         <p>
+          Firm owners choose how <strong className="font-semibold text-slate-200">asset class</strong>{' '}
+          is set under Profile → Holdings import. In <strong className="font-semibold text-slate-200">CSV</strong>{' '}
+          mode (default), each row needs an asset_class column (or a broker export that supplies it).
+          In <strong className="font-semibold text-slate-200">Tiingo (authoritative)</strong> mode, the
+          server classifies each ticker (for example TLT → Bond, U.S., Long-Term Treasury) and ignores
+          asset_class in the file. Authoritative mode requires Tiingo as the API market data provider.
+        </p>
+        <p>
           A positions export from Charles Schwab, Fidelity, LPL ClientWorks, BNY Mellon, or
           Raymond James can be uploaded as downloaded. Account titles, totals, and disclaimer
           rows are skipped. Cash and money-market rows are stored as cash.
@@ -125,7 +137,18 @@ export default function HelpPage() {
           </table>
         </div>
 
+        <p>
+          You can use <span className="font-mono text-indigo-200">market_value</span> instead of{' '}
+          <span className="font-mono text-indigo-200">current_price</span>; price is computed as market
+          value divided by quantity. Broker exports (Symbol, Quantity, Market Value, etc.) are
+          accepted too.
+        </p>
         <p>Any other column, such as currency, is ignored.</p>
+        <p>
+          A new portfolio has no mix on the dashboard until you upload a holdings CSV (or an admin
+          load includes an explicit <span className="font-mono text-indigo-200">asset_allocation</span>{' '}
+          in JSON). The first successful upload sets portfolio value and allocation.
+        </p>
         <p>
           Market value is quantity times price. For cash, set current_price to 1 and put the dollar
           amount in quantity.

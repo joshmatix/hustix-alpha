@@ -51,6 +51,8 @@ def test_class_buckets_follow_the_label_before_the_comma():
     assert _allocation_bucket("Bond") == "bonds"
     assert _allocation_bucket("Commodity") == "realAssets"
     assert _allocation_bucket("Gold") == "realAssets"
+    assert _allocation_bucket("Long-Term Treasury") == "bonds"
+    assert _allocation_bucket("Bond, U.S., Long-Term Treasury") == "bonds"
 
 
 SCHWAB = """Positions for account Individual as of 09:13 PM ET, 02/04/2023
@@ -173,6 +175,40 @@ VTI,Equity,10,280.50
     assert row["current_price"] == "280.50"
 
 
+def test_price_est_maps_to_current_price():
+    exported = """ticker,asset_class,quantity,Price_Est
+TLT,Bond,100,95.25
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert row["ticker"] == "TLT"
+    assert row["current_price"] == "95.25"
+
+
+def test_bond_without_price_column_uses_placeholder():
+    exported = """ticker,asset_class,quantity
+TLT,Bond,100
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert row["current_price"] == "0"
+
+
+def test_equity_app_file_without_price_column_uses_placeholder():
+    exported = """ticker,asset_class,quantity
+VTI,Equity,10
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert row["ticker"] == "VTI"
+    assert row["current_price"] == "0"
+
+
+def test_app_file_market_value_derives_price():
+    exported = """ticker,asset_class,quantity,market_value
+TLT,Bond,100,9500
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert row["current_price"] == "95"
+
+
 def test_share_price_fills_current_price_on_the_app_file():
     exported = """ticker,asset_class,quantity,Share Price
 VTI,Equity,10,280.50
@@ -193,6 +229,15 @@ VTI,10,2800,ETF
     assert row["asset_class"] == "Equity"
     assert row["quantity"] == "10"
     assert row["current_price"] == "280"
+
+
+def test_app_csv_allows_missing_asset_class_column():
+    exported = """ticker,quantity,current_price
+VTI,10,280
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert row["ticker"] == "VTI"
+    assert row.get("asset_class", "") == ""
 
 
 def test_unrecognized_csv_names_the_accepted_exports():
