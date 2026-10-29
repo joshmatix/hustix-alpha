@@ -14,9 +14,11 @@ import json
 import os
 import re
 import secrets
+import shutil
 import signal
 import socket
 import subprocess
+import sys
 import time
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -263,13 +265,49 @@ def _start_service(name: str) -> dict:
     }
 
 
+def _docker_db_running() -> bool:
+    try:
+        subprocess.run(
+            ["docker", "inspect", DB_CONTAINER],
+            capture_output=True,
+            check=True,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
+def _psql_argv(db_url: str) -> list[str]:
+    host_psql = shutil.which("psql")
+    if host_psql:
+        return [host_psql, db_url, "-v", "ON_ERROR_STOP=1", "-t", "-A"]
+    if _docker_db_running():
+        return [
+            "docker",
+            "exec",
+            "-i",
+            DB_CONTAINER,
+            "psql",
+            db_url,
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-t",
+            "-A",
+        ]
+    raise RuntimeError(
+        "psql is not installed. For ADMIN_DATABASE_URL, install postgresql-client "
+        "(sudo apt install postgresql-client) or start local Supabase Docker so "
+        f"this console can run psql inside {DB_CONTAINER}."
+    )
+
+
 def _psql(sql: str) -> str:
     db_url = _admin_database_url()
     if db_url:
         env = os.environ.copy()
         env.setdefault("PGSSLMODE", "require")
         completed = subprocess.run(
-            ["psql", db_url, "-v", "ON_ERROR_STOP=1", "-t", "-A"],
+            _psql_argv(db_url),
             input=sql,
             text=True,
             capture_output=True,
@@ -300,6 +338,40 @@ def _psql(sql: str) -> str:
             raise RuntimeError(message)
         raise RuntimeError(lines[-1] if lines else "Database update failed.")
     return completed.stdout.strip()
+
+
+def _database_host() -> str:
+    url = _admin_database_url()
+    if url:
+        return urlparse(url).hostname or "hosted"
+    return DB_CONTAINER
+
+
+def _read_firm_count() -> int:
+    raw = _psql("SELECT count(*)::int FROM public.firms;")
+    return int((raw or "0").strip() or 0)
+
+
+def _database_status(firm_count: int | None = None) -> dict:
+    hosted = _cloud_database_mode()
+    return {
+        "mode": "hosted" if hosted else "local",
+        "host": _database_host(),
+        "firm_count": firm_count,
+        "error": None,
+    }
+
+
+def _verify_database_on_startup() -> None:
+    hosted = _cloud_database_mode()
+    label = "hosted" if hosted else "local Docker"
+    print(f"Database target: {label} ({_database_host()})")
+    try:
+        count = _read_firm_count()
+    except RuntimeError as exc:
+        print(f"Could not connect to the database: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    print(f"Firms in database: {count}")
 
 
 def _sql_limit(value: object) -> str:
@@ -873,11 +945,13 @@ class Handler(BaseHTTPRequestHandler):
             if not self._require_auth():
                 return
             try:
+                firms = _read_firms()
                 payload = {
                     "plans": _read_plans(),
-                    "firms": _read_firms(),
+                    "firms": firms,
                     "accounts": _read_accounts(),
                     "cloud_mode": _cloud_database_mode(),
+                    "database": _database_status(len(firms)),
                     **_service_status(),
                 }
                 self._send(*_json_bytes(payload), "application/json")
@@ -1079,6 +1153,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+    _verify_database_on_startup()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Admin console on http://{HOST}:{PORT}")
     print("Frontend port 3000. Backend port 8000.")

@@ -43,6 +43,32 @@ psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/admin_firm_
 
 Or paste migration files in the Supabase SQL Editor in your usual order.
 
+### Troubleshooting
+
+**Connection refused on http://127.0.0.1:3090**
+
+Start the console and leave it running: `python3 admin/server.py`. Confirm with `ss -tln | grep 3090`. Do not kill the admin PID unless you intend to stop the console.
+
+**“Cloud” is not a different URL**
+
+Hosted data on the full firm console still uses **http://127.0.0.1:3090** with `ADMIN_DATABASE_URL` in `admin/.env`. For browser-only ops without :3090, use **https://hustix.com/admin** (subset: firm list, load JSON, enable/disable, classification—not delete firm or portfolio map).
+
+**Empty firm list on :3090 while hustix.com/admin shows firms**
+
+1. Restart `admin/server.py` after any change to `admin/.env`.
+2. On startup the process prints `Database target:` and `Firms in database:`; if it exits, fix `ADMIN_DATABASE_URL` before using the UI.
+3. **WSL without `psql`:** run `sudo apt install postgresql-client`, or start local Supabase Docker—the console runs `psql` inside `supabase_db_my-macro-app` to reach a hosted `ADMIN_DATABASE_URL`.
+4. Use the **real** database password in the URI—not square brackets from Supabase’s `[YOUR-PASSWORD]` placeholder. URL-encode special characters in the password (e.g. `[` → `%5B`, `]` → `%5D`).
+5. Verify the same Supabase project as production (pooler host / project ref must match `SUPABASE_URL`).
+6. From the repo root:
+   ```bash
+   set -a && source admin/.env && set +a
+   psql "$ADMIN_DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM public.firms;"
+   ```
+   (Use host `psql` or `docker exec -i supabase_db_my-macro-app psql "$ADMIN_DATABASE_URL" -c "..."` if the client is not installed on WSL.)
+   The count should match hustix.com/admin.
+7. In the browser, DevTools → Network → `/api/state` after sign-in: check `cloud_mode`, `database.firm_count`, and `firms`. A red message under **Firms** shows load errors that used to fail silently.
+
 ## Ports
 
 | Service | Port | Address |
@@ -61,13 +87,13 @@ Hustix Macro’s relationship is with the **firm** (subscription, portfolios, fi
 
 Each advisor **sign-in email** belongs to **one** firm on the service. There is no firm switcher on a single login. If the same person works with two firms, use **two email addresses** and two accounts (for example `jane@firm-a.com` and `jane@firm-b.com`). When loading a firm from JSON, each `advisor_email` should be unique to that firm; see **Load firm JSON** below.
 
-Port 3090 starts and stops the frontend and the backend, lists firms on the main screen, opens a **Firm console** overlay for the three-column view (firm list, firm details, advisor/portfolio map), loads new firms from JSON (or CSV), enables or disables firms and advisors, assigns advisors to portfolios (one lead per portfolio), and edits plan caps.
+Port 3090 starts and stops the frontend and the backend, lists firms on the main screen, opens a **Firm console** overlay for the three-column view (firm list, firm details, advisor/portfolio map), loads new firms from JSON, enables or disables firms and advisors, assigns advisors to portfolios (one lead per portfolio), and edits plan caps.
 
 Disabling a firm disables all of its advisors; re-enabling a firm does not re-enable advisors. Logs are `admin/logs/frontend.log` and `admin/logs/backend.log`.
 
 http://127.0.0.1:3000/admin manages advisors and **hosted firm tasks** (list, detail, load JSON, enable/disable, holdings classification source). Portfolio assign, delete firm, and the three-column firm console stay on local **:3090** with `ADMIN_DATABASE_URL` for cloud data. The frontend must be on port 3000 and the API on port 8000. That screen does not start those processes.
 
-### Load firm JSON (preferred)
+### Load firm JSON
 
 On **Load firm**, use **Choose JSON…**. Example: `admin/examples/wealth-advisors-group.load-firm.json`.
 
@@ -116,14 +142,6 @@ docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/
 - First advisor becomes firm owner unless someone has `"role": "owner"`.
 - Portfolio shells only: account numbers are auto-generated. **No default asset mix**—`asset_allocation` stays null until holdings CSV upload or you set `asset_allocation` in JSON. Upload holdings on the site when ready.
 - First advisor listed for a portfolio is the lead unless `"lead_portfolio_ids"` is set on an advisor.
-
-### Load firm CSV (legacy)
-
-| record_type | Use these columns |
-| --- | --- |
-| `firm` | `firm_name`, `plan_code` (optional, default `pro_plus`) |
-| `portfolio` | `portfolio_id`, `name`, `client_master_id`, `sub_account`, `portfolio_value` (optional) |
-| `advisor` | `full_name`, `email`, `role` (`owner` or `advisor`), `portfolio_ids` (e.g. `1,2,3`) |
 
 ### Firm console ops
 

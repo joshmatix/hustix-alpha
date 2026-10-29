@@ -262,7 +262,7 @@
         <div class="section-head">
           <div>
             <h2>Firms</h2>
-            <p>Summary from the local database. Open the firm console for AUM, access controls, and advisor–portfolio mapping.</p>
+            <p id="firms-summary-blurb">Summary from the local Docker Postgres. Open the firm console for AUM, access controls, and advisor–portfolio mapping.</p>
           </div>
           <div class="firm-console-actions">
             <button type="button" id="open-firm-console">Firm console</button>
@@ -387,8 +387,6 @@
         <div class="row-actions">
           <input type="file" id="load-firm-json-file" accept=".json,application/json" class="hidden" />
           <button type="button" id="pick-load-firm-json">Choose JSON…</button>
-          <input type="file" id="load-firm-csv-file" accept=".csv,text/csv" class="hidden" />
-          <button type="button" class="secondary" id="pick-load-firm-csv">Choose CSV…</button>
         </div>
         <p id="load-firm-import-preview" class="placeholder assign-grid" style="margin-top:10px;"></p>
       </div>
@@ -472,6 +470,7 @@
     const limitsMessage = document.querySelector('#limits-message');
     const cloudDbBanner = document.querySelector('#cloud-db-banner');
     const servicesSection = document.querySelector('#services-section');
+    const firmsSummaryBlurb = document.querySelector('#firms-summary-blurb');
 
     function money(cents) {
       if (cents == null) return 'Not set';
@@ -1263,23 +1262,59 @@
       }
     }
 
-    function applyCloudMode(cloudMode) {
+    function applyCloudMode(cloudMode, database) {
       const hosted = Boolean(cloudMode);
       cloudDbBanner.classList.toggle('hidden', !hosted);
       servicesSection.classList.toggle('hidden', hosted);
       if (hosted) {
         services.replaceChildren();
         serviceMessage.textContent = '';
+        const host = database?.host || 'hosted pooler';
+        const count = database?.firm_count;
+        const countLabel = count == null ? '' : ` · ${count} firm${count === 1 ? '' : 's'}`;
+        cloudDbBanner.textContent =
+          `Connected to hosted database (${host}${countLabel}). Services are hidden because start/stop only applies to local dev.`;
+      }
+      if (firmsSummaryBlurb) {
+        firmsSummaryBlurb.textContent = hosted
+          ? 'Summary from the hosted database. Open the firm console for AUM, access controls, and advisor–portfolio mapping.'
+          : 'Summary from the local Docker Postgres. Open the firm console for AUM, access controls, and advisor–portfolio mapping.';
+      }
+      if (firmsSummaryEmpty) {
+        firmsSummaryEmpty.textContent = hosted
+          ? 'No firms on the hosted database.'
+          : 'No firms in the local database.';
       }
     }
 
+    function showStateLoadError(message) {
+      firmsListMessage.className = 'banner error';
+      firmsListMessage.classList.remove('hidden');
+      firmsListMessage.textContent = message;
+    }
+
+    function clearStateLoadError() {
+      firmsListMessage.classList.add('hidden');
+      firmsListMessage.textContent = '';
+      firmsListMessage.className = 'banner';
+    }
+
     async function loadState() {
-      const state = await request('/api/state');
-      applyCloudMode(state.cloud_mode);
-      if (!state.cloud_mode) renderServices(state.services);
-      renderFirms(state.firms || []);
-      renderAccounts(state.accounts || []);
-      renderPlans(state.plans);
+      clearStateLoadError();
+      try {
+        const state = await request('/api/state');
+        applyCloudMode(state.cloud_mode, state.database);
+        if (!state.cloud_mode) renderServices(state.services);
+        renderFirms(state.firms || []);
+        renderAccounts(state.accounts || []);
+        renderPlans(state.plans);
+        if (state.database?.error) {
+          showStateLoadError(state.database.error);
+        }
+      } catch (error) {
+        showStateLoadError(error.message || 'Could not load the database.');
+        throw error;
+      }
     }
 
     async function changeService(name, action, button) {
@@ -1313,7 +1348,9 @@
           body: JSON.stringify({ password: document.querySelector('#password').value }),
         });
         show(true);
-        await loadState();
+        await loadState().catch((error) => {
+          loginError.textContent = error.message || 'Could not load the database.';
+        });
       } catch (error) {
         loginError.textContent = error.message;
       }
@@ -1387,132 +1424,6 @@
         portfolio_value: '',
         assignments: {},
       };
-    }
-
-    function parseCsv(text) {
-      const rows = [];
-      let row = [];
-      let field = '';
-      let quoted = false;
-      for (let i = 0; i < text.length; i += 1) {
-        const char = text[i];
-        if (quoted) {
-          if (char === '"') {
-            if (text[i + 1] === '"') {
-              field += '"';
-              i += 1;
-            } else {
-              quoted = false;
-            }
-          } else {
-            field += char;
-          }
-        } else if (char === '"') {
-          quoted = true;
-        } else if (char === ',') {
-          row.push(field);
-          field = '';
-        } else if (char === '\n' || char === '\r') {
-          if (char === '\r' && text[i + 1] === '\n') i += 1;
-          row.push(field);
-          field = '';
-          if (row.some((cell) => cell.trim() !== '')) rows.push(row);
-          row = [];
-        } else {
-          field += char;
-        }
-      }
-      row.push(field);
-      if (row.some((cell) => cell.trim() !== '')) rows.push(row);
-      return rows;
-    }
-
-    function importLoadFirmCsv(text) {
-      const table = parseCsv(text.trim());
-      if (table.length < 2) {
-        throw new Error('CSV needs a header row and at least one data row.');
-      }
-      const header = table[0].map((cell) => cell.trim().toLowerCase());
-      const col = (name) => header.indexOf(name);
-      if (col('record_type') < 0) {
-        throw new Error('Missing record_type column.');
-      }
-      const cell = (row, name) => {
-        const index = col(name);
-        return index < 0 ? '' : (row[index] || '').trim();
-      };
-
-      loadAdvisorSeq = 0;
-      loadPortfolioSeq = 0;
-      loadAdvisors = [];
-      loadPortfolios = [];
-      let firmName = '';
-      let planCode = 'pro_plus';
-      const advisorRows = [];
-
-      for (let i = 1; i < table.length; i += 1) {
-        const row = table[i];
-        const type = cell(row, 'record_type').toLowerCase();
-        if (type === 'firm') {
-          firmName = cell(row, 'firm_name') || cell(row, 'name');
-          planCode = cell(row, 'plan_code') || cell(row, 'plan') || planCode;
-        } else if (type === 'portfolio') {
-          const portfolio = newLoadPortfolio();
-          portfolio.import_id = cell(row, 'portfolio_id') || cell(row, 'id');
-          portfolio.name = cell(row, 'name') || cell(row, 'portfolio_name');
-          portfolio.account_number = cell(row, 'client_master_id') || cell(row, 'account_number');
-          portfolio.sub_account_number = cell(row, 'sub_account') || cell(row, 'sub_account_number');
-          portfolio.portfolio_value = cell(row, 'portfolio_value') || '0';
-          loadPortfolios.push(portfolio);
-        } else if (type === 'advisor') {
-          advisorRows.push({
-            full_name: cell(row, 'full_name') || cell(row, 'name'),
-            email: cell(row, 'email'),
-            role: (cell(row, 'role') || 'advisor').toLowerCase(),
-            portfolio_ids: cell(row, 'portfolio_ids') || cell(row, 'portfolio_id') || cell(row, 'portfolioids'),
-          });
-        }
-      }
-
-      if (!firmName) {
-        throw new Error('CSV needs a firm row with firm_name.');
-      }
-      if (!advisorRows.length) {
-        throw new Error('CSV needs at least one advisor row.');
-      }
-
-      for (const row of advisorRows) {
-        const advisor = {
-          id: `adv-${++loadAdvisorSeq}`,
-          email: row.email,
-          full_name: row.full_name,
-          role: row.role === 'owner' ? 'owner' : 'advisor',
-        };
-        loadAdvisors.push(advisor);
-        const idTokens = row.portfolio_ids
-          .split(/[,;|]/)
-          .map((part) => part.trim())
-          .filter(Boolean);
-        for (const token of idTokens) {
-          const portfolio = loadPortfolios.find((item) => item.import_id === token);
-          if (portfolio) portfolio.assignments[advisor.id] = true;
-        }
-      }
-
-      if (!loadAdvisors.some((row) => row.role === 'owner')) {
-        loadAdvisors[0].role = 'owner';
-      }
-
-      pendingJsonPayload = null;
-      if (loadFirmImportPreview) {
-        loadFirmImportPreview.textContent =
-          `CSV loaded: ${firmName} · ${loadAdvisors.length} advisors · ${loadPortfolios.length} portfolios.`;
-      }
-      document.querySelector('#load-firm-name').value = firmName;
-      document.querySelector('#load-firm-plan').value = planCode;
-      loadFirmError.classList.add('hidden');
-      loadFirmError.textContent = '';
-      renderLoadFirmForm();
     }
 
     function resetLoadFirmForm() {
@@ -1820,10 +1731,8 @@
       if (!firmConsoleModal.classList.contains('hidden')) closeFirmConsole();
       else if (!loadFirmModal.classList.contains('hidden')) closeLoadFirmModal();
     });
-    const loadFirmCsvFile = document.querySelector('#load-firm-csv-file');
     const loadFirmJsonFile = document.querySelector('#load-firm-json-file');
     document.querySelector('#pick-load-firm-json').addEventListener('click', () => loadFirmJsonFile.click());
-    document.querySelector('#pick-load-firm-csv').addEventListener('click', () => loadFirmCsvFile.click());
     loadFirmJsonFile.addEventListener('change', () => {
       const file = loadFirmJsonFile.files && loadFirmJsonFile.files[0];
       loadFirmJsonFile.value = '';
@@ -1831,22 +1740,6 @@
       file.text().then((text) => {
         try {
           importLoadFirmJson(text);
-        } catch (error) {
-          loadFirmError.textContent = error.message;
-          loadFirmError.classList.remove('hidden');
-        }
-      }).catch(() => {
-        loadFirmError.textContent = 'Could not read that file.';
-        loadFirmError.classList.remove('hidden');
-      });
-    });
-    loadFirmCsvFile.addEventListener('change', () => {
-      const file = loadFirmCsvFile.files && loadFirmCsvFile.files[0];
-      loadFirmCsvFile.value = '';
-      if (!file) return;
-      file.text().then((text) => {
-        try {
-          importLoadFirmCsv(text);
         } catch (error) {
           loadFirmError.textContent = error.message;
           loadFirmError.classList.remove('hidden');
@@ -1876,7 +1769,11 @@
 
     request('/api/session').then((body) => {
       show(body.signed_in);
-      if (body.signed_in) return loadState();
+      if (body.signed_in) {
+        return loadState().catch((error) => {
+          showStateLoadError(error.message || 'Could not load the database.');
+        });
+      }
     }).catch(() => show(false));
   </script>
 </body>
