@@ -4,13 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { authenticatorDigits, authenticatorStillRequired } from '@/lib/mfa';
 import { tryLocalLoginBypass } from '@/lib/localLoginBypass';
-import {
-  oauthErrorMessage,
-  pathAfterSignIn,
-  registrationStillRequired,
-  startOAuth,
-  type OAuthProvider,
-} from '@/lib/oauth';
+import { oauthErrorMessage, pathAfterSignIn, startOAuth, type OAuthProvider } from '@/lib/oauth';
 import { IDLE_NOTICE_KEY } from '@/lib/sessionIdle';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { useRouter } from 'next/navigation';
@@ -90,12 +84,9 @@ export default function LoginPage() {
       if (cancelled) return;
       const { data } = await supabase.auth.getSession();
       if (!data.session) return;
-      // Incomplete Google/Microsoft signup: clear the session so Sign in can pick
-      // another method instead of bouncing straight back to Create account.
-      if (await registrationStillRequired()) {
-        await supabase.auth.signOut();
-        return;
-      }
+      // Incomplete OAuth signup is cleared only via cancel on Create account
+      // (goToLogin signs out). Auto-routing here must not signOut or Google
+      // return trips that briefly hit /login lose the new session.
       if (await authenticatorStillRequired()) {
         void beginAuthenticator();
         return;

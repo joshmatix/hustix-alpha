@@ -282,12 +282,23 @@ function SignupPageContent() {
     <main className="flex flex-1 flex-col items-center justify-center bg-slate-950 p-6 text-slate-100">
       {/* Back to Home Link */}
       <div className="w-full max-w-3xl mb-6">
-        <Link 
-          href="/" 
-          className="inline-flex items-center text-xs font-medium text-slate-400 hover:text-slate-200 transition"
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => {
+            if (oauthUserId) {
+              void (async () => {
+                await supabase.auth.signOut();
+                router.push('/');
+              })();
+              return;
+            }
+            router.push('/');
+          }}
+          className="inline-flex items-center text-xs font-medium text-slate-400 hover:text-slate-200 transition disabled:opacity-50"
         >
           &larr; Back to Home
-        </Link>
+        </button>
       </div>
 
       {/* Register Card */}
