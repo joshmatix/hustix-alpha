@@ -117,6 +117,12 @@ function SignupPageContent() {
     setLoading(false);
   };
 
+  const goToLogin = async () => {
+    setLoading(true);
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
   const handleOAuth = async (provider: OAuthProvider) => {
     setLoading(true);
     setError(null);
@@ -310,9 +316,14 @@ function SignupPageContent() {
         {notice && (
           <div className="p-3 bg-slate-800/80 border border-slate-700 text-slate-200 text-xs rounded-lg">
             {notice}{' '}
-            <Link href="/login" className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void goToLogin()}
+              className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline disabled:opacity-50"
+            >
               Sign in
-            </Link>
+            </button>
           </div>
         )}
 
@@ -497,10 +508,11 @@ function SignupPageContent() {
           {oauthUserId && (
             <button
               type="button"
-              onClick={() => void startFreshAccount()}
-              className="w-full text-center text-xs font-medium text-slate-400 hover:text-slate-200"
+              disabled={loading}
+              onClick={() => void goToLogin()}
+              className="w-full text-center text-xs font-medium text-slate-400 hover:text-slate-200 disabled:opacity-50"
             >
-              Create an account with another email
+              Cancel and choose another sign-in method
             </button>
           )}
         </form>
@@ -512,9 +524,14 @@ function SignupPageContent() {
           <div className="border-t border-slate-800/80 pt-4 text-center">
             <p className="text-xs text-slate-400">
               Already have an account?{' '}
-              <Link href="/login" className="text-indigo-400 hover:text-indigo-300 font-medium hover:underline">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void goToLogin()}
+                className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline disabled:opacity-50"
+              >
                 Sign in here
-              </Link>
+              </button>
             </p>
           </div>
         )}
