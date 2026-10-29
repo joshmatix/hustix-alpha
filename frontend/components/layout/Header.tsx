@@ -113,15 +113,15 @@ function SessionBadge() {
 
   return (
     <div
-      className={`shrink-0 rounded-lg border px-2.5 py-1 ${
-        warn ? 'border-amber-800/80 bg-amber-950/40 text-right' : 'border-slate-800 bg-slate-950/70 text-left'
+      className={`shrink-0 rounded-lg border px-2.5 py-1 text-left ${
+        warn ? 'border-amber-800/80 bg-amber-950/40' : 'border-slate-800 bg-slate-950/70'
       }`}
       title={warn ? 'Sign out after 15 minutes of inactivity' : 'Time since this sign-in'}
     >
       <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-300">Advisor Suite</p>
       <p
-        className={`mt-0.5 flex items-center gap-1.5 text-[11px] ${
-          warn ? 'justify-end text-amber-400' : 'justify-start text-emerald-400'
+        className={`mt-0.5 flex items-center justify-start gap-1.5 text-[11px] ${
+          warn ? 'text-amber-400' : 'text-emerald-400'
         }`}
       >
         <span
