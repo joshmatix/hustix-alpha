@@ -58,7 +58,7 @@ _sessions: set[str] = set()
 _login_failures: list[float] = []
 
 
-def _load_env_file(path: Path) -> None:
+def _load_env_file(path: Path, *, override: bool = False) -> None:
     if not path.exists():
         return
     for line in path.read_text().splitlines():
@@ -68,12 +68,15 @@ def _load_env_file(path: Path) -> None:
         key, value = stripped.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        if key and key not in os.environ:
+        if not key:
+            continue
+        if override or key not in os.environ:
             os.environ[key] = value
 
 
 _load_env_file(BACKEND_DIR / ".env")
-_load_env_file(ENV_PATH)
+# admin/.env wins for ADMIN_* so cloud URL is not skipped when a blank shell var exists.
+_load_env_file(ENV_PATH, override=True)
 
 
 def _admin_database_url() -> str:
