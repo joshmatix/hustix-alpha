@@ -63,7 +63,7 @@ export async function pathAfterSignIn() {
   }
   // Finish name/firm registration before MFA code entry or agreement.
   if (await registrationStillRequired()) return '/signup';
-  if (await authenticatorStillRequired()) return '/login';
+  if (await authenticatorStillRequired()) return '/login?mfa=1';
   if (!(await hasAcceptedCurrentAgreement())) return '/agreement/accept';
   if (!(await hasVerifiedAuthenticator())) return '/signup';
   return '/dashboard';

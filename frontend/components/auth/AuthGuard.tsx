@@ -80,8 +80,10 @@ export default function AuthGuard({ children, bypass = false }: AuthGuardProps) 
         } = await supabase.auth.getSession();
         if (cancelled) return;
 
-        if (!session || (await authenticatorStillRequired())) {
+        if (!session) {
           router.push('/login');
+        } else if (await authenticatorStillRequired()) {
+          router.push('/login?mfa=1');
         } else if (await accountIsDisabled()) {
           await supabase.auth.signOut();
           router.push('/login?disabled=1');
@@ -114,7 +116,7 @@ export default function AuthGuard({ children, bypass = false }: AuthGuardProps) 
           if (cancelled || bypassRef.current) return;
           if (needsCode) {
             setAuthenticated(false);
-            router.push('/login');
+            router.push('/login?mfa=1');
             return;
           }
           if (await accountIsDisabled()) {

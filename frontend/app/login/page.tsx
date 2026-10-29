@@ -84,11 +84,15 @@ export default function LoginPage() {
       if (cancelled) return;
       const { data } = await supabase.auth.getSession();
       if (!data.session) return;
-      // Incomplete OAuth signup is cleared only via cancel on Create account
-      // (goToLogin signs out). Auto-routing here must not signOut or Google
-      // return trips that briefly hit /login lose the new session.
+      // Mid-MFA sessions only resume when redirected here with ?mfa=1 (right after
+      // password/OAuth). A plain /login visit clears the half-session so Sign in
+      // shows email/password again after Back to Home.
       if (await authenticatorStillRequired()) {
-        void beginAuthenticator();
+        if (new URLSearchParams(window.location.search).get('mfa') === '1') {
+          void beginAuthenticator();
+          return;
+        }
+        await supabase.auth.signOut();
         return;
       }
       if (!cancelled) router.replace(await pathAfterSignIn());
@@ -170,12 +174,19 @@ export default function LoginPage() {
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-6">
       {/* Back to Home Link */}
       <div className="w-full max-w-md mb-6">
-        <Link 
-          href="/" 
-          className="inline-flex items-center text-xs font-medium text-slate-400 hover:text-slate-200 transition"
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => {
+            void (async () => {
+              await supabase.auth.signOut();
+              router.push('/');
+            })();
+          }}
+          className="inline-flex items-center text-xs font-medium text-slate-400 hover:text-slate-200 transition disabled:opacity-50"
         >
           &larr; Back to Home
-        </Link>
+        </button>
       </div>
 
       {/* Login Card */}
