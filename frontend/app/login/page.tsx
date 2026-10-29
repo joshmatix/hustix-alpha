@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { authenticatorDigits, authenticatorStillRequired } from '@/lib/mfa';
 import { tryLocalLoginBypass } from '@/lib/localLoginBypass';
 import { oauthErrorMessage, pathAfterSignIn, startOAuth, type OAuthProvider } from '@/lib/oauth';
+import { IDLE_NOTICE_KEY } from '@/lib/sessionIdle';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -68,8 +69,8 @@ export default function LoginPage() {
     if (new URLSearchParams(window.location.search).get('disabled') === '1') {
       setNotice('This account is disabled.');
     }
-    if (sessionStorage.getItem('hustix_idle_signout') !== '1') return;
-    sessionStorage.removeItem('hustix_idle_signout');
+    if (sessionStorage.getItem(IDLE_NOTICE_KEY) !== '1') return;
+    sessionStorage.removeItem(IDLE_NOTICE_KEY);
     setNotice('You were signed out after 15 minutes of inactivity.');
   }, []);
 
@@ -83,8 +84,15 @@ export default function LoginPage() {
       if (cancelled) return;
       const { data } = await supabase.auth.getSession();
       if (!data.session) return;
+      // Mid-MFA sessions only resume when redirected here with ?mfa=1 (right after
+      // password/OAuth). A plain /login visit clears the half-session so Sign in
+      // shows email/password again after Back to Home.
       if (await authenticatorStillRequired()) {
-        void beginAuthenticator();
+        if (new URLSearchParams(window.location.search).get('mfa') === '1') {
+          void beginAuthenticator();
+          return;
+        }
+        await supabase.auth.signOut();
         return;
       }
       if (!cancelled) router.replace(await pathAfterSignIn());
@@ -166,12 +174,19 @@ export default function LoginPage() {
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-6">
       {/* Back to Home Link */}
       <div className="w-full max-w-md mb-6">
-        <Link 
-          href="/" 
-          className="inline-flex items-center text-xs font-medium text-slate-400 hover:text-slate-200 transition"
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => {
+            void (async () => {
+              await supabase.auth.signOut();
+              router.push('/');
+            })();
+          }}
+          className="inline-flex items-center text-xs font-medium text-slate-400 hover:text-slate-200 transition disabled:opacity-50"
         >
           &larr; Back to Home
-        </Link>
+        </button>
       </div>
 
       {/* Login Card */}

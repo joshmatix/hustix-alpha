@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { API_BASE } from '@/lib/api';
+import { formatDurationMs, readSessionTiming } from '@/lib/sessionIdle';
 import VersionAlert from './VersionAlert';
 
 type MoveUnit = 'bps' | 'pct';
@@ -96,12 +97,39 @@ function BrandMark() {
 }
 
 function SessionBadge() {
+  const [timing, setTiming] = useState(() => readSessionTiming());
+
+  useEffect(() => {
+    const tick = () => setTiming(readSessionTiming());
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const warn = timing.warn;
+  const label = warn
+    ? `${formatDurationMs(timing.remainingMs)} left`
+    : `Active ${formatDurationMs(timing.activeMs)}`;
+
   return (
-    <div className="shrink-0 rounded-lg border border-slate-800 bg-slate-950/70 px-2.5 py-1 text-right">
+    <div
+      className={`shrink-0 rounded-lg border px-2.5 py-1 text-left ${
+        warn ? 'border-amber-800/80 bg-amber-950/40' : 'border-slate-800 bg-slate-950/70'
+      }`}
+      title={warn ? 'Sign out after 15 minutes of inactivity' : 'Time since this sign-in'}
+    >
       <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-300">Advisor Suite</p>
-      <p className="mt-0.5 flex items-center justify-end gap-1.5 text-[11px] text-emerald-400">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-        Session Secure
+      <p
+        className={`mt-0.5 flex items-center justify-start gap-1.5 text-[11px] ${
+          warn ? 'text-amber-400' : 'text-emerald-400'
+        }`}
+      >
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${
+            warn ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500 animate-pulse'
+          }`}
+        />
+        {label}
       </p>
     </div>
   );

@@ -1,5 +1,8 @@
 import type { OAuthProvider } from '@/lib/oauth';
 
+/** Flip to true when Google / Microsoft sign-in should show again. */
+const OAUTH_BUTTONS_ENABLED = false;
+
 export function OAuthButtons({
   disabled,
   onProvider,
@@ -7,6 +10,8 @@ export function OAuthButtons({
   disabled?: boolean;
   onProvider: (provider: OAuthProvider) => void;
 }) {
+  if (!OAUTH_BUTTONS_ENABLED) return null;
+
   return (
     <div className="space-y-3">
       <button

@@ -54,13 +54,29 @@ def _bitcoin() -> tuple[float | None, float | None]:
     return latest, change
 
 
-def fetch_macro_indicators() -> dict:
-    """Fetches yield, policy-rate, inflation, Bitcoin, and the dollar index, plus the latest move."""
+def _fred_series(name: str, series_id: str) -> tuple[float | None, float | None]:
     if not FRED_API_KEY:
-        raise ValueError("FRED_API_KEY is missing. Define it in backend/.env to enable live feeds.")
+        return None, None
+    url = (
+        "https://api.stlouisfed.org/fred/series/observations"
+        f"?series_id={series_id}&api_key={FRED_API_KEY}&file_type=json&sort_order=desc&limit=10"
+    )
+    res = requests.get(url, timeout=10)
+    if res.status_code != 200:
+        raise ConnectionError(
+            f"FRED API Request failed for {name} ({series_id}). Status: {res.status_code}"
+        )
+    return _latest_pair(res.json().get("observations", []))
 
+
+def fetch_macro_indicators() -> dict:
+    """Fetches yield, policy-rate, inflation, Bitcoin, and the dollar index, plus the latest move.
+
+    FRED powers rates and CPI. Bitcoin and the dollar index use the market-data
+    provider. Missing FRED or a single series failure leaves those fields null
+    instead of failing the whole payload.
+    """
     # Fed funds uses the daily effective rate so the header change is a day-over-day move.
-    # Bitcoin comes from the market-data provider (Tiingo/EODHD/Yahoo), not FRED.
     # Rate changes are percentage points. *_change_pct values are percent moves.
     series_ids = {
         "10Y_Yield": "DGS10",
@@ -69,19 +85,12 @@ def fetch_macro_indicators() -> dict:
         "Fed_Funds_Rate": "DFF",
     }
 
-    macro_data = {}
+    macro_data: dict = {}
     for name, series_id in series_ids.items():
-        url = (
-            "https://api.stlouisfed.org/fred/series/observations"
-            f"?series_id={series_id}&api_key={FRED_API_KEY}&file_type=json&sort_order=desc&limit=10"
-        )
-        res = requests.get(url, timeout=10)
-        if res.status_code != 200:
-            raise ConnectionError(
-                f"FRED API Request failed for {name} ({series_id}). Status: {res.status_code}"
-            )
-
-        latest, prior = _latest_pair(res.json().get("observations", []))
+        try:
+            latest, prior = _fred_series(name, series_id)
+        except Exception:
+            latest, prior = None, None
         macro_data[name] = latest
         if latest is None or prior is None:
             change = None
@@ -108,7 +117,7 @@ def fetch_macro_indicators() -> dict:
 
 
 if __name__ == "__main__":
-    print("Testing FRED API Connection...")
+    print("Testing macro feeds...")
     try:
         data = fetch_macro_indicators()
         print("\n Success! Live Macro Indicators Fetched:")

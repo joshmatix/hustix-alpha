@@ -61,8 +61,9 @@ export async function pathAfterSignIn() {
     await supabase.auth.signOut();
     return '/login?disabled=1';
   }
-  if (await authenticatorStillRequired()) return '/login';
+  // Finish name/firm registration before MFA code entry or agreement.
   if (await registrationStillRequired()) return '/signup';
+  if (await authenticatorStillRequired()) return '/login?mfa=1';
   if (!(await hasAcceptedCurrentAgreement())) return '/agreement/accept';
   if (!(await hasVerifiedAuthenticator())) return '/signup';
   return '/dashboard';
