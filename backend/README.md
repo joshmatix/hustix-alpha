@@ -30,7 +30,7 @@ Copy [`.env.example`](.env.example) to `.env`. Common variables:
 | `MARKET_DATA_PROVIDER` | `yahoo`, `eodhd`, or `tiingo` |
 | `TIINGO_API_KEY` | Required when provider is `tiingo` |
 | `EODHD_API_KEY` | Required when provider is `eodhd` |
-| `FRED_API_KEY` | Macro / yield series (Tiingo uses FRED for ^TNX-style data) |
+| `FRED_API_KEY` | Header Fed Funds / 10Y (and Tiingo ^TNX-style series). Without it, those tickers show `—`; Bitcoin and USD still load from the market-data provider. Set this on the **Vercel backend** service, not only in local `backend/.env`. |
 | `STRIPE_*` | Checkout and webhooks |
 | `SMTP_*` / `RESEND_API_KEY` | Firm invite and contact mail ([`mailer.py`](mailer.py)) |
 

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { authenticatorDigits, authenticatorStillRequired } from '@/lib/mfa';
 import { tryLocalLoginBypass } from '@/lib/localLoginBypass';
 import { oauthErrorMessage, pathAfterSignIn, startOAuth, type OAuthProvider } from '@/lib/oauth';
+import { IDLE_NOTICE_KEY } from '@/lib/sessionIdle';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -68,8 +69,8 @@ export default function LoginPage() {
     if (new URLSearchParams(window.location.search).get('disabled') === '1') {
       setNotice('This account is disabled.');
     }
-    if (sessionStorage.getItem('hustix_idle_signout') !== '1') return;
-    sessionStorage.removeItem('hustix_idle_signout');
+    if (sessionStorage.getItem(IDLE_NOTICE_KEY) !== '1') return;
+    sessionStorage.removeItem(IDLE_NOTICE_KEY);
     setNotice('You were signed out after 15 minutes of inactivity.');
   }, []);
 
