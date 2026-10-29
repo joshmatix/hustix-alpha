@@ -379,9 +379,10 @@
         <h3>Import from JSON</h3>
         <p class="placeholder assign-grid">
           Preferred. Fields: <code>firm</code>, optional <code>plan_code</code>,
+          optional <code>firm_id</code> (<code>firm_</code> + 11 chars or UUID) to append advisors/portfolios to an existing firm,
           <code>portfolios</code> (<code>portfolio_id</code>, <code>portfolio_name</code>),
           <code>advisors</code> (<code>advisor_name</code>, <code>advisor_email</code>, <code>portfolio_ids</code>).
-          Unsigned advisors are emailed a signup link. Portfolio shells get auto account ids; upload holdings later via CSV.
+          JSON files are limited to 3&nbsp;MB. Unsigned advisors are emailed a signup link. Portfolio shells get auto account ids; upload holdings later via CSV.
           Example: <code>admin/examples/wealth-advisors-group.load-firm.json</code>
         </p>
         <div class="row-actions">
@@ -442,6 +443,7 @@
   </div>
 
   <script>
+    const MAX_LOAD_FIRM_JSON_BYTES = 3145728;
     const login = document.querySelector('#login');
     const app = document.querySelector('#app');
     const loginError = document.querySelector('#login-error');
@@ -695,7 +697,25 @@
       deleteFirmBtn.title = 'Permanently removes this firm, portfolios, invites, and assignments';
       deleteFirmBtn.addEventListener('click', () => { showFirmDeleteConfirm(); });
       actions.prepend(deleteFirmBtn, firmAccess, billing, manage);
-      firmDetailPane.append(title, sub, stats, classRow, actions);
+      if (firmDetail.public_id) {
+        const pubRow = document.createElement('div');
+        pubRow.className = 'detail-actions';
+        pubRow.style.marginTop = '0.5rem';
+        const pubText = document.createElement('span');
+        pubText.className = 'detail-sub';
+        pubText.textContent = `public_id: ${firmDetail.public_id}`;
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'secondary';
+        copyBtn.textContent = 'Copy';
+        copyBtn.addEventListener('click', () => {
+          void navigator.clipboard.writeText(firmDetail.public_id);
+        });
+        pubRow.append(pubText, copyBtn);
+        firmDetailPane.append(title, sub, stats, pubRow, classRow, actions);
+      } else {
+        firmDetailPane.append(title, sub, stats, classRow, actions);
+      }
     }
 
     async function setHoldingsClassification(source) {
@@ -1450,11 +1470,16 @@
       if (!data || typeof data !== 'object' || Array.isArray(data)) {
         throw new Error('JSON root must be an object.');
       }
+      const firmIdRaw = String(data.firm_id || '').trim();
+      const appendMode = firmIdRaw !== '';
       const firmName = String(data.firm_name || data.firm || '').trim();
-      if (!firmName) throw new Error('JSON needs firm or firm_name.');
+      if (!appendMode && !firmName) throw new Error('JSON needs firm or firm_name.');
       const advisors = Array.isArray(data.advisors) ? data.advisors : [];
       const portfolios = Array.isArray(data.portfolios) ? data.portfolios : [];
-      if (!advisors.length) throw new Error('JSON needs at least one advisor.');
+      if (!appendMode && !advisors.length) throw new Error('JSON needs at least one advisor.');
+      if (appendMode && !advisors.length && !portfolios.length) {
+        throw new Error('JSON needs at least one advisor or portfolio.');
+      }
       for (const row of advisors) {
         const email = String(row.advisor_email || row.email || '').trim();
         if (!email) throw new Error('Each advisor needs advisor_email.');
@@ -1495,13 +1520,14 @@
           if (portfolio) portfolio.assignments[advisor.id] = true;
         }
       }
-      if (!loadAdvisors.some((row) => row.role === 'owner')) {
+      if (loadAdvisors.length > 0 && !loadAdvisors.some((row) => row.role === 'owner')) {
         loadAdvisors[0].role = 'owner';
       }
 
       if (loadFirmImportPreview) {
+        const modeLabel = appendMode ? `Append to ${firmIdRaw}` : firmName;
         loadFirmImportPreview.textContent =
-          `Ready: ${firmName} · ${loadAdvisors.length} advisors · ${loadPortfolios.length} portfolios. Review below, then Create firm.`;
+          `Ready: ${modeLabel} · ${loadAdvisors.length} advisors · ${loadPortfolios.length} portfolios. Review below, then Create firm.`;
       }
       loadFirmError.classList.add('hidden');
       loadFirmError.textContent = '';
@@ -1663,7 +1689,8 @@
       let payload;
       if (pendingJsonPayload) {
         payload = pendingJsonPayload;
-        if (!String(payload.firm || payload.firm_name || '').trim()) {
+        const appendMode = String(payload.firm_id || '').trim() !== '';
+        if (!appendMode && !String(payload.firm || payload.firm_name || '').trim()) {
           loadFirmError.textContent = 'Firm name is required.';
           loadFirmError.classList.remove('hidden');
           return;
@@ -1701,12 +1728,12 @@
         firmMessage.className = 'banner ok';
         const invited = Number(result.invited_count || 0);
         const mailed = Number(result.invite_mail && result.invite_mail.emailed || 0);
+        const publicId = result.public_id || (result.firm && result.firm.public_id) || '';
+        let summary = publicId ? `Firm loaded. public_id: ${publicId}` : 'Firm loaded.';
         if (invited > 0) {
-          firmMessage.textContent =
-            `Firm loaded. ${invited} advisor(s) invited; ${mailed} signup email(s) sent.`;
-        } else {
-          firmMessage.textContent = 'Firm loaded.';
+          summary = `${summary} ${invited} advisor(s) invited; ${mailed} signup email(s) sent.`;
         }
+        firmMessage.textContent = summary;
       } catch (error) {
         loadFirmError.textContent = error.message;
         loadFirmError.classList.remove('hidden');
@@ -1737,6 +1764,11 @@
       const file = loadFirmJsonFile.files && loadFirmJsonFile.files[0];
       loadFirmJsonFile.value = '';
       if (!file) return;
+      if (file.size > MAX_LOAD_FIRM_JSON_BYTES) {
+        loadFirmError.textContent = 'Load-firm JSON is too large (max 3 MB).';
+        loadFirmError.classList.remove('hidden');
+        return;
+      }
       file.text().then((text) => {
         try {
           importLoadFirmJson(text);

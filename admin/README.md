@@ -115,7 +115,11 @@ On **Load firm**, use **Choose JSON…**. Example: `admin/examples/wealth-adviso
 ```
 
 Rules:
-- `advisor_email` is required. If the address is not in auth yet, a **pending invite** is stored and a **firm invite** email is sent via app SMTP (`backend/.env` → Resend when configured).
+- **Create:** omit `firm_id`. `firm` / `firm_name` and at least one advisor are required.
+- **Append:** set `firm_id` to the firm's `public_id` (`firm_` + 11 letters or digits) or UUID. Add advisors and/or portfolios; firm name and plan in JSON are ignored. At least one advisor or portfolio is required.
+- Each firm has a stable **`public_id`** (shown in the firm detail pane). Use it in append payloads.
+- JSON uploads are capped at **3 MB** (API and file picker).
+- `advisor_email` is required on each advisor row you add. If the address is not in auth yet, a **pending invite** is stored and a **firm invite** email is sent via app SMTP (`backend/.env` → Resend when configured).
 - After signup with that email, `claim_firm_invites` attaches firm membership and portfolio assignments automatically (no solo shadow firm).
 
 ### Two different emails (invite vs confirm)
@@ -165,6 +169,9 @@ docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/
 docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/invite_signup_auto_confirm.sql
 docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/invite_signup_auto_confirm_after.sql
 docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/portfolio_allocation_null_default.sql
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/firm_public_id.sql
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/admin_firm_read_public_id.sql
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/admin_load_firm_append.sql
 docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/holdings_classification_source.sql
 docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/firm_disabled.sql
 docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/admin_firm_read.sql

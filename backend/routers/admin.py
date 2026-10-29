@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from admin_firm_load import normalize_load_firm_payload
+from admin_firm_load import normalize_load_firm_payload, read_bounded_json
 from database import SUPABASE_KEY, SUPABASE_UNREACHABLE, _bypasses_rls, supabase
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
@@ -393,12 +393,7 @@ def firm_detail(firm_id: str, request: Request):
 async def load_firm(request: Request):
     _require_admin(request)
     _require_database()
-    try:
-        raw = await request.json()
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail="Invalid JSON.") from exc
-    if not isinstance(raw, dict):
-        raise HTTPException(status_code=422, detail="Invalid request.")
+    raw = await read_bounded_json(request)
     try:
         normalized = normalize_load_firm_payload(raw)
     except ValueError as exc:
@@ -421,6 +416,7 @@ async def load_firm(request: Request):
     return {
         "ok": True,
         "firm_id": firm_id,
+        "public_id": data.get("public_id"),
         "firm": detail,
         "firms": _read_firms(),
         "invited_count": data.get("invited_count") or len(data.get("invited_emails") or []),

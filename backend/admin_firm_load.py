@@ -2,14 +2,76 @@
 
 from __future__ import annotations
 
+import json
+import re
+
+from fastapi import HTTPException, Request
+
+MAX_LOAD_FIRM_JSON_BYTES = 3 * 1024 * 1024
+JSON_TOO_LARGE_MESSAGE = "Load-firm JSON is too large (max 3 MB)."
+_READ_CHUNK_BYTES = 64 * 1024
+
+FIRM_PUBLIC_ID = re.compile(r"^firm_[a-zA-Z0-9]{11}$")
+FIRM_UUID = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+
+def ensure_json_byte_limit(contents: bytes) -> None:
+    if len(contents) > MAX_LOAD_FIRM_JSON_BYTES:
+        raise ValueError(JSON_TOO_LARGE_MESSAGE)
+
+
+async def read_bounded_json(request: Request) -> dict:
+    """Read a JSON body without buffering more than MAX_LOAD_FIRM_JSON_BYTES."""
+    raw_length = request.headers.get("content-length")
+    if raw_length is not None:
+        try:
+            declared = int(raw_length)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Invalid request.") from exc
+        if declared > MAX_LOAD_FIRM_JSON_BYTES:
+            raise HTTPException(status_code=413, detail=JSON_TOO_LARGE_MESSAGE)
+
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > MAX_LOAD_FIRM_JSON_BYTES:
+            raise HTTPException(status_code=413, detail=JSON_TOO_LARGE_MESSAGE)
+        chunks.append(chunk)
+
+    raw = b"".join(chunks)
+    if not raw:
+        return {}
+    ensure_json_byte_limit(raw)
+    try:
+        parsed = json.loads(raw.decode())
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail="Invalid JSON.") from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=422, detail="Invalid request.")
+    return parsed
+
 
 def normalize_load_firm_payload(payload: dict) -> dict:
+    firm_id_raw = str(payload.get("firm_id") or "").strip()
+    append_mode = bool(firm_id_raw)
+    if append_mode and not (FIRM_PUBLIC_ID.fullmatch(firm_id_raw) or FIRM_UUID.fullmatch(firm_id_raw)):
+        raise ValueError("Invalid firm_id.")
+
     firm_name = str(payload.get("firm_name") or payload.get("firm") or "").strip()
     plan_code = str(payload.get("plan_code") or "pro_plus").strip() or "pro_plus"
     advisors_in = payload.get("advisors")
     portfolios_in = payload.get("portfolios")
     if not isinstance(advisors_in, list):
         raise ValueError("Advisors must be an array.")
+    if not append_mode and not firm_name:
+        raise ValueError("Firm name is required.")
+    if not append_mode and len(advisors_in) == 0:
+        raise ValueError("Add at least one advisor.")
+
     advisors: list[dict] = []
     seen_emails: set[str] = set()
     for row in advisors_in:
@@ -72,10 +134,19 @@ def normalize_load_firm_payload(payload: dict) -> dict:
                     "asset_allocation": row.get("asset_allocation"),
                 }
             )
-    return {
+    elif portfolios_in is not None and not isinstance(portfolios_in, list):
+        raise ValueError("Portfolios must be an array.")
+
+    if append_mode and len(advisors) == 0 and len(portfolios) == 0:
+        raise ValueError("Add at least one advisor or portfolio.")
+
+    normalized: dict = {
         "firm": firm_name,
         "firm_name": firm_name,
         "plan_code": plan_code,
         "advisors": advisors,
         "portfolios": portfolios,
     }
+    if firm_id_raw:
+        normalized["firm_id"] = firm_id_raw
+    return normalized

@@ -39,6 +39,8 @@ FIRM_ID = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
+MAX_LOAD_FIRM_JSON_BYTES = 3145728
+_READ_JSON_CHUNK_BYTES = 65536
 SERVICES = {
     "frontend": {
         "label": "Frontend",
@@ -456,6 +458,7 @@ def _read_firms() -> list[dict]:
         FROM (
           SELECT
             firm.id::text AS id,
+            firm.public_id,
             firm.name,
             COALESCE(subscription.plan_code, 'free') AS plan_code,
             COALESCE(subscription.status, '') AS subscription_status,
@@ -526,83 +529,11 @@ def _sql_json_literal(payload: object) -> str:
 
 
 def _normalize_load_firm_payload(payload: dict) -> dict:
-    """Accept Wealth Advisors Group JSON or the older form-shaped payload."""
-    firm_name = str(payload.get("firm_name") or payload.get("firm") or "").strip()
-    plan_code = str(payload.get("plan_code") or "pro_plus").strip() or "pro_plus"
-    advisors_in = payload.get("advisors")
-    portfolios_in = payload.get("portfolios")
-    if not isinstance(advisors_in, list):
-        raise ValueError("Advisors must be an array.")
-    advisors: list[dict] = []
-    seen_emails: set[str] = set()
-    for row in advisors_in:
-        if not isinstance(row, dict):
-            raise ValueError("Each advisor must be an object.")
-        email = str(row.get("email") or row.get("advisor_email") or "").strip().lower()
-        full_name = str(row.get("full_name") or row.get("advisor_name") or "").strip()
-        role = str(row.get("role") or "advisor").strip() or "advisor"
-        portfolio_ids = row.get("portfolio_ids") or []
-        if not isinstance(portfolio_ids, list):
-            raise ValueError("portfolio_ids must be an array.")
-        lead_ids = row.get("lead_portfolio_ids") or []
-        if lead_ids and not isinstance(lead_ids, list):
-            raise ValueError("lead_portfolio_ids must be an array.")
-        if email in seen_emails:
-            # Merge portfolio assignments onto the first row with this email.
-            for existing in advisors:
-                if existing["email"] == email:
-                    merged = list(existing["portfolio_ids"])
-                    for pid in portfolio_ids:
-                        if pid not in merged:
-                            merged.append(pid)
-                    existing["portfolio_ids"] = merged
-                    if role == "owner":
-                        existing["role"] = "owner"
-                    if full_name and not existing["full_name"]:
-                        existing["full_name"] = full_name
-                        existing["advisor_name"] = full_name
-                    break
-            continue
-        seen_emails.add(email)
-        advisors.append(
-            {
-                "email": email,
-                "advisor_email": email,
-                "full_name": full_name,
-                "advisor_name": full_name,
-                "role": role,
-                "portfolio_ids": portfolio_ids,
-                "lead_portfolio_ids": lead_ids if isinstance(lead_ids, list) else [],
-            }
-        )
-    portfolios: list[dict] = []
-    if isinstance(portfolios_in, list):
-        for row in portfolios_in:
-            if not isinstance(row, dict):
-                raise ValueError("Each portfolio must be an object.")
-            name = str(row.get("name") or row.get("portfolio_name") or "").strip()
-            portfolio_id = row.get("portfolio_id", row.get("import_id", ""))
-            portfolios.append(
-                {
-                    "name": name,
-                    "portfolio_name": name,
-                    "portfolio_id": portfolio_id,
-                    "account_number": str(row.get("account_number") or "").strip(),
-                    "sub_account_number": str(row.get("sub_account_number") or "").strip(),
-                    "portfolio_value": row.get("portfolio_value", 0),
-                    "advisor_emails": row.get("advisor_emails") or [],
-                    "description": row.get("description") or "",
-                    "target_risk_profile": row.get("target_risk_profile") or "Balanced",
-                    "asset_allocation": row.get("asset_allocation"),
-                }
-            )
-    return {
-        "firm": firm_name,
-        "firm_name": firm_name,
-        "plan_code": plan_code,
-        "advisors": advisors,
-        "portfolios": portfolios,
-    }
+    if str(BACKEND_DIR) not in sys.path:
+        sys.path.insert(0, str(BACKEND_DIR))
+    from admin_firm_load import normalize_load_firm_payload  # type: ignore
+
+    return normalize_load_firm_payload(payload)
 
 
 def _send_firm_invites(firm_name: str, invited_emails: list[str], advisors: list[dict]) -> dict:
@@ -662,6 +593,7 @@ def _load_firm(payload: object) -> dict:
     return {
         "ok": True,
         "firm_id": firm_id,
+        "public_id": result.get("public_id"),
         "firm": detail,
         "firms": _read_firms(),
         "invited_count": result.get("invited_count") or len(invited_emails),
@@ -762,6 +694,7 @@ def _read_firm_detail(firm_id: str) -> dict | None:
         FROM (
           SELECT
             firm.id::text AS id,
+            firm.public_id,
             firm.name,
             firm.holdings_classification_source,
             to_char(firm.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS created_on,
@@ -917,10 +850,26 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _read_json(self) -> object:
+        max_bytes = MAX_LOAD_FIRM_JSON_BYTES
         length = int(self.headers.get("Content-Length", "0") or "0")
-        if length > 100_000:
+        if length > max_bytes:
             raise ValueError("Request is too large.")
-        raw = self.rfile.read(length) if length else b""
+        if length > 0:
+            raw = self.rfile.read(length)
+            if len(raw) > max_bytes:
+                raise ValueError("Request is too large.")
+        else:
+            chunks: list[bytes] = []
+            total = 0
+            while True:
+                chunk = self.rfile.read(_READ_JSON_CHUNK_BYTES)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise ValueError("Request is too large.")
+                chunks.append(chunk)
+            raw = b"".join(chunks)
         if not raw:
             return {}
         return json.loads(raw.decode())

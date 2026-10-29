@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { holdingsCsvFileError } from "@/lib/holdingsCsvLimits";
 
 interface CreatePortfolioModalProps {
   isOpen: boolean;
@@ -94,6 +95,13 @@ export default function CreatePortfolioModal({
     setSubmitting(true);
     setError(null);
     try {
+      if (csvFile) {
+        const sizeError = holdingsCsvFileError(csvFile);
+        if (sizeError) {
+          setError(sizeError);
+          return;
+        }
+      }
       if (onSubmit) {
         await onSubmit({
           name: portfolioName,
@@ -122,7 +130,16 @@ export default function CreatePortfolioModal({
   const handleCsv = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     setCsvFile(file);
-    if (!file) return;
+    if (!file) {
+      setError(null);
+      return;
+    }
+    const sizeError = holdingsCsvFileError(file);
+    if (sizeError) {
+      setError(sizeError);
+      return;
+    }
+    setError(null);
     const label = labelFromCsv(file);
     setPortfolioName(label);
     setDescription(label);

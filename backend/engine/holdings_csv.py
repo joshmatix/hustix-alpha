@@ -16,6 +16,13 @@ class HoldingsCsvError(ValueError):
     pass
 
 
+MAX_HOLDINGS_ROWS = 100
+MAX_HOLDINGS_CSV_BYTES = 512_000
+CSV_TOO_LARGE_MESSAGE = (
+    "CSV file is too large (max 500 KB, including any broker header and footer)."
+)
+_READ_CHUNK_BYTES = 64 * 1024
+
 _APP_REQUIRED = {"ticker", "quantity"}
 
 _SYMBOL_KEYS = ("ticker", "symbol", "securitysymbol", "symbolcusip", "securityid")
@@ -139,18 +146,50 @@ def _is_app_csv_header(found: dict[str, int]) -> bool:
     return _pick(found, _PRICE_KEYS) is not None or _pick(found, _VALUE_KEYS) is not None
 
 
+def ensure_csv_byte_limit(contents: bytes) -> None:
+    if len(contents) > MAX_HOLDINGS_CSV_BYTES:
+        raise HoldingsCsvError(CSV_TOO_LARGE_MESSAGE)
+
+
+async def read_bounded_upload(file) -> bytes:
+    """Read an upload without buffering more than MAX_HOLDINGS_CSV_BYTES."""
+    declared = getattr(file, "size", None)
+    if declared is not None and declared > MAX_HOLDINGS_CSV_BYTES:
+        raise HoldingsCsvError(CSV_TOO_LARGE_MESSAGE)
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_HOLDINGS_CSV_BYTES:
+            raise HoldingsCsvError(CSV_TOO_LARGE_MESSAGE)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _enforce_holdings_limit(holdings: list[dict[str, str]]) -> list[dict[str, str]]:
+    if len(holdings) > MAX_HOLDINGS_ROWS:
+        raise HoldingsCsvError(
+            f"CSV has too many holdings ({len(holdings)}). Maximum is {MAX_HOLDINGS_ROWS}."
+        )
+    return holdings
+
+
 def parse_holdings_csv(contents: bytes) -> list[dict[str, str]]:
+    ensure_csv_byte_limit(contents)
     rows = _table(contents)
     if len(rows) < 2:
         raise HoldingsCsvError("CSV has no holdings.")
 
     header = _header_index(rows[0])
     if _is_app_csv_header(header):
-        return _parse_app_rows(rows)
+        return _enforce_holdings_limit(_parse_app_rows(rows))
 
     parsed = _parse_broker_rows(rows)
     if parsed is not None:
-        return parsed
+        return _enforce_holdings_limit(parsed)
 
     app_keys = _APP_REQUIRED & set(header)
     if len(app_keys) >= 2:

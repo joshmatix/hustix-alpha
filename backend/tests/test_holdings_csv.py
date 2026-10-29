@@ -245,6 +245,54 @@ def test_unrecognized_csv_names_the_accepted_exports():
         parse_holdings_csv(b"Foo,Bar\n1,2\n")
 
 
+def test_rejects_more_than_max_holdings_rows():
+    lines = ["ticker,asset_class,quantity,current_price"]
+    for index in range(101):
+        lines.append(f"SYM{index},Equity,1,10")
+    with pytest.raises(HoldingsCsvError, match="too many holdings"):
+        parse_holdings_csv("\n".join(lines).encode())
+
+
+def test_accepts_max_holdings_rows():
+    lines = ["ticker,asset_class,quantity,current_price"]
+    for index in range(100):
+        lines.append(f"SYM{index},Equity,1,10")
+    rows = parse_holdings_csv("\n".join(lines).encode())
+    assert len(rows) == 100
+
+
+def test_rejects_csv_larger_than_max_bytes():
+    oversized = b"x" * (512_001)
+    with pytest.raises(HoldingsCsvError, match="too large"):
+        parse_holdings_csv(oversized)
+
+
+@pytest.mark.asyncio
+async def test_read_bounded_upload_stops_before_buffering_entire_file():
+    from engine.holdings_csv import MAX_HOLDINGS_CSV_BYTES, read_bounded_upload
+
+    class FakeUpload:
+        def __init__(self, payload: bytes):
+            self.size = len(payload)
+            self._payload = payload
+            self._offset = 0
+
+        async def read(self, size: int = -1) -> bytes:
+            if self._offset >= len(self._payload):
+                return b""
+            if size < 0:
+                size = len(self._payload)
+            chunk = self._payload[self._offset : self._offset + size]
+            self._offset += len(chunk)
+            return chunk
+
+    ok = await read_bounded_upload(FakeUpload(b"a" * MAX_HOLDINGS_CSV_BYTES))
+    assert len(ok) == MAX_HOLDINGS_CSV_BYTES
+
+    with pytest.raises(HoldingsCsvError, match="too large"):
+        await read_bounded_upload(FakeUpload(b"b" * (MAX_HOLDINGS_CSV_BYTES + 1)))
+
+
 def test_singular_labels_split_the_pie():
     rows = [
         {"asset_class": "Equity", "quantity": 799, "current_price": 375.54},

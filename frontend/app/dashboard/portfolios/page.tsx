@@ -11,6 +11,7 @@ import { apiFetch, type Holding, type Portfolio } from '@/lib/api';
 import { portfolioLimitSentence } from '@/lib/planLimits';
 import { supabase } from '@/lib/supabaseClient';
 import { createCheckoutSession } from '@/lib/stripeCheckout';
+import { holdingsCsvFileError } from '@/lib/holdingsCsvLimits';
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const PORTFOLIO_VIEW_KEY = 'hustix-portfolio-view';
@@ -347,6 +348,11 @@ export default function PortfoliosPage() {
   };
 
   const handleCsvUpload = async (portfolioId: string, file: File) => {
+    const sizeError = holdingsCsvFileError(file);
+    if (sizeError) {
+      setError(sizeError);
+      return sizeError;
+    }
     setUploadingId(portfolioId);
     setError(null);
     try {

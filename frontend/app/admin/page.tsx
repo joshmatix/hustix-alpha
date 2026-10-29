@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { loadFirmJsonFileError } from '@/lib/loadFirmJsonLimits';
 
 type Plan = {
   code: string;
@@ -62,6 +63,7 @@ type AdminState = {
 
 type FirmSummary = {
   id: string;
+  public_id?: string;
   name: string;
   plan_code: string;
   subscription_status: string;
@@ -357,14 +359,36 @@ function FirmsSection() {
 
   async function onLoadFile(file: File) {
     setMessage('');
+    const sizeError = loadFirmJsonFileError(file);
+    if (sizeError) {
+      setOk(false);
+      setMessage(sizeError);
+      return;
+    }
     try {
       const text = await file.text();
       const payload = JSON.parse(text) as unknown;
       const result = await runAction('/api/admin/firms/load', payload);
-      if (result?.firm_id) setSelectedId(String(result.firm_id));
+      if (result) {
+        const publicId = String(result.public_id || (result.firm as FirmDetail | undefined)?.public_id || '');
+        setOk(true);
+        setMessage(publicId ? `Firm loaded. public_id: ${publicId}` : 'Firm loaded.');
+        if (result.firm_id) setSelectedId(String(result.firm_id));
+      }
     } catch (error) {
       setOk(false);
       setMessage(error instanceof Error ? error.message : 'Could not read JSON.');
+    }
+  }
+
+  async function copyPublicId(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setOk(true);
+      setMessage('Copied public_id.');
+    } catch {
+      setOk(false);
+      setMessage('Could not copy.');
     }
   }
 
@@ -440,8 +464,23 @@ function FirmsSection() {
       {detail ? (
         <div className="mt-5 space-y-4 border-t border-slate-800 pt-4">
           <p className="text-sm text-slate-300">
-            {detail.name} · {formatAum(detail.total_aum)} AUM · {detail.advisor_count} advisors · {detail.portfolio_count} portfolios
+            {detail.name} · {formatAum(detail.total_aum)} AUM · {detail.advisor_count} advisors · {detail.portfolio_count}{' '}
+            portfolios
           </p>
+          {detail.public_id ? (
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
+              <span>
+                public_id: <code className="text-indigo-200">{detail.public_id}</code>
+              </span>
+              <button
+                type="button"
+                className="rounded border border-slate-600 px-2 py-0.5 text-xs"
+                onClick={() => void copyPublicId(detail.public_id!)}
+              >
+                Copy
+              </button>
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-end gap-3">
             <button
               type="button"

@@ -12,7 +12,12 @@ from engine.equity_prices import (
     uses_market_close_on_upload,
     yahoo_symbol,
 )
-from engine.holdings_csv import HoldingsCsvError, number_field, parse_holdings_csv
+from engine.holdings_csv import (
+    HoldingsCsvError,
+    number_field,
+    parse_holdings_csv,
+    read_bounded_upload,
+)
 from engine.market_data import fetch_asset_classes, provider_label, selected_provider
 
 router = APIRouter(prefix="/api/portfolios", tags=["Portfolios"])
@@ -603,7 +608,7 @@ async def upload_csv(
         raise HTTPException(status_code=404, detail="Portfolio not found.")
 
     try:
-        contents = await file.read()
+        contents = await read_bounded_upload(file)
         table = parse_holdings_csv(contents)
         portfolio_key = str(portfolio_id)
         firm_id = _portfolio_firm_id(db, portfolio_key)
