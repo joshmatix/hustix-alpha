@@ -324,13 +324,16 @@ export default function PortfoliosPage() {
     setNotice(null);
 
     const created = await res.json().catch(() => ({}));
-    await fetchPortfolios();
-    if (data.file && created.portfolio_id) {
-      const uploadError = await handleCsvUpload(String(created.portfolio_id), data.file);
+    const portfolioId = created.portfolio_id ? String(created.portfolio_id) : '';
+    if (data.file && portfolioId) {
+      const uploadError = await handleCsvUpload(portfolioId, data.file);
       if (uploadError) {
-        throw new Error(`${uploadError} ${data.name} was created without those holdings.`);
+        await apiFetch(`/api/portfolios/${portfolioId}`, { method: 'DELETE' }).catch(() => undefined);
+        await fetchPortfolios(true);
+        throw new Error(uploadError);
       }
     }
+    await fetchPortfolios(true);
   };
 
   const handleDeletePortfolio = async () => {

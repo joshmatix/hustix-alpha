@@ -32,10 +32,12 @@ _QUANTITY_KEYS = (
     "qtyquantity",
     "shares",
     "sharequantity",
+    "samplequantity",
     "units",
     "tradedatequantity",
     "settledquantity",
 )
+_WEIGHT_KEYS = ("targetweight", "weight", "allocation", "targetallocation", "pctofaccount")
 _PRICE_KEYS = (
     "price",
     "lastprice",
@@ -136,9 +138,15 @@ def _is_broker_header(found: dict[str, int]) -> bool:
 
 
 def _is_app_csv_header(found: dict[str, int]) -> bool:
-    """Hustix app export: ticker + quantity, without broker name/type columns."""
-    if "ticker" not in found or _pick(found, _QUANTITY_KEYS) is None:
+    """Hustix app / model CSV: ticker + quantity (or Sample Quantity / Target Weight)."""
+    if "ticker" not in found:
         return False
+    has_quantity = _pick(found, _QUANTITY_KEYS) is not None
+    has_weight = _pick(found, _WEIGHT_KEYS) is not None
+    if not has_quantity and not has_weight:
+        return False
+    if "samplequantity" in found or has_weight:
+        return True
     if "assetclass" in found:
         return True
     if _pick(found, _NAME_KEYS) is not None or _pick(found, _CLASS_KEYS) is not None:
@@ -199,7 +207,7 @@ def parse_holdings_csv(contents: bytes) -> list[dict[str, str]]:
     raise HoldingsCsvError(
         "This CSV is not a holdings file. Upload a positions export from "
         "Schwab, Fidelity, LPL, BNY Mellon, or Raymond James, or a file with "
-        "ticker, asset_class, quantity, and current_price (or market_value)."
+        "ticker, asset_class, and quantity (or Sample Quantity / Target Weight)."
     )
 
 
@@ -223,9 +231,8 @@ def _ensure_app_current_price(record: dict[str, str], line_no: int) -> None:
     if uses_market_close_on_upload(ticker, str(record.get("asset_class", ""))):
         record["current_price"] = "0"
         return
-    raise HoldingsCsvError(
-        f"Row {line_no}: {label} needs current_price, or market_value with quantity, for cash holdings."
-    )
+    # Model / sample files often omit price; treat quantity as notional at $1.
+    record["current_price"] = "1"
 
 
 def _parse_app_rows(rows: list[list[str]]) -> list[dict[str, str]]:
@@ -242,6 +249,13 @@ def _parse_app_rows(rows: list[list[str]]) -> list[dict[str, str]]:
             if _compact(cell) in _QUANTITY_KEYS:
                 header[index] = "quantity"
                 break
+    if "quantity" not in header:
+        for index, cell in enumerate(header):
+            if _compact(cell) in _WEIGHT_KEYS:
+                header[index] = "quantity"
+                break
+    if "description" in header and "asset_name" not in header:
+        header[header.index("description")] = "asset_name"
     if "current_price" not in header:
         for index, cell in enumerate(header):
             if _compact(cell) in _PRICE_KEYS:
@@ -321,12 +335,17 @@ def _number(value: str) -> float | None:
         return None
     negative = text.startswith("(") and text.endswith(")")
     text = text.strip("()").replace("$", "").replace(",", "").replace("+", "").strip()
-    if not text or "%" in text:
+    percent = text.endswith("%")
+    if percent:
+        text = text[:-1].strip()
+    if not text:
         return None
     try:
         number = float(text)
     except ValueError:
         return None
+    if percent:
+        number = number / 100.0
     return -number if negative else number
 
 

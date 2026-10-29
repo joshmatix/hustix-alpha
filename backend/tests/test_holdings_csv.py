@@ -240,6 +240,36 @@ VTI,10,280
     assert row.get("asset_class", "") == ""
 
 
+def test_sample_quantity_model_file_without_price():
+    exported = """Ticker,Asset Class,Target Weight,Sample Quantity,Description
+VTI,Equity,25%,100,Vanguard Total Stock
+TLT,Bond,25%,200,Long Treasury
+GLD,Commodity,25%,50,Gold
+BIL,Cash,25%,1000,T-Bills
+""".encode()
+    rows = parse_holdings_csv(exported)
+    # Listed symbols omit file price (0 → market close on upload); cash stays $1.
+    assert [(row["ticker"], row["asset_class"], row["quantity"], row["current_price"]) for row in rows] == [
+        ("VTI", "Equity", "100", "0"),
+        ("TLT", "Bond", "200", "0"),
+        ("GLD", "Commodity", "50", "0"),
+        ("BIL", "Cash", "1000", "1"),
+    ]
+    assert rows[0]["asset_name"] == "Vanguard Total Stock"
+
+
+def test_target_weight_alone_uses_weight_as_quantity():
+    exported = """Ticker,Asset Class,Target Weight,Description
+VTI,Equity,40,Stocks
+TLT,Bond,60,Bonds
+""".encode()
+    rows = parse_holdings_csv(exported)
+    assert [(row["ticker"], row["quantity"], row["current_price"]) for row in rows] == [
+        ("VTI", "40", "0"),
+        ("TLT", "60", "0"),
+    ]
+
+
 def test_unrecognized_csv_names_the_accepted_exports():
     with pytest.raises(HoldingsCsvError, match="Schwab, Fidelity, LPL, BNY Mellon, or Raymond James"):
         parse_holdings_csv(b"Foo,Bar\n1,2\n")
