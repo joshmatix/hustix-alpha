@@ -386,19 +386,51 @@ def _sql_limit(value: object) -> str:
     return str(value)
 
 
+def _parse_json_list(raw: str) -> list[dict]:
+    text = (raw or "").strip()
+    if not text:
+        return []
+    data = json.loads(text)
+    return data if isinstance(data, list) else []
+
+
 def _read_accounts() -> list[dict]:
     raw = _psql(
         """
-        SELECT COALESCE(json_agg(row ORDER BY row.last_seen DESC), '[]'::json)::text
+        SELECT COALESCE(
+          json_agg(
+            row
+            ORDER BY
+              row.signed_in DESC,
+              row.last_seen DESC NULLS LAST,
+              row.full_name,
+              row.email
+          ),
+          '[]'::json
+        )::text
         FROM (
           SELECT
+            account_user.id::text AS user_id,
             account_user.email,
             COALESCE(profile.full_name, '') AS full_name,
             COALESCE(account.firm_name, '') AS firm_name,
             COALESCE(account.role, '') AS role,
             COALESCE(account.plan_code, profile.plan, 'free') AS plan_code,
+            (open_session.user_id IS NOT NULL) AS signed_in,
+            (profile.disabled_at IS NULL) AS enabled,
+            NOT EXISTS (
+              SELECT 1
+              FROM public.firm_members AS member
+              JOIN public.firms AS firm ON firm.id = member.firm_id
+              WHERE member.user_id = account_user.id
+                AND firm.disabled_at IS NOT NULL
+            ) AS firm_enabled,
+            (account_user.email_confirmed_at IS NOT NULL) AS verified,
+            to_char(account_user.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
             to_char(open_session.last_seen AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS last_seen
-          FROM (
+          FROM auth.users AS account_user
+          LEFT JOIN public.profiles AS profile ON profile.id = account_user.id
+          LEFT JOIN (
             SELECT
               session.user_id,
               max(GREATEST(
@@ -418,9 +450,7 @@ def _read_accounts() -> list[dict]:
                   AND token.revoked IS NOT TRUE
               )
             GROUP BY session.user_id
-          ) AS open_session
-          JOIN auth.users AS account_user ON account_user.id = open_session.user_id
-          LEFT JOIN public.profiles AS profile ON profile.id = account_user.id
+          ) AS open_session ON open_session.user_id = account_user.id
           LEFT JOIN LATERAL (
             SELECT
               string_agg(firm.name, ', ' ORDER BY (member.role = 'owner') DESC, firm.name) AS firm_name,
@@ -435,7 +465,7 @@ def _read_accounts() -> list[dict]:
         ) AS row;
         """
     )
-    return json.loads(raw or "[]")
+    return _parse_json_list(raw)
 
 
 def _read_plans() -> list[dict]:
@@ -521,6 +551,18 @@ def _set_advisor_access(user_id: str, enabled: bool) -> None:
     uid = _parse_user_id(user_id)
     flag = "true" if enabled else "false"
     _psql(f"SELECT public.admin_set_advisor_access('{uid}'::uuid, {flag});")
+
+
+def _delete_advisor(user_id: str) -> dict:
+    uid = _parse_user_id(user_id)
+    raw = _psql(f"SELECT public.admin_delete_advisor('{uid}'::uuid)::text;")
+    deleted = json.loads(raw or "{}")
+    return {
+        "ok": True,
+        "deleted": deleted,
+        "firms": _read_firms(),
+        "accounts": _read_accounts(),
+    }
 
 
 def _sql_json_literal(payload: object) -> str:
@@ -977,6 +1019,15 @@ class Handler(BaseHTTPRequestHandler):
                     "application/json",
                 )
                 return
+            advisor_delete = re.fullmatch(r"/api/advisors/([0-9a-f-]{36})/delete", path, re.IGNORECASE)
+            if advisor_delete:
+                user_id = advisor_delete.group(1)
+                result = _delete_advisor(user_id)
+                refresh_firm = payload.get("firm_id") if isinstance(payload, dict) else None
+                if isinstance(refresh_firm, str) and FIRM_ID.fullmatch(refresh_firm):
+                    result["firm"] = _read_firm_detail(refresh_firm)
+                self._send(*_json_bytes(result), "application/json")
+                return
             advisor_access = re.fullmatch(r"/api/advisors/([0-9a-f-]{36})/access", path, re.IGNORECASE)
             if advisor_access:
                 if not isinstance(payload, dict) or "enabled" not in payload:
@@ -988,7 +1039,14 @@ class Handler(BaseHTTPRequestHandler):
                 if isinstance(refresh_firm, str) and FIRM_ID.fullmatch(refresh_firm):
                     detail = _read_firm_detail(refresh_firm)
                 self._send(
-                    *_json_bytes({"ok": True, "firm": detail, "firms": _read_firms()}),
+                    *_json_bytes(
+                        {
+                            "ok": True,
+                            "firm": detail,
+                            "firms": _read_firms(),
+                            "accounts": _read_accounts(),
+                        }
+                    ),
                     "application/json",
                 )
                 return

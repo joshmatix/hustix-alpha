@@ -12,12 +12,42 @@ type Plan = {
 };
 
 type Account = {
+  user_id?: string;
   email: string;
   full_name: string;
   firm_name: string;
   plan_code: string;
-  last_seen: string;
+  last_seen: string | null;
+  created_at?: string | null;
+  signed_in?: boolean;
+  enabled?: boolean;
+  firm_enabled?: boolean;
+  verified?: boolean;
 };
+
+function accountInitials(fullName: string, email: string) {
+  const source = (fullName || email || '?').trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return source.slice(0, 2).toUpperCase();
+}
+
+function formatAccountCreated(value: string | null | undefined) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString(undefined, {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function planLabel(code: string) {
+  return (code || 'free').replace(/_/g, ' ').toUpperCase();
+}
 
 type AppliedPromotion = {
   code: string;
@@ -874,6 +904,8 @@ export default function CloudAdminPage() {
   const [limitsMessage, setLimitsMessage] = useState('');
   const [limitsOk, setLimitsOk] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [accountBusy, setAccountBusy] = useState<string | null>(null);
+  const [accountsMessage, setAccountsMessage] = useState('');
 
   function applyState(next: AdminState) {
     const plans = Array.isArray(next.plans) ? next.plans : [];
@@ -953,6 +985,66 @@ export default function CloudAdminPage() {
     setStateError('');
   }
 
+  async function setAccountAccess(userId: string, enabled: boolean) {
+    if (!state) return;
+    setAccountBusy(userId);
+    setAccountsMessage('');
+    try {
+      const result = await request('/api/admin/advisors/access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, enabled }),
+      });
+      applyState({
+        ...state,
+        advisors: Array.isArray(result.advisors) ? result.advisors : state.advisors,
+        promotions: Array.isArray(result.promotions) ? result.promotions : state.promotions,
+        accounts: Array.isArray(result.accounts) ? result.accounts : state.accounts,
+        accounts_error: result.accounts_error ?? state.accounts_error,
+        advisors_error: null,
+      });
+      setAccountsMessage(enabled ? 'Account enabled.' : 'Account disabled.');
+    } catch (error) {
+      setAccountsMessage(error instanceof Error ? error.message : 'Could not update account.');
+    } finally {
+      setAccountBusy(null);
+    }
+  }
+
+  async function deleteAccountAccess(userId: string, email: string) {
+    if (!state) return;
+    const label = email || 'this account';
+    if (
+      !window.confirm(
+        `Permanently delete ${label}?\n\nThis removes the login, profile, and firm memberships. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setAccountBusy(userId);
+    setAccountsMessage('');
+    try {
+      const result = await request('/api/admin/advisors/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      applyState({
+        ...state,
+        advisors: Array.isArray(result.advisors) ? result.advisors : state.advisors,
+        promotions: Array.isArray(result.promotions) ? result.promotions : state.promotions,
+        accounts: Array.isArray(result.accounts) ? result.accounts : state.accounts,
+        accounts_error: result.accounts_error ?? state.accounts_error,
+        advisors_error: result.advisors_error ?? null,
+      });
+      setAccountsMessage(`Deleted ${email || userId}.`);
+    } catch (error) {
+      setAccountsMessage(error instanceof Error ? error.message : 'Could not delete account.');
+    } finally {
+      setAccountBusy(null);
+    }
+  }
+
   async function onSave(event: FormEvent) {
     event.preventDefault();
     if (!state) return;
@@ -1002,7 +1094,7 @@ export default function CloudAdminPage() {
 
   return (
     <main className="flex-1 bg-slate-950 text-slate-100">
-      <div className="mx-auto max-w-5xl px-5 py-8">
+      <div className="mx-auto max-w-6xl px-5 py-8">
         {!ready ? <p className="text-sm text-slate-400">Loading admin...</p> : null}
 
         {ready && !signedIn ? (
@@ -1080,7 +1172,7 @@ export default function CloudAdminPage() {
 
             <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold">Signed-in accounts</h2>
+                <h2 className="text-lg font-semibold">All accounts</h2>
                 <button
                   type="button"
                   onClick={() => loadState().catch((error) => setLimitsMessage(error.message))}
@@ -1089,37 +1181,110 @@ export default function CloudAdminPage() {
                   Refresh
                 </button>
               </div>
-              <p className="mt-1 text-sm text-slate-400">Advisors with an open session, and the firm account they are on.</p>
+              <p className="mt-1 text-sm text-slate-400">Advisor login accounts on this database.</p>
               {state.accounts_error ? <p className="mt-3 text-sm text-rose-300">{state.accounts_error}</p> : null}
+              {accountsMessage ? (
+                <p
+                  className={`mt-3 text-sm ${
+                    accountsMessage.toLowerCase().includes('deleted')
+                      || accountsMessage.toLowerCase().includes('enabled')
+                      || accountsMessage.toLowerCase().includes('disabled')
+                      ? 'text-emerald-300'
+                      : 'text-rose-300'
+                  }`}
+                >
+                  {accountsMessage}
+                </p>
+              ) : null}
               {state.accounts.length === 0 && !state.accounts_error ? (
-                <p className="mt-3 text-sm text-slate-400">No one is signed in.</p>
+                <p className="mt-3 text-sm text-slate-400">No accounts.</p>
               ) : null}
               {state.accounts.length > 0 ? (
-                <table className="mt-3 w-full text-left text-sm">
-                  <thead className="text-xs text-slate-400">
-                    <tr>
-                      <th className="py-2 pr-3 font-medium">Name</th>
-                      <th className="py-2 pr-3 font-medium">Email</th>
-                      <th className="py-2 pr-3 font-medium">Firm</th>
-                      <th className="py-2 pr-3 font-medium">Plan</th>
-                      <th className="py-2 font-medium">Last active</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <div className="mt-4">
+                  <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.8fr)] gap-x-3 gap-y-1 border-b border-slate-800 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <div>User</div>
+                    <div>Company / plan</div>
+                    <div className="text-right">Status / action</div>
+                    <div className="text-right">Date added</div>
+                  </div>
+                  <div className="space-y-2 pt-2">
                     {state.accounts.map((account) => {
-                      const seen = account.last_seen ? new Date(account.last_seen) : null;
+                      const enabled = account.enabled !== false;
+                      const firmOpen = account.firm_enabled !== false;
+                      const verified = account.verified === true;
+                      const displayName = account.full_name?.trim() || account.email?.split('@')[0] || '—';
                       return (
-                        <tr key={`${account.email}-${account.last_seen}`} className="border-t border-slate-800">
-                          <td className="py-2 pr-3">{account.full_name || '—'}</td>
-                          <td className="py-2 pr-3">{account.email || '—'}</td>
-                          <td className="py-2 pr-3">{account.firm_name || '—'}</td>
-                          <td className="py-2 pr-3">{account.plan_code || '—'}</td>
-                          <td className="py-2">{seen && !Number.isNaN(seen.getTime()) ? seen.toLocaleString() : '—'}</td>
-                        </tr>
+                        <div
+                          key={account.user_id || account.email}
+                          className={`grid grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.8fr)] items-center gap-x-3 gap-y-2 rounded-xl border px-3.5 py-3 ${
+                            enabled
+                              ? 'border-slate-700/80 bg-gradient-to-b from-[#1a2332] to-[#151c28] text-slate-100'
+                              : 'border-slate-800/80 bg-[#0c1017] text-slate-400'
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-600 text-xs font-bold text-slate-200">
+                              {accountInitials(account.full_name, account.email)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold" title={displayName}>
+                                {displayName}
+                              </div>
+                              <div
+                                className={`truncate font-mono text-xs ${verified ? 'text-emerald-400' : 'text-slate-400'}`}
+                                title={verified ? 'Email verified' : (account.email || 'Not verified')}
+                              >
+                                {account.email || '—'}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-bold" title={account.firm_name}>
+                              {account.firm_name || '—'}
+                            </div>
+                            <div className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-950/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                              <span>Plan:</span>
+                              <span className="text-slate-300">{planLabel(account.plan_code)}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-end gap-2">
+                            {account.user_id ? (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={accountBusy === account.user_id || (!enabled && !firmOpen)}
+                                  title={!enabled && !firmOpen ? 'Enable the firm before enabling this account' : undefined}
+                                  onClick={() => void setAccountAccess(account.user_id!, !enabled)}
+                                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-45 ${
+                                    enabled
+                                      ? 'border-red-900 bg-[#2a1218] text-rose-400'
+                                      : 'border-green-900 bg-[#0f1a14] text-green-400'
+                                  }`}
+                                >
+                                  {enabled ? '⏻ Disable' : '✓ Enable'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={accountBusy === account.user_id}
+                                  title="Delete account"
+                                  onClick={() => void deleteAccountAccess(account.user_id!, account.email)}
+                                  className="rounded-lg p-1.5 text-sm text-rose-400 hover:bg-rose-950/40 disabled:opacity-45"
+                                >
+                                  🗑
+                                </button>
+                              </>
+                            ) : (
+                              '—'
+                            )}
+                          </div>
+                          <div className="self-end pb-0.5 text-right text-xs leading-snug text-slate-500">
+                            {formatAccountCreated(account.created_at)}
+                          </div>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </div>
+                </div>
               ) : null}
             </section>
 

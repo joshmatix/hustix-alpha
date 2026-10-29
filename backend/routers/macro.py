@@ -14,14 +14,14 @@ def get_macro_indicators():
         return {
             "status": "fallback",
             "indicators": {
-                "10Y_Yield": 4.22,
-                "10Y_Yield_change": 0.02,
-                "Fed_Funds_Rate": 5.25,
-                "Fed_Funds_Rate_change": -0.01,
-                "Bitcoin": 67420,
-                "Bitcoin_change_pct": -0.05,
-                "Dollar_Index": 104.20,
-                "Dollar_Index_change_pct": 0.12,
+                "10Y_Yield": None,
+                "10Y_Yield_change": None,
+                "Fed_Funds_Rate": None,
+                "Fed_Funds_Rate_change": None,
+                "Bitcoin": None,
+                "Bitcoin_change_pct": None,
+                "Dollar_Index": None,
+                "Dollar_Index_change_pct": None,
             },
             "detail": str(exc),
         }

@@ -25,11 +25,11 @@ const navItems = [
   { name: 'Help', href: '/dashboard/help' },
 ];
 
-const fallbackTickers: Ticker[] = [
-  { label: 'Fed Funds (EFFR)', value: '5.25%', change: -0.01, unit: 'bps' },
-  { label: 'US 10Y (TNX)', value: '4.22%', change: 0.02, unit: 'bps' },
-  { label: 'USD Proxy', value: '104.20', change: 0.12, unit: 'pct', hint: 'Synthetic USD Index (Calculated via UUP)' },
-  { label: 'Bitcoin (BTC)', value: '$67,420', change: -0.05, unit: 'pct' },
+const placeholderTickers: Ticker[] = [
+  { label: 'Fed Funds (EFFR)', value: '—', change: null, unit: 'bps' },
+  { label: 'US 10Y (TNX)', value: '—', change: null, unit: 'bps' },
+  { label: 'USD Proxy', value: '—', change: null, unit: 'pct', hint: 'Synthetic USD Index (Calculated via UUP)' },
+  { label: 'Bitcoin (BTC)', value: '—', change: null, unit: 'pct' },
 ];
 
 function formatMove(change: number, unit: MoveUnit) {
@@ -112,7 +112,7 @@ export default function Header() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [tickers, setTickers] = useState<Ticker[]>(fallbackTickers);
+  const [tickers, setTickers] = useState<Ticker[]>(placeholderTickers);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -133,45 +133,40 @@ export default function Header() {
       .then((res) => (res.ok ? res.json() : null))
       .then((payload) => {
         const indicators = payload?.indicators;
-        if (!indicators) return;
-        const next: Ticker[] = [];
-        if (indicators.Fed_Funds_Rate != null) {
-          next.push({
+        if (!indicators) {
+          setTickers(placeholderTickers);
+          return;
+        }
+        setTickers([
+          {
             label: 'Fed Funds (EFFR)',
-            value: `${Number(indicators.Fed_Funds_Rate).toFixed(2)}%`,
+            value: indicators.Fed_Funds_Rate == null ? '—' : `${Number(indicators.Fed_Funds_Rate).toFixed(2)}%`,
             change: indicators.Fed_Funds_Rate_change == null ? null : Number(indicators.Fed_Funds_Rate_change),
             unit: 'bps',
-          });
-        }
-        if (indicators['10Y_Yield'] != null) {
-          next.push({
+          },
+          {
             label: 'US 10Y (TNX)',
-            value: `${Number(indicators['10Y_Yield']).toFixed(2)}%`,
+            value: indicators['10Y_Yield'] == null ? '—' : `${Number(indicators['10Y_Yield']).toFixed(2)}%`,
             change: indicators['10Y_Yield_change'] == null ? null : Number(indicators['10Y_Yield_change']),
             unit: 'bps',
-          });
-        }
-        if (indicators.Dollar_Index != null) {
-          next.push({
+          },
+          {
             label: 'USD Proxy',
             hint: 'Synthetic USD Index (Calculated via UUP)',
-            value: Number(indicators.Dollar_Index).toFixed(2),
+            value: indicators.Dollar_Index == null ? '—' : Number(indicators.Dollar_Index).toFixed(2),
             change: indicators.Dollar_Index_change_pct == null ? null : Number(indicators.Dollar_Index_change_pct),
             unit: 'pct',
-          });
-        }
-        if (indicators.Bitcoin != null) {
-          next.push({
+          },
+          {
             label: 'Bitcoin (BTC)',
-            value: formatBitcoin(Number(indicators.Bitcoin)),
+            value: indicators.Bitcoin == null ? '—' : formatBitcoin(Number(indicators.Bitcoin)),
             change: indicators.Bitcoin_change_pct == null ? null : Number(indicators.Bitcoin_change_pct),
             unit: 'pct',
-          });
-        }
-        if (next.length) setTickers(next);
+          },
+        ]);
       })
       .catch(() => {
-        /* keep fallback ticker values */
+        setTickers(placeholderTickers);
       });
   }, []);
 
