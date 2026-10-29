@@ -1090,6 +1090,9 @@ class Handler(BaseHTTPRequestHandler):
                 detail = detail.split(":", 1)[1].strip()
             self._send(*_json_bytes({"detail": detail}, status), "application/json")
             return
+        except Exception as exc:  # noqa: BLE001 — keep the browser from seeing Failed to fetch
+            self._send(*_json_bytes({"detail": str(exc)}, 500), "application/json")
+            return
         self._send(404, b"Not found", "text/plain; charset=utf-8")
 
     def do_DELETE(self) -> None:

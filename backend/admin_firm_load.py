@@ -1,11 +1,14 @@
-"""Normalize load-firm JSON for admin_load_firm RPC (shared shape with admin/server.py)."""
+"""Normalize load-firm JSON for admin_load_firm RPC (shared shape with admin/server.py).
+
+Keep top-level imports free of FastAPI so admin/server.py (stdlib only) can reuse
+normalize_load_firm_payload without the backend venv.
+"""
 
 from __future__ import annotations
 
 import json
 import re
-
-from fastapi import HTTPException, Request
+from typing import Any
 
 MAX_LOAD_FIRM_JSON_BYTES = 3 * 1024 * 1024
 JSON_TOO_LARGE_MESSAGE = "Load-firm JSON is too large (max 3 MB)."
@@ -23,8 +26,10 @@ def ensure_json_byte_limit(contents: bytes) -> None:
         raise ValueError(JSON_TOO_LARGE_MESSAGE)
 
 
-async def read_bounded_json(request: Request) -> dict:
+async def read_bounded_json(request: Any) -> dict:
     """Read a JSON body without buffering more than MAX_LOAD_FIRM_JSON_BYTES."""
+    from fastapi import HTTPException
+
     raw_length = request.headers.get("content-length")
     if raw_length is not None:
         try:
