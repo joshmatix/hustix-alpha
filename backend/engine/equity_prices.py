@@ -13,6 +13,7 @@ from engine.market_data import (
 )
 
 EQUITY_CLASSES = {"equities", "equity", "stocks", "stock"}
+CASH_TICKERS = {"CASH", "USD", "USD-CASH"}
 
 
 def is_equity_class(asset_class: str) -> bool:
@@ -28,11 +29,27 @@ def yahoo_symbol(ticker: str) -> str:
     return canonical_symbol(ticker)
 
 
+def is_cash_ticker_or_class(ticker: str, asset_class: str) -> bool:
+    if yahoo_symbol(ticker) in CASH_TICKERS:
+        return True
+    text = str(asset_class).strip().lower()
+    if text in {"cash", "money market"}:
+        return True
+    return "cash" in text and "equity" not in text
+
+
+def uses_market_close_on_upload(ticker: str, asset_class: str) -> bool:
+    """Listed symbols (equity, bond ETF, commodity, etc.) may omit file price on CSV upload."""
+    return not is_cash_ticker_or_class(ticker, asset_class)
+
+
 __all__ = [
     "fetch_closing_price",
     "fetch_closing_prices",
     "fetch_equity_price",
     "fetch_equity_prices",
+    "is_cash_ticker_or_class",
     "is_equity_class",
+    "uses_market_close_on_upload",
     "yahoo_symbol",
 ]

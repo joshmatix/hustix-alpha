@@ -11,6 +11,7 @@ import { apiFetch, type Holding, type Portfolio } from '@/lib/api';
 import { portfolioLimitSentence } from '@/lib/planLimits';
 import { supabase } from '@/lib/supabaseClient';
 import { createCheckoutSession } from '@/lib/stripeCheckout';
+import { holdingsCsvFileError } from '@/lib/holdingsCsvLimits';
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const PORTFOLIO_VIEW_KEY = 'hustix-portfolio-view';
@@ -27,10 +28,12 @@ type PortfolioView = 'cards' | 'list';
 function PortfolioCsvActions({
   portfolioName,
   uploading,
+  classificationMode,
   onFile,
 }: {
   portfolioName: string;
   uploading: boolean;
+  classificationMode: 'csv' | 'authoritative';
   onFile: (file: File) => void;
 }) {
   return (
@@ -63,7 +66,13 @@ function PortfolioCsvActions({
             <p className="font-semibold text-slate-100">CSV columns</p>
             <p className="mt-1">Column order is not significant.</p>
             <p className="mt-2 text-slate-400">Required</p>
-            <p>ticker, asset_class, quantity, current_price</p>
+            <p>
+              ticker, quantity, current_price
+              {classificationMode === 'csv' ? ', asset_class' : ''}
+            </p>
+            {classificationMode === 'authoritative' && (
+              <p className="mt-2 text-amber-200/90">Asset class comes from Tiingo for this firm.</p>
+            )}
             <p className="mt-2 text-slate-400">Optional</p>
             <p>asset_name, duration_years, beta</p>
             <p className="mt-2 text-slate-400">
@@ -123,6 +132,7 @@ export default function PortfoliosPage() {
   const [accountFilter, setAccountFilter] = useState('');
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  const [holdingsClassSource, setHoldingsClassSource] = useState<'csv' | 'authoritative'>('csv');
   const [notice, setNotice] = useState<{
     message: string;
     detail: string;
@@ -150,6 +160,30 @@ export default function PortfoliosPage() {
     supabase.rpc('firm_subscription_quote').then(({ data }) => {
       applyQuote(data);
     });
+  }, []);
+
+  useEffect(() => {
+    async function loadFirmClassSource() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: membership } = await supabase
+        .from('firm_members')
+        .select('firm_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle();
+      if (!membership?.firm_id) return;
+      const { data: firm } = await supabase
+        .from('firms')
+        .select('holdings_classification_source')
+        .eq('id', membership.firm_id)
+        .maybeSingle();
+      const source = String(firm?.holdings_classification_source || 'csv').toLowerCase();
+      setHoldingsClassSource(source === 'authoritative' ? 'authoritative' : 'csv');
+    }
+    void loadFirmClassSource();
   }, []);
 
   useEffect(() => {
@@ -314,6 +348,11 @@ export default function PortfoliosPage() {
   };
 
   const handleCsvUpload = async (portfolioId: string, file: File) => {
+    const sizeError = holdingsCsvFileError(file);
+    if (sizeError) {
+      setError(sizeError);
+      return sizeError;
+    }
     setUploadingId(portfolioId);
     setError(null);
     try {
@@ -487,8 +526,19 @@ export default function PortfoliosPage() {
         </div>
       ) : (
         <>
+        {holdingsClassSource === 'authoritative' && (
+          <p className="mb-3 text-sm text-amber-200/90">
+            This firm uses Tiingo for asset class on CSV upload. You do not need an asset_class column in the file.
+          </p>
+        )}
         <p id="csv-format-help" className="sr-only">
-          Column order is not significant. Required columns: ticker, asset_class, quantity, and current_price. Quantity is the number of shares. Optional columns: asset_name, duration_years, and beta. Class labels are Equity, Bond, Commodity, Gold, and Cash. A positions export from Schwab, Fidelity, LPL, BNY Mellon, or Raymond James is also accepted. A sample file is at /samples/holdings-sample.csv. Uploading replaces the holdings already in this portfolio.
+          Column order is not significant. Required columns: ticker, quantity, and current_price.
+          {holdingsClassSource === 'csv'
+            ? ' asset_class is required for this firm.'
+            : ' Asset class is supplied by Tiingo for this firm.'}
+          Quantity is the number of shares. Optional columns: asset_name, duration_years, and beta.
+          A positions export from Schwab, Fidelity, LPL, BNY Mellon, or Raymond James is also accepted.
+          A sample file is at /samples/holdings-sample.csv. Uploading replaces the holdings already in this portfolio.
         </p>
         <div className="flex flex-wrap gap-2">
         <div ref={accountMenuRef} className="relative w-full max-w-xs">
@@ -589,6 +639,7 @@ export default function PortfoliosPage() {
                 <PortfolioCsvActions
                   portfolioName={portfolio.name}
                   uploading={uploadingId === portfolio.id}
+                  classificationMode={holdingsClassSource}
                   onFile={(file) =>
                     setCsvReplace({
                       portfolioId: portfolio.id,
@@ -640,6 +691,7 @@ export default function PortfoliosPage() {
                 <PortfolioCsvActions
                   portfolioName={portfolio.name}
                   uploading={uploadingId === portfolio.id}
+                  classificationMode={holdingsClassSource}
                   onFile={(file) =>
                     setCsvReplace({
                       portfolioId: portfolio.id,

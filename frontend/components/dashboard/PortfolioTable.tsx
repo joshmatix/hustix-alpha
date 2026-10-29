@@ -13,7 +13,7 @@ interface Portfolio {
     bonds: number;
     realAssets: number;
     cash: number;
-  };
+  } | null;
   created_at?: string;
   selected: boolean;
 }
@@ -65,6 +65,24 @@ export default function PortfolioTable({
   onToggleAll,
   onSelectPortfolio,
 }: PortfolioTableProps) {
+  function allocationLabel(allocation: Portfolio['asset_allocation']) {
+    if (!allocation) return 'No holdings';
+    const total =
+      Number(allocation.equities || 0) +
+      Number(allocation.bonds || 0) +
+      Number(allocation.realAssets || 0) +
+      Number(allocation.cash || 0);
+    if (total <= 0) return 'No holdings';
+    return (
+      <>
+        <span className="text-indigo-400">{allocation.equities}%</span> /{' '}
+        <span className="text-sky-400">{allocation.bonds}%</span> /{' '}
+        <span className="text-amber-400">{allocation.realAssets}%</span> /{' '}
+        <span className="text-slate-400">{allocation.cash}%</span>
+      </>
+    );
+  }
+
   const selectedCount = portfolios.filter((item) => item.selected).length;
   const allSelected = portfolios.length > 0 && selectedCount === portfolios.length;
   const someSelected = selectedCount > 0 && !allSelected;
@@ -127,12 +145,7 @@ export default function PortfolioTable({
                   <td className="px-6 py-4 font-semibold text-emerald-400">
                     ${item.portfolio_value.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </td>
-                  <td className="px-6 py-4 text-xs">
-                    <span className="text-indigo-400">{item.asset_allocation.equities}%</span> /{' '}
-                    <span className="text-sky-400">{item.asset_allocation.bonds}%</span> /{' '}
-                    <span className="text-amber-400">{item.asset_allocation.realAssets}%</span> /{' '}
-                    <span className="text-slate-400">{item.asset_allocation.cash}%</span>
-                  </td>
+                  <td className="px-6 py-4 text-xs text-slate-400">{allocationLabel(item.asset_allocation)}</td>
                   <td className="px-6 py-4 text-right">
                     <button
                       onClick={() => onSelectPortfolio && onSelectPortfolio(item)}

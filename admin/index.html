@@ -45,7 +45,8 @@
     button.stop { background: #be123c; }
     button:disabled { opacity: 0.55; cursor: default; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #1e293b; font-size: 14px; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #1e293b; font-size: 14px; vertical-align: top; }
+    td.mono { font-family: ui-monospace, monospace; font-size: 12px; color: #94a3b8; word-break: break-all; }
     th { color: #94a3b8; font-size: 12px; font-weight: 600; }
     td input { max-width: 140px; }
     .row { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 14px 0; border-top: 1px solid #1e293b; }
@@ -72,6 +73,148 @@
     details summary { cursor: pointer; font-weight: 600; }
     details p, details li { font-size: 14px; }
     details ol { margin: 8px 0 0; padding-left: 20px; }
+    .firm-console {
+      display: grid;
+      grid-template-columns: minmax(200px, 20%) minmax(260px, 35%) minmax(300px, 1fr);
+      min-height: 420px;
+      margin-top: 12px;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #020617;
+    }
+    .firm-pane {
+      padding: 14px 12px;
+      border-right: 1px solid #1e293b;
+      overflow-y: auto;
+      max-height: 72vh;
+    }
+    .firm-pane:last-child { border-right: 0; }
+    .firm-pane h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: #94a3b8; }
+    .firm-search { margin-bottom: 10px; font-size: 13px; padding: 8px 10px; }
+    .firm-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      margin-bottom: 6px;
+      padding: 10px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+    }
+    .firm-item:hover { background: rgba(30, 41, 59, 0.6); }
+    .firm-item.selected { background: #1e293b; border-color: #334155; }
+    .firm-item strong { display: block; font-size: 14px; color: #f8fafc; }
+    .firm-item-meta { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: #94a3b8; }
+    .badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      padding: 2px 7px;
+      border-radius: 99px;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+    }
+    .badge.active { border-color: #065f46; color: #6ee7b7; background: rgba(6, 95, 70, 0.25); }
+    .badge.canceled { border-color: #9f1239; color: #fda4af; background: rgba(159, 18, 57, 0.2); }
+    .badge.trial { border-color: #1d4ed8; color: #93c5fd; background: rgba(29, 78, 216, 0.2); }
+    .detail-title { margin: 0; font-size: 20px; color: #f8fafc; }
+    .detail-sub { margin: 8px 0 14px; font-size: 13px; color: #94a3b8; }
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0 16px; }
+    .stat {
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #1e293b;
+      background: rgba(15, 23, 42, 0.8);
+      font-size: 12px;
+      color: #94a3b8;
+    }
+    .stat strong { display: block; margin-top: 4px; font-size: 15px; color: #e2e8f0; }
+    .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .detail-actions a.ghost-link {
+      display: inline-block;
+      padding: 9px 14px;
+      border-radius: 8px;
+      border: 1px solid #475569;
+      color: #e2e8f0;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    .tab-row { display: flex; gap: 8px; margin-bottom: 12px; }
+    .tab {
+      background: transparent;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      font-size: 12px;
+      padding: 6px 10px;
+    }
+    .tab.on { background: #312e81; border-color: #4f46e5; color: white; }
+    .relation-block { margin-bottom: 14px; }
+    .relation-block h4 { margin: 0 0 6px; font-size: 14px; color: #f1f5f9; }
+    .relation-list { margin: 0; padding-left: 18px; color: #cbd5e1; font-size: 13px; }
+    .relation-list li { margin: 4px 0; }
+    .advisor-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 7px;
+      border-radius: 6px;
+      border: 1px solid #4338ca;
+      background: rgba(79, 70, 229, 0.2);
+      color: #c7d2fe;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .placeholder { color: #64748b; font-size: 13px; line-height: 1.5; }
+    .section-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.82);
+      align-items: flex-start;
+      justify-content: center;
+      padding: 24px 16px 48px;
+      overflow-y: auto;
+      z-index: 40;
+    }
+    .modal-backdrop:not(.hidden) {
+      display: flex;
+    }
+    .modal-backdrop.hidden {
+      display: none;
+    }
+    .modal-panel {
+      width: min(920px, 100%);
+      border: 1px solid #334155;
+      border-radius: 14px;
+      background: #0f172a;
+      padding: 20px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+    }
+    .modal-panel.wide { width: min(1360px, 100%); }
+    .firm-console-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .modal-panel h2 { margin: 0 0 6px; }
+    .modal-section { margin-top: 18px; padding-top: 16px; border-top: 1px solid #1e293b; }
+    .modal-section h3 { margin: 0 0 10px; font-size: 15px; }
+    .mini-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .mini-table th, .mini-table td { padding: 8px 6px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+    .mini-table input, .mini-table select { font-size: 13px; padding: 8px; }
+    .mini-table input[type="checkbox"] { width: auto; }
+    .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .assign-grid { font-size: 12px; color: #94a3b8; }
+    .delete-confirm {
+      margin-top: 14px;
+      padding: 14px;
+      border: 1px solid #9f1239;
+      border-radius: 10px;
+      background: rgba(127, 29, 29, 0.15);
+    }
+    .delete-confirm label { margin-top: 10px; font-size: 13px; color: #fda4af; }
+    .delete-confirm input { margin-top: 6px; }
   </style>
 </head>
 <body>
@@ -100,18 +243,47 @@
     </section>
 
     <section id="app" class="hidden">
+      <p id="cloud-db-banner" class="banner ok hidden">Connected to hosted database. Services are hidden because start/stop only applies to local dev.</p>
       <div style="display:flex;justify-content:space-between;align-items:end;gap:16px;">
         <div>
           <h1>Admin</h1>
-          <p>Port <code>3090</code>. Frontend is <code>3000</code>. Backend is <code>8000</code>.</p>
+          <p id="app-subtitle">Port <code>3090</code>. Frontend is <code>3000</code>. Backend is <code>8000</code>.</p>
         </div>
         <button id="sign-out" class="secondary" type="button">Sign out</button>
       </div>
 
-      <section class="card">
+      <section id="services-section" class="card">
         <h2>Services</h2>
         <div id="services"></div>
         <p id="service-message" class="banner"></p>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Firms</h2>
+            <p id="firms-summary-blurb">Summary from the local Docker Postgres. Open the firm console for AUM, access controls, and advisor–portfolio mapping.</p>
+          </div>
+          <div class="firm-console-actions">
+            <button type="button" id="open-firm-console">Firm console</button>
+            <button type="button" class="secondary" id="open-load-firm">Load firm</button>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Plan</th>
+              <th>Advisors</th>
+              <th>Portfolios</th>
+              <th>Created</th>
+              <th>Firm id</th>
+            </tr>
+          </thead>
+          <tbody id="firms-summary"></tbody>
+        </table>
+        <p id="firms-summary-empty" class="banner hidden">No firms in the local database.</p>
+        <p id="firms-list-message" class="banner hidden"></p>
       </section>
 
       <section class="card">
@@ -132,7 +304,7 @@
         <p id="accounts-empty" class="banner hidden">No one is signed in.</p>
       </section>
 
-      <section class="card">
+      <section id="plan-limits-section" class="card">
         <h2>Plan limits</h2>
         <p>Empty means no cap. Portfolios already over a new cap stay. The next one past the cap is refused.</p>
         <form id="limits-form">
@@ -153,16 +325,154 @@
       </section>
     </section>
   </main>
+
+  <div id="firm-console-modal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-panel wide" role="dialog" aria-labelledby="firm-console-title">
+      <div class="section-head">
+        <div>
+          <h2 id="firm-console-title">Firm console</h2>
+          <p class="placeholder">Subscription, AUM, enable/disable, and advisor–portfolio assignments.</p>
+        </div>
+        <button type="button" class="secondary" id="close-firm-console">Close</button>
+      </div>
+      <div class="firm-console">
+        <div class="firm-pane">
+          <h3>Firms list</h3>
+          <input id="firm-search" class="firm-search" type="search" placeholder="Search firms…" autocomplete="off" />
+          <div id="firm-list"></div>
+          <p id="firms-empty" class="placeholder hidden">No firms match.</p>
+        </div>
+        <div class="firm-pane" id="firm-detail-pane">
+          <p class="placeholder">Select a firm to see details.</p>
+        </div>
+        <div class="firm-pane" id="firm-relation-pane">
+          <p class="placeholder">Advisor and portfolio relationships appear here.</p>
+        </div>
+      </div>
+      <div id="firm-delete-confirm" class="delete-confirm hidden" aria-hidden="true">
+        <p style="margin:0 0 8px;font-size:14px;color:#fecdd3;">
+          <strong>Delete this firm permanently?</strong>
+          Portfolios, pending invites, and assignments are removed. Advisor login accounts are not deleted.
+        </p>
+        <label for="firm-delete-input">Type <code id="firm-delete-label"></code> to confirm:</label>
+        <input id="firm-delete-input" type="text" autocomplete="off" />
+        <div class="row-actions" style="margin-top:12px;">
+          <button type="button" class="stop" id="firm-delete-submit">Permanently delete</button>
+          <button type="button" class="secondary" id="firm-delete-cancel">Cancel</button>
+        </div>
+      </div>
+      <p id="firm-message" class="banner"></p>
+    </div>
+  </div>
+
+  <div id="load-firm-modal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-panel" role="dialog" aria-labelledby="load-firm-title">
+      <div class="section-head">
+        <div>
+          <h2 id="load-firm-title">Load firm</h2>
+          <p class="placeholder">Advisors without accounts are invited by email to sign up. Assign zero or more portfolios per advisor.</p>
+        </div>
+        <button type="button" class="secondary" id="close-load-firm">Close</button>
+      </div>
+
+      <div class="modal-section">
+        <h3>Import from JSON</h3>
+        <p class="placeholder assign-grid">
+          Preferred. Fields: <code>firm</code>, optional <code>plan_code</code>,
+          optional <code>firm_id</code> (<code>firm_</code> + 11 chars or UUID) to append advisors/portfolios to an existing firm,
+          <code>portfolios</code> (<code>portfolio_id</code>, <code>portfolio_name</code>),
+          <code>advisors</code> (<code>advisor_name</code>, <code>advisor_email</code>, <code>portfolio_ids</code>).
+          JSON files are limited to 3&nbsp;MB. Unsigned advisors are emailed a signup link. Portfolio shells get auto account ids; upload holdings later via CSV.
+          Example: <code>admin/examples/wealth-advisors-group.load-firm.json</code>
+        </p>
+        <div class="row-actions">
+          <input type="file" id="load-firm-json-file" accept=".json,application/json" class="hidden" />
+          <button type="button" id="pick-load-firm-json">Choose JSON…</button>
+        </div>
+        <p id="load-firm-import-preview" class="placeholder assign-grid" style="margin-top:10px;"></p>
+      </div>
+
+      <div class="modal-section">
+        <h3>Firm</h3>
+        <label for="load-firm-name">Name</label>
+        <input id="load-firm-name" type="text" required placeholder="Alpha Wealth Management" />
+        <label for="load-firm-plan" style="margin-top:10px;">Plan</label>
+        <select id="load-firm-plan">
+          <option value="pro_plus" selected>Pro+</option>
+          <option value="pro">Pro</option>
+          <option value="free">Free</option>
+          <option value="enterprise">Enterprise</option>
+        </select>
+      </div>
+
+      <div class="modal-section">
+        <h3>Advisors</h3>
+        <table class="mini-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Name</th>
+              <th>Role</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="load-firm-advisors"></tbody>
+        </table>
+        <div class="row-actions">
+          <button type="button" class="secondary" id="add-load-advisor">Add advisor</button>
+        </div>
+      </div>
+
+      <div class="modal-section">
+        <h3>Portfolios</h3>
+        <p class="placeholder assign-grid">Check which advisors are assigned to each portfolio. Leave all unchecked to assign the firm owner.</p>
+        <table class="mini-table">
+          <thead id="load-firm-portfolio-head"></thead>
+          <tbody id="load-firm-portfolios"></tbody>
+        </table>
+        <div class="row-actions">
+          <button type="button" class="secondary" id="add-load-portfolio">Add portfolio</button>
+        </div>
+      </div>
+
+      <p id="load-firm-error" class="banner error hidden"></p>
+      <div class="row-actions" style="margin-top:16px;">
+        <button type="button" id="submit-load-firm">Create firm</button>
+      </div>
+    </div>
+  </div>
+
   <script>
+    const MAX_LOAD_FIRM_JSON_BYTES = 3145728;
     const login = document.querySelector('#login');
     const app = document.querySelector('#app');
     const loginError = document.querySelector('#login-error');
     const services = document.querySelector('#services');
+    const firmSearch = document.querySelector('#firm-search');
+    const firmList = document.querySelector('#firm-list');
+    const firmsEmpty = document.querySelector('#firms-empty');
+    const firmDetailPane = document.querySelector('#firm-detail-pane');
+    const firmRelationPane = document.querySelector('#firm-relation-pane');
+    const firmMessage = document.querySelector('#firm-message');
+    const firmDeleteConfirm = document.querySelector('#firm-delete-confirm');
+    const firmDeleteLabel = document.querySelector('#firm-delete-label');
+    const firmDeleteInput = document.querySelector('#firm-delete-input');
+    const firmsSummaryBody = document.querySelector('#firms-summary');
+    const firmsSummaryEmpty = document.querySelector('#firms-summary-empty');
+    const firmsListMessage = document.querySelector('#firms-list-message');
+    const firmConsoleModal = document.querySelector('#firm-console-modal');
+    let firmRows = [];
+    let selectedFirmId = null;
+    let firmDetail = null;
+    let relationshipView = 'advisors';
     const accountsBody = document.querySelector('#accounts');
     const accountsEmpty = document.querySelector('#accounts-empty');
     const plansBody = document.querySelector('#plans');
     const serviceMessage = document.querySelector('#service-message');
     const limitsMessage = document.querySelector('#limits-message');
+    const cloudDbBanner = document.querySelector('#cloud-db-banner');
+    const servicesSection = document.querySelector('#services-section');
+    const firmsSummaryBlurb = document.querySelector('#firms-summary-blurb');
 
     function money(cents) {
       if (cents == null) return 'Not set';
@@ -171,6 +481,28 @@
         minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
         maximumFractionDigits: 2,
       });
+    }
+
+    function formatAum(value) {
+      const amount = Number(value) || 0;
+      return amount.toLocaleString('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      });
+    }
+
+    function firmStatusBadge(firm) {
+      if (firm.enabled === false) return { label: 'Disabled', className: 'canceled' };
+      const status = (firm.subscription_status || 'active').toLowerCase();
+      if (status === 'canceled') return { label: 'Suspended', className: 'canceled' };
+      if ((firm.plan_code || 'free') === 'free') return { label: 'Trial', className: 'trial' };
+      return { label: 'Active', className: 'active' };
+    }
+
+    function capLabel(value) {
+      return value == null ? 'No cap' : String(value);
     }
 
     function show(signedIn) {
@@ -216,6 +548,691 @@
         row.append(copy, actions);
         services.append(row);
       }
+    }
+
+    function filteredFirms() {
+      const query = (firmSearch.value || '').trim().toLowerCase();
+      if (!query) return firmRows;
+      return firmRows.filter((firm) => (firm.name || '').toLowerCase().includes(query));
+    }
+
+    function renderFirmList() {
+      const rows = filteredFirms();
+      firmList.replaceChildren();
+      firmsEmpty.classList.toggle('hidden', rows.length > 0);
+      for (const firm of rows) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `firm-item${firm.id === selectedFirmId ? ' selected' : ''}`;
+        const badge = firmStatusBadge(firm);
+        const title = document.createElement('strong');
+        title.textContent = firm.name || 'Unnamed firm';
+        const meta = document.createElement('div');
+        meta.className = 'firm-item-meta';
+        const status = document.createElement('span');
+        status.className = `badge ${badge.className}`;
+        status.textContent = badge.label;
+        meta.append(status, document.createTextNode(`${firm.portfolio_count ?? 0} portfolios`));
+        button.append(title, meta);
+        button.addEventListener('click', () => selectFirm(firm.id));
+        firmList.append(button);
+      }
+    }
+
+    function hideFirmDeleteConfirm() {
+      firmDeleteConfirm.classList.add('hidden');
+      firmDeleteConfirm.setAttribute('aria-hidden', 'true');
+      firmDeleteInput.value = '';
+    }
+
+    function showFirmDeleteConfirm() {
+      if (!firmDetail || !selectedFirmId) return;
+      const label = firmDetail.name || '';
+      firmDeleteLabel.textContent = label;
+      firmDeleteInput.value = '';
+      firmDeleteConfirm.classList.remove('hidden');
+      firmDeleteConfirm.setAttribute('aria-hidden', 'false');
+      firmDeleteInput.focus();
+      firmDeleteConfirm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function renderFirmDetail() {
+      hideFirmDeleteConfirm();
+      firmDetailPane.replaceChildren();
+      if (!firmDetail) {
+        firmDetailPane.append(Object.assign(document.createElement('p'), {
+          className: 'placeholder',
+          textContent: 'Select a firm to see details.',
+        }));
+        return;
+      }
+      const badge = firmStatusBadge(firmDetail);
+      const title = document.createElement('h2');
+      title.className = 'detail-title';
+      title.textContent = firmDetail.name || 'Unnamed firm';
+      const sub = document.createElement('p');
+      sub.className = 'detail-sub';
+      sub.append(
+        document.createElement('span'),
+      );
+      sub.firstChild.className = `badge ${badge.className}`;
+      sub.firstChild.textContent = badge.label;
+      sub.append(document.createTextNode(` · Plan: ${(firmDetail.plan_code || 'free').replace('_', ' ')}`));
+      const stats = document.createElement('div');
+      stats.className = 'stat-grid';
+      const statItems = [
+        ['Total AUM', formatAum(firmDetail.total_aum)],
+        ['Advisors', String(firmDetail.advisor_count ?? 0)],
+        ['Portfolios', String(firmDetail.portfolio_count ?? 0)],
+        ['Created', firmDetail.created_on || '—'],
+        ['Portfolio cap', capLabel(firmDetail.portfolio_limit)],
+        ['Ticker cap', capLabel(firmDetail.ticker_limit)],
+        ['Holdings class', (firmDetail.holdings_classification_source || 'csv') === 'authoritative' ? 'Tiingo' : 'CSV'],
+      ];
+      for (const [label, value] of statItems) {
+        const box = document.createElement('div');
+        box.className = 'stat';
+        box.textContent = label;
+        const strong = document.createElement('strong');
+        strong.textContent = value;
+        box.append(strong);
+        stats.append(box);
+      }
+      const classRow = document.createElement('div');
+      classRow.className = 'detail-actions';
+      classRow.style.marginTop = '0.75rem';
+      const classLabel = document.createElement('label');
+      classLabel.className = 'detail-sub';
+      classLabel.textContent = 'Holdings asset class on CSV upload';
+      const classSelect = document.createElement('select');
+      classSelect.className = 'secondary';
+      for (const [value, text] of [
+        ['csv', 'From CSV file (default)'],
+        ['authoritative', 'Tiingo (authoritative)'],
+      ]) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = text;
+        if ((firmDetail.holdings_classification_source || 'csv') === value) opt.selected = true;
+        classSelect.append(opt);
+      }
+      classSelect.addEventListener('change', () => {
+        void setHoldingsClassification(classSelect.value);
+      });
+      classRow.append(classLabel, classSelect);
+      const actions = document.createElement('div');
+      actions.className = 'detail-actions';
+      const manage = document.createElement('a');
+      manage.className = 'ghost-link';
+      manage.href = 'http://127.0.0.1:3000/admin';
+      manage.target = '_blank';
+      manage.rel = 'noopener';
+      manage.textContent = 'Manage advisors';
+      const billing = document.createElement('button');
+      billing.type = 'button';
+      billing.className = 'secondary';
+      billing.textContent = 'Plan limits';
+      billing.addEventListener('click', () => {
+        document.querySelector('#plan-limits-section')?.scrollIntoView({ behavior: 'smooth' });
+      });
+      const firmAccess = document.createElement('button');
+      firmAccess.type = 'button';
+      firmAccess.className = firmDetail.enabled ? 'stop' : '';
+      firmAccess.textContent = firmDetail.enabled ? 'Disable firm' : 'Enable firm';
+      firmAccess.title = firmDetail.enabled
+        ? 'Disables the firm and all of its advisors'
+        : 'Enables the firm only; advisors stay disabled until you enable each one';
+      firmAccess.addEventListener('click', () => {
+        const enabling = !firmDetail.enabled;
+        const prompt = enabling
+          ? 'Enable this firm? Advisors will stay disabled until you enable them individually.'
+          : 'Disable this firm? All advisors on this firm will be disabled.';
+        if (!window.confirm(prompt)) return;
+        void setFirmAccess(enabling);
+      });
+      const deleteFirmBtn = document.createElement('button');
+      deleteFirmBtn.type = 'button';
+      deleteFirmBtn.className = 'stop';
+      deleteFirmBtn.textContent = 'Delete firm';
+      deleteFirmBtn.title = 'Permanently removes this firm, portfolios, invites, and assignments';
+      deleteFirmBtn.addEventListener('click', () => { showFirmDeleteConfirm(); });
+      actions.prepend(deleteFirmBtn, firmAccess, billing, manage);
+      if (firmDetail.public_id) {
+        const pubRow = document.createElement('div');
+        pubRow.className = 'detail-actions';
+        pubRow.style.marginTop = '0.5rem';
+        const pubText = document.createElement('span');
+        pubText.className = 'detail-sub';
+        pubText.textContent = `public_id: ${firmDetail.public_id}`;
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'secondary';
+        copyBtn.textContent = 'Copy';
+        copyBtn.addEventListener('click', () => {
+          void navigator.clipboard.writeText(firmDetail.public_id);
+        });
+        pubRow.append(pubText, copyBtn);
+        firmDetailPane.append(title, sub, stats, pubRow, classRow, actions);
+      } else {
+        firmDetailPane.append(title, sub, stats, classRow, actions);
+      }
+    }
+
+    async function setHoldingsClassification(source) {
+      if (!selectedFirmId) return;
+      try {
+        const result = await request(`/api/firms/${selectedFirmId}/holdings-classification`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source }),
+        });
+        firmDetail = result.firm || firmDetail;
+        renderFirmDetail();
+        firmMessage.className = 'banner ok';
+        firmMessage.textContent = 'Holdings classification source saved.';
+      } catch (err) {
+        firmMessage.className = 'banner error';
+        firmMessage.textContent = err.message || 'Could not save classification source.';
+        renderFirmDetail();
+      }
+    }
+
+    async function submitDeleteFirm() {
+      if (!selectedFirmId || !firmDetail) return;
+      const label = firmDetail.name || '';
+      const typed = firmDeleteInput.value.trim();
+      if (typed !== label) {
+        firmMessage.className = 'banner error';
+        firmMessage.textContent = 'Firm name did not match. Delete canceled.';
+        return;
+      }
+      const submitBtn = document.querySelector('#firm-delete-submit');
+      submitBtn.disabled = true;
+      firmMessage.className = 'banner';
+      firmMessage.textContent = 'Deleting…';
+      try {
+        const result = await request(`/api/firms/${selectedFirmId}`, { method: 'DELETE' });
+        hideFirmDeleteConfirm();
+        firmRows = result.firms || [];
+        selectedFirmId = null;
+        firmDetail = null;
+        renderFirmsSummary();
+        closeFirmConsole();
+        firmsListMessage.className = 'banner ok';
+        firmsListMessage.classList.remove('hidden');
+        firmsListMessage.textContent = `Deleted ${result.deleted?.name || label}.`;
+      } catch (error) {
+        firmMessage.className = 'banner error';
+        firmMessage.textContent = error.message;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    }
+
+    async function setFirmAccess(enabled) {
+      if (!selectedFirmId) return;
+      firmMessage.className = 'banner';
+      firmMessage.textContent = '';
+      try {
+        const result = await request(`/api/firms/${selectedFirmId}/access`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled }),
+        });
+        firmRows = result.firms || firmRows;
+        firmDetail = result.firm || firmDetail;
+        renderFirmList();
+        renderFirmDetail();
+        renderFirmRelations();
+        firmMessage.className = 'banner ok';
+        firmMessage.textContent = enabled
+          ? 'Firm enabled. Enable each advisor separately if needed.'
+          : 'Firm disabled. Its advisors were disabled too.';
+      } catch (error) {
+        firmMessage.className = 'banner error';
+        firmMessage.textContent = error.message;
+      }
+    }
+
+    async function setAdvisorAccess(userId, enabled) {
+      firmMessage.className = 'banner';
+      firmMessage.textContent = '';
+      try {
+        const result = await request(`/api/advisors/${userId}/access`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled, firm_id: selectedFirmId }),
+        });
+        firmRows = result.firms || firmRows;
+        if (result.firm) firmDetail = result.firm;
+        renderFirmList();
+        renderFirmDetail();
+        renderFirmRelations(userId);
+        firmMessage.className = 'banner ok';
+        firmMessage.textContent = enabled ? 'Advisor enabled.' : 'Advisor disabled.';
+      } catch (error) {
+        firmMessage.className = 'banner error';
+        firmMessage.textContent = error.message;
+      }
+    }
+
+    async function addAdvisorToFirm() {
+      if (!selectedFirmId) return;
+      const email = window.prompt('Advisor email (invite sent if they have not signed up yet):');
+      if (email == null) return;
+      const full_name = window.prompt('Full name (optional):', '') || '';
+      firmMessage.className = 'banner';
+      firmMessage.textContent = '';
+      try {
+        const result = await request(`/api/firms/${selectedFirmId}/advisors`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim(), full_name: full_name.trim(), role: 'advisor' }),
+        });
+        firmRows = result.firms || firmRows;
+        if (result.firm) firmDetail = result.firm;
+        renderFirmList();
+        renderFirmDetail();
+        renderFirmRelations();
+        firmMessage.className = 'banner ok';
+        firmMessage.textContent = result.pending
+          ? 'Invite created; signup email sent if mail is configured.'
+          : 'Advisor added to firm.';
+      } catch (error) {
+        firmMessage.className = 'banner error';
+        firmMessage.textContent = error.message;
+      }
+    }
+
+    async function assignAdvisorToPortfolio(portfolioId, userId, isLead) {
+      firmMessage.className = 'banner';
+      firmMessage.textContent = '';
+      try {
+        const result = await request(`/api/portfolios/${portfolioId}/advisors`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId, is_lead: !!isLead, firm_id: selectedFirmId }),
+        });
+        firmRows = result.firms || firmRows;
+        if (result.firm) firmDetail = result.firm;
+        renderFirmList();
+        renderFirmDetail();
+        renderFirmRelations(userId);
+        firmMessage.className = 'banner ok';
+        firmMessage.textContent = isLead ? 'Lead advisor set.' : 'Advisor assigned.';
+      } catch (error) {
+        firmMessage.className = 'banner error';
+        firmMessage.textContent = error.message;
+      }
+    }
+
+    async function removeAdvisorFromPortfolio(portfolioId, userId) {
+      if (!window.confirm('Remove this advisor from the portfolio?')) return;
+      firmMessage.className = 'banner';
+      firmMessage.textContent = '';
+      try {
+        const result = await request(
+          `/api/portfolios/${portfolioId}/advisors/${userId}?firm_id=${encodeURIComponent(selectedFirmId)}`,
+          { method: 'DELETE' },
+        );
+        firmRows = result.firms || firmRows;
+        if (result.firm) firmDetail = result.firm;
+        renderFirmList();
+        renderFirmDetail();
+        renderFirmRelations();
+        firmMessage.className = 'banner ok';
+        firmMessage.textContent = 'Advisor removed from portfolio.';
+      } catch (error) {
+        firmMessage.className = 'banner error';
+        firmMessage.textContent = error.message;
+      }
+    }
+
+    function renderAdvisorRelations(highlightUserId) {
+      firmRelationPane.replaceChildren();
+      const tabs = document.createElement('div');
+      tabs.className = 'tab-row';
+      for (const mode of ['advisors', 'portfolios']) {
+        const tab = document.createElement('button');
+        tab.type = 'button';
+        tab.className = `tab${relationshipView === mode ? ' on' : ''}`;
+        tab.textContent = mode === 'advisors' ? 'By advisors' : 'By portfolios';
+        tab.addEventListener('click', () => {
+          relationshipView = mode;
+          renderFirmRelations(highlightUserId);
+        });
+        tabs.append(tab);
+      }
+      firmRelationPane.append(tabs);
+      if (!firmDetail) {
+        firmRelationPane.append(Object.assign(document.createElement('p'), {
+          className: 'placeholder',
+          textContent: 'Select a firm first.',
+        }));
+        return;
+      }
+      if (relationshipView === 'advisors') {
+        const addRow = document.createElement('div');
+        addRow.className = 'row-actions';
+        addRow.style.marginBottom = '12px';
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'secondary';
+        addBtn.textContent = 'Add advisor';
+        addBtn.addEventListener('click', () => { void addAdvisorToFirm(); });
+        addRow.append(addBtn);
+        firmRelationPane.append(addRow);
+      }
+      if (relationshipView === 'portfolios') {
+        renderPortfolioRelations(highlightUserId);
+        return;
+      }
+      const advisors = firmDetail.advisors || [];
+      const pendingAdvisors = firmDetail.pending_advisors || [];
+      if (!advisors.length && !pendingAdvisors.length) {
+        firmRelationPane.append(Object.assign(document.createElement('p'), {
+          className: 'placeholder',
+          textContent: 'No advisors on this firm.',
+        }));
+        return;
+      }
+      const portfolios = firmDetail.portfolios || [];
+      for (const advisor of pendingAdvisors) {
+        const block = document.createElement('div');
+        block.className = 'relation-block';
+        const heading = document.createElement('h4');
+        heading.style.margin = '0 0 6px';
+        heading.textContent = advisor.full_name || advisor.email || 'Advisor';
+        const status = document.createElement('span');
+        status.className = 'badge trial';
+        status.textContent = 'Invite pending';
+        status.style.marginLeft = '8px';
+        const titleLine = document.createElement('div');
+        titleLine.append(heading, status);
+        const meta = document.createElement('p');
+        meta.className = 'placeholder';
+        meta.style.margin = '0 0 6px';
+        meta.textContent = `${advisor.email || ''} · ${advisor.role || 'advisor'} · invited ${advisor.invited_on || '—'}`;
+        const list = document.createElement('ul');
+        list.className = 'relation-list';
+        const assigned = advisor.portfolios || [];
+        if (!assigned.length) {
+          list.append(Object.assign(document.createElement('li'), { textContent: 'No portfolios assigned yet' }));
+        } else {
+          for (const portfolio of assigned) {
+            const item = document.createElement('li');
+            item.textContent = `${portfolio.name || 'Portfolio'}${portfolio.is_lead ? ' · lead' : ''} (pending)`;
+            list.append(item);
+          }
+        }
+        block.append(titleLine, meta, list);
+        firmRelationPane.append(block);
+      }
+      for (const advisor of advisors) {
+        const block = document.createElement('div');
+        block.className = 'relation-block';
+        const toolbar = document.createElement('div');
+        toolbar.style.display = 'flex';
+        toolbar.style.justifyContent = 'space-between';
+        toolbar.style.alignItems = 'center';
+        toolbar.style.gap = '10px';
+        toolbar.style.marginBottom = '6px';
+        const heading = document.createElement('h4');
+        heading.style.margin = '0';
+        heading.textContent = advisor.full_name || advisor.email || 'Advisor';
+        if (highlightUserId && advisor.user_id === highlightUserId) {
+          heading.style.color = '#a5b4fc';
+        }
+        const status = document.createElement('span');
+        status.className = `badge ${advisor.enabled ? 'active' : 'canceled'}`;
+        status.textContent = advisor.enabled ? 'Enabled' : 'Disabled';
+        status.style.marginLeft = '8px';
+        const titleLine = document.createElement('div');
+        titleLine.append(heading, status);
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = advisor.enabled ? 'secondary' : '';
+        toggle.textContent = advisor.enabled ? 'Disable' : 'Enable';
+        const firmOpen = firmDetail.enabled !== false;
+        toggle.disabled = !advisor.enabled && !firmOpen;
+        toggle.title = toggle.disabled ? 'Enable the firm before enabling this advisor' : '';
+        toggle.addEventListener('click', () => {
+          const enabling = !advisor.enabled;
+          if (enabling && !firmOpen) return;
+          void setAdvisorAccess(advisor.user_id, enabling);
+        });
+        toolbar.append(titleLine, toggle);
+        const list = document.createElement('ul');
+        list.className = 'relation-list';
+        const assigned = portfolios.filter((portfolio) =>
+          (portfolio.advisors || []).some((item) => item.user_id === advisor.user_id),
+        );
+        if (!assigned.length) {
+          const item = document.createElement('li');
+          item.textContent = 'No portfolios assigned';
+          list.append(item);
+        } else {
+          for (const portfolio of assigned) {
+            const item = document.createElement('li');
+            const leadHere = (portfolio.advisors || []).some(
+              (row) => row.user_id === advisor.user_id && row.is_lead,
+            );
+            item.textContent = `${portfolio.name || 'Portfolio'}${leadHere ? ' · lead' : ''}`;
+            const others = (portfolio.advisors || []).filter((item) => item.user_id !== advisor.user_id);
+            if (others.length) {
+              item.append(document.createTextNode(' (Co-managed'));
+              for (const other of others) {
+                const badge = document.createElement('button');
+                badge.type = 'button';
+                badge.className = 'advisor-badge';
+                badge.textContent = other.full_name || 'Advisor';
+                badge.addEventListener('click', () => {
+                  relationshipView = 'advisors';
+                  renderFirmRelations(other.user_id);
+                });
+                item.append(document.createTextNode(' '), badge);
+              }
+              item.append(document.createTextNode(')'));
+            }
+            list.append(item);
+          }
+        }
+        block.append(toolbar, list);
+        firmRelationPane.append(block);
+      }
+    }
+
+    function renderPortfolioRelations(highlightUserId) {
+      const portfolios = firmDetail?.portfolios || [];
+      const firmAdvisors = firmDetail?.advisors || [];
+      if (!portfolios.length) {
+        firmRelationPane.append(Object.assign(document.createElement('p'), {
+          className: 'placeholder',
+          textContent: 'No portfolios on this firm.',
+        }));
+        return;
+      }
+      for (const portfolio of portfolios) {
+        const block = document.createElement('div');
+        block.className = 'relation-block';
+        const heading = document.createElement('h4');
+        heading.textContent = `${portfolio.name || 'Portfolio'} · ${formatAum(portfolio.portfolio_value)}`;
+        const list = document.createElement('ul');
+        list.className = 'relation-list';
+        const advisors = portfolio.advisors || [];
+        if (!advisors.length) {
+          const item = document.createElement('li');
+          item.textContent = 'No advisors assigned';
+          list.append(item);
+        } else {
+          for (const advisor of advisors) {
+            const item = document.createElement('li');
+            item.style.display = 'flex';
+            item.style.flexWrap = 'wrap';
+            item.style.alignItems = 'center';
+            item.style.gap = '6px';
+            const badge = document.createElement('button');
+            badge.type = 'button';
+            badge.className = 'advisor-badge';
+            badge.textContent = advisor.full_name || 'Advisor';
+            if (advisor.is_lead) badge.textContent += ' (lead)';
+            if (highlightUserId && advisor.user_id === highlightUserId) {
+              badge.style.borderColor = '#a5b4fc';
+            }
+            badge.addEventListener('click', () => {
+              relationshipView = 'advisors';
+              renderFirmRelations(advisor.user_id);
+            });
+            item.append(badge);
+            if (!advisor.is_lead) {
+              const leadBtn = document.createElement('button');
+              leadBtn.type = 'button';
+              leadBtn.className = 'secondary';
+              leadBtn.textContent = 'Set lead';
+              leadBtn.addEventListener('click', () => {
+                void assignAdvisorToPortfolio(portfolio.id, advisor.user_id, true);
+              });
+              item.append(leadBtn);
+            }
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'secondary';
+            removeBtn.textContent = 'Remove';
+            removeBtn.addEventListener('click', () => {
+              void removeAdvisorFromPortfolio(portfolio.id, advisor.user_id);
+            });
+            item.append(removeBtn);
+            list.append(item);
+          }
+        }
+        const assignRow = document.createElement('div');
+        assignRow.className = 'row-actions';
+        const unassigned = firmAdvisors.filter(
+          (advisor) => !(advisors || []).some((row) => row.user_id === advisor.user_id),
+        );
+        if (unassigned.length) {
+          const select = document.createElement('select');
+          select.style.maxWidth = '220px';
+          const blank = document.createElement('option');
+          blank.value = '';
+          blank.textContent = 'Assign advisor…';
+          select.append(blank);
+          for (const advisor of unassigned) {
+            const option = document.createElement('option');
+            option.value = advisor.user_id;
+            option.textContent = advisor.full_name || advisor.email || 'Advisor';
+            select.append(option);
+          }
+          const assignBtn = document.createElement('button');
+          assignBtn.type = 'button';
+          assignBtn.className = 'secondary';
+          assignBtn.textContent = 'Assign';
+          assignBtn.addEventListener('click', () => {
+            if (!select.value) return;
+            void assignAdvisorToPortfolio(portfolio.id, select.value, false);
+          });
+          assignRow.append(select, assignBtn);
+        }
+        block.append(heading, list, assignRow);
+        firmRelationPane.append(block);
+      }
+    }
+
+    function renderFirmRelations(highlightUserId) {
+      renderAdvisorRelations(highlightUserId);
+    }
+
+    async function selectFirm(firmId) {
+      if (!firmId) return;
+      selectedFirmId = firmId;
+      firmMessage.className = 'banner';
+      firmMessage.textContent = '';
+      renderFirmList();
+      firmDetailPane.replaceChildren(Object.assign(document.createElement('p'), {
+        className: 'placeholder',
+        textContent: 'Loading firm…',
+      }));
+      firmRelationPane.replaceChildren(Object.assign(document.createElement('p'), {
+        className: 'placeholder',
+        textContent: 'Loading relationships…',
+      }));
+      try {
+        firmDetail = await request(`/api/firms/${firmId}`);
+        renderFirmDetail();
+        renderFirmRelations();
+      } catch (error) {
+        firmDetail = null;
+        firmMessage.className = 'banner error';
+        firmMessage.textContent = error.message;
+        renderFirmDetail();
+        renderFirmRelations();
+      }
+    }
+
+    function renderFirmsSummary() {
+      firmsSummaryBody.replaceChildren();
+      firmsSummaryEmpty.classList.toggle('hidden', firmRows.length > 0);
+      for (const firm of firmRows) {
+        const tr = document.createElement('tr');
+        const nameTd = document.createElement('td');
+        const open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'secondary';
+        open.textContent = firm.name || 'Unnamed firm';
+        open.addEventListener('click', () => openFirmConsole(firm.id));
+        nameTd.append(open);
+        tr.append(nameTd);
+        for (const value of [
+          (firm.plan_code || 'free').replace('_', ' '),
+          String(firm.member_count ?? 0),
+          String(firm.portfolio_count ?? 0),
+          firm.created_on || '—',
+        ]) {
+          const td = document.createElement('td');
+          td.textContent = value;
+          tr.append(td);
+        }
+        const idCell = document.createElement('td');
+        idCell.className = 'mono';
+        idCell.textContent = firm.id || '—';
+        tr.append(idCell);
+        firmsSummaryBody.append(tr);
+      }
+    }
+
+    function refreshFirmConsoleSelection() {
+      renderFirmList();
+      if (!firmRows.length) {
+        selectedFirmId = null;
+        firmDetail = null;
+        renderFirmDetail();
+        renderFirmRelations();
+        return;
+      }
+      if (!selectedFirmId || !firmRows.some((firm) => firm.id === selectedFirmId)) {
+        selectedFirmId = firmRows[0].id;
+      }
+      void selectFirm(selectedFirmId);
+    }
+
+    function openFirmConsole(firmId) {
+      if (firmId) selectedFirmId = firmId;
+      firmConsoleModal.classList.remove('hidden');
+      firmConsoleModal.setAttribute('aria-hidden', 'false');
+      refreshFirmConsoleSelection();
+    }
+
+    function closeFirmConsole() {
+      hideFirmDeleteConfirm();
+      firmConsoleModal.classList.add('hidden');
+      firmConsoleModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function renderFirms(rows) {
+      firmRows = rows || [];
+      renderFirmsSummary();
+      if (firmConsoleModal.classList.contains('hidden')) return;
+      refreshFirmConsoleSelection();
     }
 
     function renderAccounts(rows) {
@@ -265,11 +1282,59 @@
       }
     }
 
+    function applyCloudMode(cloudMode, database) {
+      const hosted = Boolean(cloudMode);
+      cloudDbBanner.classList.toggle('hidden', !hosted);
+      servicesSection.classList.toggle('hidden', hosted);
+      if (hosted) {
+        services.replaceChildren();
+        serviceMessage.textContent = '';
+        const host = database?.host || 'hosted pooler';
+        const count = database?.firm_count;
+        const countLabel = count == null ? '' : ` · ${count} firm${count === 1 ? '' : 's'}`;
+        cloudDbBanner.textContent =
+          `Connected to hosted database (${host}${countLabel}). Services are hidden because start/stop only applies to local dev.`;
+      }
+      if (firmsSummaryBlurb) {
+        firmsSummaryBlurb.textContent = hosted
+          ? 'Summary from the hosted database. Open the firm console for AUM, access controls, and advisor–portfolio mapping.'
+          : 'Summary from the local Docker Postgres. Open the firm console for AUM, access controls, and advisor–portfolio mapping.';
+      }
+      if (firmsSummaryEmpty) {
+        firmsSummaryEmpty.textContent = hosted
+          ? 'No firms on the hosted database.'
+          : 'No firms in the local database.';
+      }
+    }
+
+    function showStateLoadError(message) {
+      firmsListMessage.className = 'banner error';
+      firmsListMessage.classList.remove('hidden');
+      firmsListMessage.textContent = message;
+    }
+
+    function clearStateLoadError() {
+      firmsListMessage.classList.add('hidden');
+      firmsListMessage.textContent = '';
+      firmsListMessage.className = 'banner';
+    }
+
     async function loadState() {
-      const state = await request('/api/state');
-      renderServices(state.services);
-      renderAccounts(state.accounts || []);
-      renderPlans(state.plans);
+      clearStateLoadError();
+      try {
+        const state = await request('/api/state');
+        applyCloudMode(state.cloud_mode, state.database);
+        if (!state.cloud_mode) renderServices(state.services);
+        renderFirms(state.firms || []);
+        renderAccounts(state.accounts || []);
+        renderPlans(state.plans);
+        if (state.database?.error) {
+          showStateLoadError(state.database.error);
+        }
+      } catch (error) {
+        showStateLoadError(error.message || 'Could not load the database.');
+        throw error;
+      }
     }
 
     async function changeService(name, action, button) {
@@ -303,7 +1368,9 @@
           body: JSON.stringify({ password: document.querySelector('#password').value }),
         });
         show(true);
-        await loadState();
+        await loadState().catch((error) => {
+          loginError.textContent = error.message || 'Could not load the database.';
+        });
       } catch (error) {
         loginError.textContent = error.message;
       }
@@ -346,9 +1413,399 @@
       }
     });
 
+    const loadFirmModal = document.querySelector('#load-firm-modal');
+    const loadFirmAdvisors = document.querySelector('#load-firm-advisors');
+    const loadFirmPortfolios = document.querySelector('#load-firm-portfolios');
+    const loadFirmPortfolioHead = document.querySelector('#load-firm-portfolio-head');
+    const loadFirmError = document.querySelector('#load-firm-error');
+    let loadAdvisorSeq = 0;
+    let loadPortfolioSeq = 0;
+    let loadAdvisors = [];
+    let loadPortfolios = [];
+    let pendingJsonPayload = null;
+    const loadFirmImportPreview = document.querySelector('#load-firm-import-preview');
+
+    function newLoadAdvisor() {
+      return {
+        id: `adv-${++loadAdvisorSeq}`,
+        email: '',
+        full_name: '',
+        role: loadAdvisors.length === 0 ? 'owner' : 'advisor',
+      };
+    }
+
+    function newLoadPortfolio() {
+      return {
+        id: `pf-${++loadPortfolioSeq}`,
+        import_id: '',
+        name: '',
+        account_number: '',
+        sub_account_number: '',
+        portfolio_value: '',
+        assignments: {},
+      };
+    }
+
+    function resetLoadFirmForm() {
+      loadAdvisorSeq = 0;
+      loadPortfolioSeq = 0;
+      loadAdvisors = [newLoadAdvisor()];
+      loadPortfolios = [];
+      pendingJsonPayload = null;
+      if (loadFirmImportPreview) loadFirmImportPreview.textContent = '';
+      document.querySelector('#load-firm-name').value = '';
+      document.querySelector('#load-firm-plan').value = 'pro_plus';
+      loadFirmError.classList.add('hidden');
+      loadFirmError.textContent = '';
+      renderLoadFirmForm();
+    }
+
+    function importLoadFirmJson(text) {
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (_error) {
+        throw new Error('Invalid JSON.');
+      }
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('JSON root must be an object.');
+      }
+      const firmIdRaw = String(data.firm_id || '').trim();
+      const appendMode = firmIdRaw !== '';
+      const firmName = String(data.firm_name || data.firm || '').trim();
+      if (!appendMode && !firmName) throw new Error('JSON needs firm or firm_name.');
+      const advisors = Array.isArray(data.advisors) ? data.advisors : [];
+      const portfolios = Array.isArray(data.portfolios) ? data.portfolios : [];
+      if (!appendMode && !advisors.length) throw new Error('JSON needs at least one advisor.');
+      if (appendMode && !advisors.length && !portfolios.length) {
+        throw new Error('JSON needs at least one advisor or portfolio.');
+      }
+      for (const row of advisors) {
+        const email = String(row.advisor_email || row.email || '').trim();
+        if (!email) throw new Error('Each advisor needs advisor_email.');
+      }
+
+      loadAdvisorSeq = 0;
+      loadPortfolioSeq = 0;
+      loadAdvisors = [];
+      loadPortfolios = [];
+      pendingJsonPayload = data;
+
+      const planCode = String(data.plan_code || 'pro_plus').trim() || 'pro_plus';
+      document.querySelector('#load-firm-name').value = firmName;
+      document.querySelector('#load-firm-plan').value = planCode;
+
+      for (const row of portfolios) {
+        const portfolio = newLoadPortfolio();
+        portfolio.import_id = String(row.portfolio_id ?? row.import_id ?? '');
+        portfolio.name = String(row.portfolio_name || row.name || '');
+        portfolio.account_number = String(row.account_number || '');
+        portfolio.sub_account_number = String(row.sub_account_number || '');
+        portfolio.portfolio_value = row.portfolio_value == null ? '0' : String(row.portfolio_value);
+        loadPortfolios.push(portfolio);
+      }
+
+      for (const row of advisors) {
+        const advisor = {
+          id: `adv-${++loadAdvisorSeq}`,
+          email: String(row.advisor_email || row.email || ''),
+          full_name: String(row.advisor_name || row.full_name || ''),
+          role: String(row.role || 'advisor').toLowerCase() === 'owner' ? 'owner' : 'advisor',
+        };
+        loadAdvisors.push(advisor);
+        const ids = Array.isArray(row.portfolio_ids) ? row.portfolio_ids : [];
+        for (const token of ids) {
+          const key = String(token);
+          const portfolio = loadPortfolios.find((item) => item.import_id === key);
+          if (portfolio) portfolio.assignments[advisor.id] = true;
+        }
+      }
+      if (loadAdvisors.length > 0 && !loadAdvisors.some((row) => row.role === 'owner')) {
+        loadAdvisors[0].role = 'owner';
+      }
+
+      if (loadFirmImportPreview) {
+        const modeLabel = appendMode ? `Append to ${firmIdRaw}` : firmName;
+        loadFirmImportPreview.textContent =
+          `Ready: ${modeLabel} · ${loadAdvisors.length} advisors · ${loadPortfolios.length} portfolios. Review below, then Create firm.`;
+      }
+      loadFirmError.classList.add('hidden');
+      loadFirmError.textContent = '';
+      renderLoadFirmForm();
+    }
+
+    function renderLoadFirmForm() {
+      loadFirmAdvisors.replaceChildren();
+      for (const advisor of loadAdvisors) {
+        const tr = document.createElement('tr');
+        tr.dataset.advisorId = advisor.id;
+        const email = document.createElement('td');
+        const emailInput = document.createElement('input');
+        emailInput.type = 'email';
+        emailInput.required = true;
+        emailInput.value = advisor.email;
+        emailInput.placeholder = 'advisor@firm.com';
+        emailInput.addEventListener('input', () => {
+          advisor.email = emailInput.value;
+          renderLoadPortfolioHeader();
+        });
+        email.append(emailInput);
+        const name = document.createElement('td');
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = advisor.full_name;
+        nameInput.placeholder = 'Sarah Jenkins';
+        nameInput.addEventListener('input', () => { advisor.full_name = nameInput.value; });
+        name.append(nameInput);
+        const role = document.createElement('td');
+        const roleSelect = document.createElement('select');
+        for (const value of ['owner', 'advisor']) {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = value === 'owner' ? 'Owner' : 'Advisor';
+          option.selected = advisor.role === value;
+          roleSelect.append(option);
+        }
+        roleSelect.addEventListener('change', () => { advisor.role = roleSelect.value; });
+        role.append(roleSelect);
+        const remove = document.createElement('td');
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'secondary';
+        removeBtn.textContent = 'Remove';
+        removeBtn.disabled = loadAdvisors.length === 1;
+        removeBtn.addEventListener('click', () => {
+          loadAdvisors = loadAdvisors.filter((row) => row.id !== advisor.id);
+          for (const portfolio of loadPortfolios) delete portfolio.assignments[advisor.id];
+          renderLoadFirmForm();
+        });
+        remove.append(removeBtn);
+        tr.append(email, name, role, remove);
+        loadFirmAdvisors.append(tr);
+      }
+
+      renderLoadPortfolioHeader();
+      loadFirmPortfolios.replaceChildren();
+      for (const portfolio of loadPortfolios) {
+        const tr = document.createElement('tr');
+        tr.dataset.portfolioId = portfolio.id;
+        const addField = (value, key, placeholder, type = 'text') => {
+          const td = document.createElement('td');
+          const input = document.createElement('input');
+          input.type = type;
+          input.value = value;
+          input.placeholder = placeholder;
+          input.addEventListener('input', () => { portfolio[key] = input.value; });
+          td.append(input);
+          tr.append(td);
+        };
+        addField(portfolio.name, 'name', 'Miller Trust');
+        addField(portfolio.account_number, 'account_number', '11');
+        addField(portfolio.sub_account_number, 'sub_account_number', '1');
+        addField(portfolio.portfolio_value, 'portfolio_value', '0', 'number');
+        for (const advisor of loadAdvisors) {
+          const td = document.createElement('td');
+          const box = document.createElement('input');
+          box.type = 'checkbox';
+          box.checked = Boolean(portfolio.assignments[advisor.id]);
+          box.title = advisor.email || 'Assign advisor';
+          box.addEventListener('change', () => {
+            if (box.checked) portfolio.assignments[advisor.id] = true;
+            else delete portfolio.assignments[advisor.id];
+          });
+          td.append(box);
+          tr.append(td);
+        }
+        const remove = document.createElement('td');
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'secondary';
+        removeBtn.textContent = 'Remove';
+        removeBtn.addEventListener('click', () => {
+          loadPortfolios = loadPortfolios.filter((row) => row.id !== portfolio.id);
+          renderLoadFirmForm();
+        });
+        remove.append(removeBtn);
+        tr.append(remove);
+        loadFirmPortfolios.append(tr);
+      }
+    }
+
+    function renderLoadPortfolioHeader() {
+      const tr = document.createElement('tr');
+      for (const label of ['Portfolio name', 'Client Master ID', 'Sub-Account', 'Value ($)']) {
+        const th = document.createElement('th');
+        th.textContent = label;
+        tr.append(th);
+      }
+      for (const advisor of loadAdvisors) {
+        const th = document.createElement('th');
+        const email = advisor.email.trim();
+        th.textContent = email || 'Advisor';
+        tr.append(th);
+      }
+      tr.append(document.createElement('th'));
+      loadFirmPortfolioHead.replaceChildren(tr);
+    }
+
+    function openLoadFirmModal() {
+      resetLoadFirmForm();
+      loadFirmModal.classList.remove('hidden');
+      loadFirmModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeLoadFirmModal() {
+      loadFirmModal.classList.add('hidden');
+      loadFirmModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function collectLoadFirmPayload() {
+      const firm_name = document.querySelector('#load-firm-name').value.trim();
+      const plan_code = document.querySelector('#load-firm-plan').value;
+      const advisors = loadAdvisors.map((row) => ({
+        email: row.email.trim(),
+        full_name: row.full_name.trim(),
+        role: row.role,
+      }));
+      const portfolios = loadPortfolios.map((row) => {
+        const advisor_emails = loadAdvisors
+          .filter((advisor) => row.assignments[advisor.id])
+          .map((advisor) => advisor.email.trim())
+          .filter(Boolean);
+        return {
+          name: row.name.trim(),
+          account_number: row.account_number.trim(),
+          sub_account_number: row.sub_account_number.trim(),
+          portfolio_value: row.portfolio_value === '' ? 0 : Number(row.portfolio_value),
+          advisor_emails,
+        };
+      });
+      return { firm_name, plan_code, advisors, portfolios };
+    }
+
+    async function submitLoadFirm() {
+      loadFirmError.classList.add('hidden');
+      loadFirmError.textContent = '';
+      let payload;
+      if (pendingJsonPayload) {
+        payload = pendingJsonPayload;
+        const appendMode = String(payload.firm_id || '').trim() !== '';
+        if (!appendMode && !String(payload.firm || payload.firm_name || '').trim()) {
+          loadFirmError.textContent = 'Firm name is required.';
+          loadFirmError.classList.remove('hidden');
+          return;
+        }
+      } else {
+        payload = collectLoadFirmPayload();
+        if (!payload.firm_name) {
+          loadFirmError.textContent = 'Firm name is required.';
+          loadFirmError.classList.remove('hidden');
+          return;
+        }
+        if (!payload.advisors.length || !payload.advisors.every((row) => row.email)) {
+          loadFirmError.textContent = 'Each advisor needs an email.';
+          loadFirmError.classList.remove('hidden');
+          return;
+        }
+        for (const portfolio of payload.portfolios) {
+          if (!portfolio.name) {
+            loadFirmError.textContent = 'Each portfolio needs a name.';
+            loadFirmError.classList.remove('hidden');
+            return;
+          }
+        }
+      }
+      try {
+        const result = await request('/api/firms/load', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        closeLoadFirmModal();
+        firmRows = result.firms || firmRows;
+        renderFirmsSummary();
+        openFirmConsole(result.firm_id);
+        firmMessage.className = 'banner ok';
+        const invited = Number(result.invited_count || 0);
+        const mailed = Number(result.invite_mail && result.invite_mail.emailed || 0);
+        const publicId = result.public_id || (result.firm && result.firm.public_id) || '';
+        let summary = publicId ? `Firm loaded. public_id: ${publicId}` : 'Firm loaded.';
+        if (invited > 0) {
+          summary = `${summary} ${invited} advisor(s) invited; ${mailed} signup email(s) sent.`;
+        }
+        firmMessage.textContent = summary;
+      } catch (error) {
+        loadFirmError.textContent = error.message;
+        loadFirmError.classList.remove('hidden');
+      }
+    }
+
+    document.querySelector('#open-firm-console').addEventListener('click', () => openFirmConsole());
+    document.querySelector('#close-firm-console').addEventListener('click', closeFirmConsole);
+    document.querySelector('#firm-delete-cancel').addEventListener('click', hideFirmDeleteConfirm);
+    document.querySelector('#firm-delete-submit').addEventListener('click', () => { void submitDeleteFirm(); });
+    firmDeleteInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        void submitDeleteFirm();
+      }
+    });
+    firmConsoleModal.addEventListener('click', (event) => {
+      if (event.target === firmConsoleModal) closeFirmConsole();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      if (!firmConsoleModal.classList.contains('hidden')) closeFirmConsole();
+      else if (!loadFirmModal.classList.contains('hidden')) closeLoadFirmModal();
+    });
+    const loadFirmJsonFile = document.querySelector('#load-firm-json-file');
+    document.querySelector('#pick-load-firm-json').addEventListener('click', () => loadFirmJsonFile.click());
+    loadFirmJsonFile.addEventListener('change', () => {
+      const file = loadFirmJsonFile.files && loadFirmJsonFile.files[0];
+      loadFirmJsonFile.value = '';
+      if (!file) return;
+      if (file.size > MAX_LOAD_FIRM_JSON_BYTES) {
+        loadFirmError.textContent = 'Load-firm JSON is too large (max 3 MB).';
+        loadFirmError.classList.remove('hidden');
+        return;
+      }
+      file.text().then((text) => {
+        try {
+          importLoadFirmJson(text);
+        } catch (error) {
+          loadFirmError.textContent = error.message;
+          loadFirmError.classList.remove('hidden');
+        }
+      }).catch(() => {
+        loadFirmError.textContent = 'Could not read that file.';
+        loadFirmError.classList.remove('hidden');
+      });
+    });
+
+    document.querySelector('#open-load-firm').addEventListener('click', openLoadFirmModal);
+    document.querySelector('#close-load-firm').addEventListener('click', closeLoadFirmModal);
+    document.querySelector('#add-load-advisor').addEventListener('click', () => {
+      loadAdvisors.push(newLoadAdvisor());
+      renderLoadFirmForm();
+    });
+    document.querySelector('#add-load-portfolio').addEventListener('click', () => {
+      loadPortfolios.push(newLoadPortfolio());
+      renderLoadFirmForm();
+    });
+    document.querySelector('#submit-load-firm').addEventListener('click', () => { void submitLoadFirm(); });
+    loadFirmModal.addEventListener('click', (event) => {
+      if (event.target === loadFirmModal) closeLoadFirmModal();
+    });
+
+    firmSearch.addEventListener('input', () => renderFirmList());
+
     request('/api/session').then((body) => {
       show(body.signed_in);
-      if (body.signed_in) return loadState();
+      if (body.signed_in) {
+        return loadState().catch((error) => {
+          showStateLoadError(error.message || 'Could not load the database.');
+        });
+      }
     }).catch(() => show(false));
   </script>
 </body>

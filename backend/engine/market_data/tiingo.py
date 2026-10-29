@@ -219,6 +219,48 @@ def _multiplier(uup_rows: list[tuple[str, float]]) -> float:
     return refreshed[1]
 
 
+def _fund_metadata(ticker: str) -> tuple[str, str, str]:
+    """Tiingo search + fund description for classification."""
+    symbol = tiingo_symbol(ticker)
+    asset_type = ""
+    name = ""
+    description = ""
+    search = _get(
+        "/tiingo/utilities/search",
+        {"query": symbol, "exactTickerMatch": "true"},
+    )
+    if isinstance(search, list) and search:
+        row = search[0] if isinstance(search[0], dict) else {}
+        asset_type = str(row.get("assetType") or "")
+        name = str(row.get("name") or "")
+    fund = _get(f"/tiingo/funds/{quote(symbol, safe='-')}")
+    if isinstance(fund, dict):
+        name = str(fund.get("name") or name)
+        description = str(fund.get("description") or "")
+    return asset_type, name, description
+
+
+def asset_class_for_ticker(ticker: str) -> str | None:
+    from engine.market_data.etf_classification import classify_institutional_asset_class
+
+    asset_type, name, description = _fund_metadata(ticker)
+    return classify_institutional_asset_class(asset_type, name, description, ticker)
+
+
+def fetch_asset_classes(tickers: list[str]) -> dict[str, str]:
+    from engine.equity_prices import yahoo_symbol
+
+    classes: dict[str, str] = {}
+    for ticker in tickers:
+        symbol = yahoo_symbol(ticker)
+        if symbol in classes:
+            continue
+        label = asset_class_for_ticker(symbol)
+        if label:
+            classes[symbol] = label
+    return classes
+
+
 def fetch_dollar_index() -> tuple[float | None, float | None]:
     """Estimate the ICE dollar index as the UUP close times the nightly multiplier.
 

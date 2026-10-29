@@ -12,8 +12,6 @@ import RiskGauge from '@/components/dashboard/RiskGauge';
 import { DashboardSkeleton, SkeletonFade } from '@/components/ui/Skeleton';
 import { apiFetch, poolAssetAllocation, type Portfolio } from '@/lib/api';
 
-const emptyAllocation = { equities: 0, bonds: 0, realAssets: 0, cash: 0 };
-
 export default function DashboardPage() {
   const router = useRouter();
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
@@ -73,7 +71,7 @@ export default function DashboardPage() {
     account_number: portfolio.account_number,
     sub_account_number: portfolio.sub_account_number,
     portfolio_value: Number(portfolio.portfolio_value || 0),
-    asset_allocation: portfolio.asset_allocation || emptyAllocation,
+    asset_allocation: portfolio.asset_allocation,
     created_at: portfolio.created_at,
     selected: !excludedPortfolios.has(portfolio.id),
   }));

@@ -1,0 +1,1 @@
+docker exec -i supabase_db_my-macro-app psql -U postgres -d postgres < supabase/migrations/invite_signup_auto_confirm.sql

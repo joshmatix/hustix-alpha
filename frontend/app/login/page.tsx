@@ -19,8 +19,35 @@ export default function LoginPage() {
   const [step, setStep] = useState<'password' | 'code'>('password');
   const [factorId, setFactorId] = useState('');
   const [code, setCode] = useState('');
+  const [needsEmailConfirm, setNeedsEmailConfirm] = useState(false);
+  const [localMail, setLocalMail] = useState(false);
   const codeLock = useRef(false);
   const router = useRouter();
+
+  const emailNotConfirmed = (message: string) => /email not confirmed/i.test(message);
+
+  const resendSignupConfirmation = async () => {
+    const target = email.trim();
+    if (!target) {
+      setError('Enter your work email, then resend the confirmation message.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email: target,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    });
+    setLoading(false);
+    if (resendError) {
+      setError(resendError.message);
+      return;
+    }
+    setNotice(
+      'A new confirmation email was sent. Open the message titled “Confirm your email for Hustix Macro” (not the firm invite).',
+    );
+  };
 
   async function beginAuthenticator() {
     const { data: factors, error: factorError } = await supabase.auth.mfa.listFactors();
@@ -36,6 +63,8 @@ export default function LoginPage() {
   }
 
   useEffect(() => {
+    const host = window.location.hostname;
+    setLocalMail(host === '127.0.0.1' || host === 'localhost');
     if (new URLSearchParams(window.location.search).get('disabled') === '1') {
       setNotice('This account is disabled.');
     }
@@ -79,6 +108,8 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setNeedsEmailConfirm(false);
+    setNotice(null);
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -86,7 +117,14 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setError(error.message);
+      if (emailNotConfirmed(error.message)) {
+        setNeedsEmailConfirm(true);
+        setError(
+          'This account is not confirmed yet. Use the “Confirm your email for Hustix Macro” message from Supabase—not the firm invite email.',
+        );
+      } else {
+        setError(error.message);
+      }
       setLoading(false);
       return;
     }
@@ -165,6 +203,35 @@ export default function LoginPage() {
           <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-lg flex items-center gap-2">
             <span>&bull;</span>
             <span>{error}</span>
+          </div>
+        )}
+
+        {needsEmailConfirm && step === 'password' && (
+          <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-800/80 p-3 text-xs text-slate-200">
+            <p>
+              After you create an account, Supabase sends a separate confirmation email. Firm invites only link you to
+              signup; they do not activate the account.
+            </p>
+            {localMail && (
+              <p>
+                On this computer, open the{' '}
+                <a
+                  href="http://127.0.0.1:54324"
+                  className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline"
+                >
+                  local mail viewer
+                </a>{' '}
+                and confirm the newest message to {email.trim() || 'your address'}.
+              </p>
+            )}
+            <button
+              type="button"
+              disabled={loading || !email.trim()}
+              onClick={() => void resendSignupConfirmation()}
+              className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:bg-indigo-600/50"
+            >
+              Resend confirmation email
+            </button>
           </div>
         )}
 

@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from admin_firm_load import normalize_load_firm_payload, read_bounded_json
 from database import SUPABASE_KEY, SUPABASE_UNREACHABLE, _bypasses_rls, supabase
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
@@ -26,6 +27,10 @@ router = APIRouter(prefix="/api/admin", tags=["Admin"])
 COOKIE = "hustix_admin"
 MAX_AGE = 12 * 60 * 60
 PLAN_CODES = ("free", "pro", "pro_plus", "enterprise")
+FIRM_ID = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 _failures: dict[str, list[float]] = {}
 
 
@@ -45,6 +50,11 @@ class LoginBody(BaseModel):
 
 class AdvisorAccessBody(BaseModel):
     user_id: str
+    enabled: bool
+
+
+class FirmAccessBody(BaseModel):
+    firm_id: str
     enabled: bool
 
 
@@ -72,6 +82,50 @@ class PromotionBody(BaseModel):
     applies_to: list[str] = Field(default_factory=list)
     starts_on: str = ""
     ends_on: str = ""
+
+
+class HoldingsClassificationBody(BaseModel):
+    source: str = ""
+
+
+def _parse_firm_id(value: str) -> str:
+    if not FIRM_ID.fullmatch(value or ""):
+        raise HTTPException(status_code=422, detail="Invalid firm id.")
+    return value.lower()
+
+
+def _rpc_json(name: str, params: dict | None = None) -> object:
+    result = supabase.rpc(name, params or {}).execute()
+    data = result.data
+    if isinstance(data, str):
+        return json.loads(data or "null")
+    return data
+
+
+def _read_firms() -> list[dict]:
+    try:
+        data = _rpc_json("admin_firms_list")
+    except Exception as exc:
+        print(f"[admin] firm list failed: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail="Run supabase/migrations/admin_firm_read.sql on this database, then refresh.",
+        ) from exc
+    if not isinstance(data, list):
+        return []
+    return data
+
+
+def _read_firm_detail(firm_id: str) -> dict | None:
+    fid = _parse_firm_id(firm_id)
+    try:
+        data = _rpc_json("admin_firm_detail", {"target_firm": fid})
+    except Exception as exc:
+        print(f"[admin] firm detail failed: {exc}")
+        raise HTTPException(status_code=503, detail="Could not read firm.") from exc
+    if not isinstance(data, dict):
+        return None
+    return data
 
 
 def admin_password() -> str:
@@ -297,6 +351,94 @@ def advisor_access(body: AdvisorAccessBody, request: Request):
     _require_admin(request)
     _require_database()
     return _mutate_directory("admin_set_advisor_access", {"target_user": body.user_id, "enabled": body.enabled})
+
+
+@router.post("/firms/access")
+def firm_access(body: FirmAccessBody, request: Request):
+    _require_admin(request)
+    _require_database()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database is not configured.")
+    try:
+        supabase.rpc(
+            "admin_set_firm_access",
+            {"target_firm": body.firm_id, "enabled": body.enabled},
+        ).execute()
+    except Exception as exc:
+        detail = str(exc)
+        if "admin_set_firm_access" in detail and "PGRST202" in detail:
+            detail = "Run supabase/migrations/firm_disabled.sql or re-run admin_firm_read.sql on this database."
+        raise HTTPException(status_code=422, detail=detail) from exc
+    return {"ok": True}
+
+
+@router.get("/firms")
+def firms_list(request: Request):
+    _require_admin(request)
+    _require_database()
+    return {"firms": _read_firms()}
+
+
+@router.get("/firms/{firm_id}")
+def firm_detail(firm_id: str, request: Request):
+    _require_admin(request)
+    _require_database()
+    detail = _read_firm_detail(firm_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Firm not found.")
+    return detail
+
+
+@router.post("/firms/load")
+async def load_firm(request: Request):
+    _require_admin(request)
+    _require_database()
+    raw = await read_bounded_json(request)
+    try:
+        normalized = normalize_load_firm_payload(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        result = supabase.rpc("admin_load_firm", {"payload": normalized}).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=_rpc_message(exc)) from exc
+    data = result.data
+    if isinstance(data, str):
+        data = json.loads(data or "{}")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=503, detail="Firm was not created.")
+    firm_id = data.get("firm_id")
+    if not firm_id:
+        raise HTTPException(status_code=503, detail="Firm was not created.")
+    detail = _read_firm_detail(str(firm_id))
+    if detail is None:
+        raise HTTPException(status_code=503, detail="Firm was created but could not be loaded.")
+    return {
+        "ok": True,
+        "firm_id": firm_id,
+        "public_id": data.get("public_id"),
+        "firm": detail,
+        "firms": _read_firms(),
+        "invited_count": data.get("invited_count") or len(data.get("invited_emails") or []),
+    }
+
+
+@router.post("/firms/{firm_id}/holdings-classification")
+def firm_holdings_classification(firm_id: str, body: HoldingsClassificationBody, request: Request):
+    _require_admin(request)
+    _require_database()
+    fid = _parse_firm_id(firm_id)
+    source = str(body.source or "").strip().lower()
+    if source not in {"csv", "authoritative"}:
+        raise HTTPException(status_code=422, detail="Source must be csv or authoritative.")
+    try:
+        supabase.table("firms").update({"holdings_classification_source": source}).eq("id", fid).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Could not update classification source.") from exc
+    detail = _read_firm_detail(fid)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Firm not found.")
+    return {"ok": True, "firm": detail}
 
 
 @router.post("/advisors/plan")

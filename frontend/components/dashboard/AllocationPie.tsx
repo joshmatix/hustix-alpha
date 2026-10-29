@@ -54,7 +54,7 @@ export default function AllocationPie({
       )}
       {!allocation || total <= 0 ? (
         <p className={compact ? 'text-xs text-slate-400' : 'mt-4 text-sm text-slate-400'}>
-          Select a portfolio to see its allocation.
+          {allocation ? 'Upload holdings to see allocation.' : 'Select a portfolio to see its allocation.'}
         </p>
       ) : (
         <div className={`flex items-center ${compact ? 'gap-3' : 'mt-4 flex-col gap-4 sm:flex-row sm:items-center'}`}>

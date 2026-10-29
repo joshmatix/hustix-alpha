@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { loadFirmJsonFileError } from '@/lib/loadFirmJsonLimits';
 
 type Plan = {
   code: string;
@@ -58,6 +59,29 @@ type AdminState = {
   advisors: Advisor[];
   promotions: Promotion[];
   advisors_error: string | null;
+};
+
+type FirmSummary = {
+  id: string;
+  public_id?: string;
+  name: string;
+  plan_code: string;
+  subscription_status: string;
+  enabled: boolean;
+  member_count: number;
+  portfolio_count: number;
+  created_on: string;
+};
+
+type FirmDetail = FirmSummary & {
+  holdings_classification_source: string | null;
+  total_aum: number;
+  advisor_count: number;
+  portfolio_limit: number | null;
+  ticker_limit: number | null;
+  advisors: { user_id: string; full_name: string; email: string; role: string; enabled: boolean }[];
+  pending_advisors: { invite_id: string; full_name: string; email: string; role: string; invited_on: string }[];
+  portfolios: { id: string; name: string; portfolio_value: number; advisors: { full_name: string; is_lead: boolean }[] }[];
 };
 
 const PLAN_CODES = ['free', 'pro', 'pro_plus', 'enterprise'] as const;
@@ -251,6 +275,279 @@ function PromotionList({ advisor, promotions }: { advisor: Advisor; promotions: 
         </li>
       ))}
     </ul>
+  );
+}
+
+function formatAum(value: number) {
+  return (Number(value) || 0).toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+}
+
+function FirmsSection() {
+  const [firms, setFirms] = useState<FirmSummary[]>([]);
+  const [listError, setListError] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<FirmDetail | null>(null);
+  const [detailError, setDetailError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [ok, setOk] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function loadFirms() {
+    setListError('');
+    try {
+      const body = await request('/api/admin/firms');
+      setFirms(Array.isArray(body.firms) ? body.firms : []);
+    } catch (error) {
+      setListError(error instanceof Error ? error.message : 'Could not load firms.');
+      setFirms([]);
+    }
+  }
+
+  async function loadDetail(firmId: string) {
+    setDetailError('');
+    setDetail(null);
+    try {
+      const body = await request(`/api/admin/firms/${firmId}`);
+      setDetail(body as FirmDetail);
+    } catch (error) {
+      setDetailError(error instanceof Error ? error.message : 'Could not load firm.');
+    }
+  }
+
+  function selectFirm(firm: FirmSummary) {
+    setSelectedId(firm.id);
+    setMessage('');
+    void loadDetail(firm.id);
+  }
+
+  useEffect(() => {
+    void loadFirms();
+  }, []);
+
+  async function runAction(url: string, body: unknown) {
+    setBusy(true);
+    setMessage('');
+    try {
+      const result = await request(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      setOk(true);
+      setMessage('Saved.');
+      if (Array.isArray(result.firms)) setFirms(result.firms);
+      else await loadFirms();
+      if (result.firm) {
+        setDetail(result.firm as FirmDetail);
+        setSelectedId((result.firm as FirmDetail).id);
+      } else if (selectedId) await loadDetail(selectedId);
+      return result;
+    } catch (error) {
+      setOk(false);
+      setMessage(error instanceof Error ? error.message : 'Could not save.');
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onLoadFile(file: File) {
+    setMessage('');
+    const sizeError = loadFirmJsonFileError(file);
+    if (sizeError) {
+      setOk(false);
+      setMessage(sizeError);
+      return;
+    }
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text) as unknown;
+      const result = await runAction('/api/admin/firms/load', payload);
+      if (result) {
+        const publicId = String(result.public_id || (result.firm as FirmDetail | undefined)?.public_id || '');
+        setOk(true);
+        setMessage(publicId ? `Firm loaded. public_id: ${publicId}` : 'Firm loaded.');
+        if (result.firm_id) setSelectedId(String(result.firm_id));
+      }
+    } catch (error) {
+      setOk(false);
+      setMessage(error instanceof Error ? error.message : 'Could not read JSON.');
+    }
+  }
+
+  async function copyPublicId(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setOk(true);
+      setMessage('Copied public_id.');
+    } catch {
+      setOk(false);
+      setMessage('Could not copy.');
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Firms</h2>
+          <p className="mt-1 text-sm text-slate-400">
+            List, load JSON, enable or disable, and set holdings classification. Portfolio assign and delete firm: run local admin on{' '}
+            <code className="text-indigo-200">:3090</code> with <code className="text-indigo-200">ADMIN_DATABASE_URL</code>.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => void loadFirms()} className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs">
+            Refresh
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) void onLoadFile(file);
+            }}
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => fileRef.current?.click()}
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold disabled:opacity-60"
+          >
+            Load firm JSON
+          </button>
+        </div>
+      </div>
+      {listError ? <p className="mt-3 text-sm text-rose-300">{listError}</p> : null}
+      {firms.length === 0 && !listError ? <p className="mt-3 text-sm text-slate-400">No firms yet.</p> : null}
+      {firms.length > 0 ? (
+        <table className="mt-3 w-full text-left text-sm">
+          <thead className="text-xs text-slate-400">
+            <tr>
+              <th className="py-2 pr-3 font-medium">Name</th>
+              <th className="py-2 pr-3 font-medium">Plan</th>
+              <th className="py-2 pr-3 font-medium">Advisors</th>
+              <th className="py-2 pr-3 font-medium">Portfolios</th>
+              <th className="py-2 pr-3 font-medium">Created</th>
+              <th className="py-2 font-medium">Access</th>
+            </tr>
+          </thead>
+          <tbody>
+            {firms.map((firm) => (
+              <tr
+                key={firm.id}
+                className={`cursor-pointer border-t border-slate-800 ${firm.id === selectedId ? 'bg-slate-800/60' : ''}`}
+                onClick={() => selectFirm(firm)}
+              >
+                <td className="py-2 pr-3 font-medium text-indigo-200">{firm.name || 'Unnamed'}</td>
+                <td className="py-2 pr-3">{firm.plan_code || '—'}</td>
+                <td className="py-2 pr-3">{firm.member_count ?? '—'}</td>
+                <td className="py-2 pr-3">{firm.portfolio_count ?? '—'}</td>
+                <td className="py-2 pr-3">{firm.created_on || '—'}</td>
+                <td className="py-2">{firm.enabled ? 'Enabled' : 'Disabled'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+
+      {detailError ? <p className="mt-3 text-sm text-rose-300">{detailError}</p> : null}
+      {detail ? (
+        <div className="mt-5 space-y-4 border-t border-slate-800 pt-4">
+          <p className="text-sm text-slate-300">
+            {detail.name} · {formatAum(detail.total_aum)} AUM · {detail.advisor_count} advisors · {detail.portfolio_count}{' '}
+            portfolios
+          </p>
+          {detail.public_id ? (
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
+              <span>
+                public_id: <code className="text-indigo-200">{detail.public_id}</code>
+              </span>
+              <button
+                type="button"
+                className="rounded border border-slate-600 px-2 py-0.5 text-xs"
+                onClick={() => void copyPublicId(detail.public_id!)}
+              >
+                Copy
+              </button>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap items-end gap-3">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void runAction('/api/admin/firms/access', { firm_id: detail.id, enabled: !detail.enabled })}
+              className="rounded-lg border border-slate-600 px-3 py-2 text-sm disabled:opacity-60"
+            >
+              {detail.enabled ? 'Disable firm' : 'Enable firm'}
+            </button>
+            <label className="block text-xs text-slate-400">
+              Holdings classification
+              <select
+                value={detail.holdings_classification_source || 'csv'}
+                disabled={busy}
+                onChange={(event) => {
+                  void runAction(`/api/admin/firms/${detail.id}/holdings-classification`, { source: event.target.value });
+                }}
+                className="mt-1 block rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              >
+                <option value="csv">CSV (file asset_class)</option>
+                <option value="authoritative">Tiingo (authoritative)</option>
+              </select>
+            </label>
+          </div>
+          {(detail.advisors?.length ?? 0) > 0 ? (
+            <div>
+              <p className="text-xs text-slate-400">Advisors</p>
+              <ul className="mt-1 space-y-1 text-sm text-slate-200">
+                {detail.advisors.map((advisor) => (
+                  <li key={advisor.user_id}>
+                    {advisor.full_name || advisor.email} · {advisor.email} · {advisor.enabled ? 'enabled' : 'disabled'}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {(detail.pending_advisors?.length ?? 0) > 0 ? (
+            <div>
+              <p className="text-xs text-slate-400">Pending invites</p>
+              <ul className="mt-1 space-y-1 text-sm text-slate-200">
+                {detail.pending_advisors.map((invite) => (
+                  <li key={invite.invite_id}>
+                    {invite.full_name || invite.email} · invited {invite.invited_on}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {(detail.portfolios?.length ?? 0) > 0 ? (
+            <div>
+              <p className="text-xs text-slate-400">Portfolios (read-only here)</p>
+              <ul className="mt-1 space-y-1 text-sm text-slate-200">
+                {detail.portfolios.map((portfolio) => (
+                  <li key={portfolio.id}>
+                    {portfolio.name} · {formatAum(portfolio.portfolio_value)}
+                    {(portfolio.advisors?.length ?? 0) > 0
+                      ? ` · ${portfolio.advisors.map((a) => `${a.full_name}${a.is_lead ? ' (lead)' : ''}`).join(', ')}`
+                      : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {message ? <p className={`mt-3 text-sm ${ok ? 'text-emerald-300' : 'text-rose-300'}`}>{message}</p> : null}
+    </section>
   );
 }
 
@@ -762,7 +1059,7 @@ export default function CloudAdminPage() {
             <div className="flex items-end justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-semibold">Admin</h1>
-                <p className="mt-1 text-sm text-slate-400">Advisors, subscriptions, and plan caps on the cloud database.</p>
+                <p className="mt-1 text-sm text-slate-400">Firms, advisors, subscriptions, and plan caps on the cloud database.</p>
               </div>
               <button
                 type="button"
@@ -772,6 +1069,8 @@ export default function CloudAdminPage() {
                 Sign out
               </button>
             </div>
+
+            <FirmsSection />
 
             <AdvisorSection
               state={state}

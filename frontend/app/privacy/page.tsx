@@ -10,18 +10,19 @@ const sections = [
     heading: '1. Who we are',
     paragraphs: [
       'This policy describes how Hustix handles information when you use the Hustix Macro website and service at hustix.com. Hustix Macro is a portfolio stress-test tool for wealth advisors.',
-      'If you use the service for a firm or RIA, this policy applies to the account and to the information that account submits.',
+      'The subscribed service is provided to your firm (or RIA). Advisor logins access that firm’s workspace and act on the firm’s behalf; Hustix is not contracting with advisors in their personal capacity for the firm subscription.',
+      'If you use the service for a firm or RIA, this policy applies to the firm account and to the information that firm and its authorized users submit.',
     ],
   },
   {
     heading: '2. Information we collect',
     paragraphs: [
-      'Account information. When you register, we collect your email address, a password, and your firm name. Passwords are stored by our authentication provider in a form that we cannot read. Each time you accept a Customer Agreement, we store the version, the time, and the IP address of that acceptance.',
+      'Account information. When you register, we collect your email address, a password, and your firm name. Passwords are stored by our authentication provider in a form that we cannot read. Each time you accept a Customer Agreement, we store the version, the time, and the IP address of that acceptance. Your registration email identifies a login for one firm on the service; if you work with more than one firm, use a separate email address for each firm.',
       'Security information. The service requires an authenticator app. We store the enrollment needed to verify sign-in codes. We do not receive the secret stored in your authenticator app.',
       'Portfolio information. You may enter client names, portfolio labels, tickers, allocations, a Client Master ID, and a Sub-Account so the service can run stress tests and build reports. You decide what to upload. The RIA or advisor retains ownership of all uploaded portfolio data and client identifier data.',
       'Government identifiers. Do not enter sensitive government identifiers in any free-text field. That includes Social Security numbers, tax identification numbers, and passport numbers.',
       'Questions. The public contact form collects the name, email address, and message you submit.',
-      'Billing. If you choose a paid plan, payment is processed by Stripe. Stripe collects the payment details. We receive the plan, billing status, and related identifiers, not your full card number.',
+      'Billing. If the firm chooses a paid plan, payment is processed by Stripe. Stripe collects the payment details. We receive the plan, billing status, and related identifiers for the firm, not your full card number.',
       'Sign-in state. We use browser storage and cookies to keep you signed in, to protect the service, and to operate the admin console. We do not use them for advertising.',
     ],
   },
@@ -38,7 +39,7 @@ const sections = [
       'Service providers process information for us. That includes our authentication and database host, Stripe when you pay, and email delivery used for account messages. They may use the information only to perform those services.',
       'Market-data providers. To price a portfolio, we send tickers and related request details to the market-data provider. That provider handles the request under its own terms.',
       'Legal and safety. We may disclose information if the law requires it, or if we believe disclosure is needed to protect Hustix, our users, or others.',
-      'A firm account. People you authorize on a firm account can see the portfolios and reports stored in that account.',
+      'A firm account. Other advisors authorized on the same firm can see the portfolios and reports stored for that firm. They cannot see another firm’s data through the same login email.',
     ],
   },
   {
@@ -93,7 +94,7 @@ export default function PrivacyPage() {
         <article className="space-y-4 text-sm leading-relaxed text-slate-300">
           <header className="space-y-1">
             <h1 className="text-lg font-semibold text-white">Privacy Policy</h1>
-            <p className="text-xs text-slate-500">Last updated October 20, 2026</p>
+            <p className="text-xs text-slate-500">Last updated October 28, 2026</p>
           </header>
           {sections.map((section) => (
             <section key={section.heading} className="space-y-2">

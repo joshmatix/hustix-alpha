@@ -9,7 +9,7 @@ const sections = [
   {
     heading: '1. These terms',
     paragraphs: [
-      'These terms govern your use of the Hustix Macro website and service at hustix.com. They are between you and Hustix. The version date is October 21, 2026.',
+      'These terms govern your use of the Hustix Macro website and service at hustix.com. They are between you and Hustix. The version date is October 28, 2026.',
       'By using the site, you agree to these terms. If you do not agree, do not use the site. If you create an account, you also agree to the Customer Agreement. For the subscribed service, the Customer Agreement controls if it conflicts with these terms.',
     ],
   },
@@ -33,6 +33,8 @@ const sections = [
     paragraphs: [
       'An account is required to use the product. You must provide accurate registration information, keep your credentials confidential, and use an authenticator app. You are responsible for activity under your account.',
       'If you accept for a firm or RIA, you confirm that you have authority to bind that entity.',
+      'Hustix Macro’s subscribed service relationship is with the firm, not with individual advisors in their personal capacity. Your login accesses that firm’s workspace.',
+      'Each sign-in email is tied to one firm on the service. If you work with more than one firm, register and sign in with a different email address for each firm.',
     ],
   },
   {
@@ -52,7 +54,7 @@ const sections = [
   {
     heading: '7. Plans and fees',
     paragraphs: [
-      'The plan you select, including any portfolio or feature limits, is the plan shown when you sign up. A free plan has no charge. A paid plan is billed monthly in advance at the price shown at signup.',
+      'Plans, limits, and paid subscriptions apply to the firm. The plan shown at signup, including any portfolio or feature limits, is the firm’s plan. A free plan has no charge. A paid plan is billed monthly in advance at the price shown when the firm subscribes.',
       'Fees already paid are not refundable, except where the law requires a refund. Stripe processes paid-plan charges.',
     ],
   },
@@ -105,7 +107,7 @@ export default function TermsPage() {
         <article className="space-y-4 text-sm leading-relaxed text-slate-300">
           <header className="space-y-1">
             <h1 className="text-lg font-semibold text-white">Terms of Service</h1>
-            <p className="text-xs text-slate-500">Last updated October 21, 2026</p>
+            <p className="text-xs text-slate-500">Last updated October 28, 2026</p>
           </header>
           {sections.map((section) => (
             <section key={section.heading} className="space-y-2">

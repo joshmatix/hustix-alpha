@@ -87,6 +87,10 @@ export default function ProfilePage() {
   const [planStatus, setPlanStatus] = useState<Status>(null);
   const [passwordStatus, setPasswordStatus] = useState<Status>(null);
   const [headerStatus, setHeaderStatus] = useState<Status>(null);
+  const [isFirmOwner, setIsFirmOwner] = useState(false);
+  const [holdingsClassSource, setHoldingsClassSource] = useState<'csv' | 'authoritative'>('csv');
+  const [savingClassSource, setSavingClassSource] = useState(false);
+  const [classSourceStatus, setClassSourceStatus] = useState<Status>(null);
 
   useEffect(() => {
     async function getProfile() {
@@ -121,9 +125,10 @@ export default function ProfilePage() {
           .maybeSingle();
 
         if (membership?.firm_id) {
+          setIsFirmOwner(true);
           const { data: firm } = await supabase
             .from('firms')
-            .select('name, report_header')
+            .select('name, report_header, holdings_classification_source')
             .eq('id', membership.firm_id)
             .single();
           if (firm) {
@@ -133,6 +138,8 @@ export default function ProfilePage() {
                 ? firm.report_header
                 : {}
             );
+            const source = String(firm.holdings_classification_source || 'csv').toLowerCase();
+            setHoldingsClassSource(source === 'authoritative' ? 'authoritative' : 'csv');
           }
         }
       }
@@ -260,6 +267,20 @@ export default function ProfilePage() {
     } catch {
       setHeaderStatus({ text: 'That file is not valid JSON.', type: 'error' });
     }
+  };
+
+  const saveHoldingsClassSource = async (source: 'csv' | 'authoritative') => {
+    setSavingClassSource(true);
+    setClassSourceStatus(null);
+    const { data, error } = await supabase.rpc('set_holdings_classification_source', { source });
+    if (error) {
+      setClassSourceStatus({ text: error.message, type: 'error' });
+    } else {
+      const normalized = String(data || source).toLowerCase();
+      setHoldingsClassSource(normalized === 'authoritative' ? 'authoritative' : 'csv');
+      setClassSourceStatus({ text: 'Holdings import setting saved.', type: 'success' });
+    }
+    setSavingClassSource(false);
   };
 
   const saveHeader = async (header: Record<string, unknown>) => {
@@ -443,6 +464,52 @@ export default function ProfilePage() {
           </div>
         </form>
       </Card>
+
+      {isFirmOwner && (
+        <Card
+          title="Holdings import"
+          subtitle="How asset class is chosen when advisors upload a CSV."
+        >
+          <div className="space-y-4 mt-2">
+            <fieldset className="space-y-2">
+              <legend className="sr-only">Holdings classification source</legend>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-800 p-3 hover:border-slate-600">
+                <input
+                  type="radio"
+                  name="holdings-class-source"
+                  className="mt-1"
+                  checked={holdingsClassSource === 'csv'}
+                  disabled={savingClassSource}
+                  onChange={() => void saveHoldingsClassSource('csv')}
+                />
+                <span>
+                  <span className="block text-sm font-medium text-slate-100">Use CSV asset class</span>
+                  <span className="block text-xs text-slate-400 mt-1">
+                    Each row must include asset_class (or a broker export that supplies it). Default for most firms.
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-800 p-3 hover:border-slate-600">
+                <input
+                  type="radio"
+                  name="holdings-class-source"
+                  className="mt-1"
+                  checked={holdingsClassSource === 'authoritative'}
+                  disabled={savingClassSource}
+                  onChange={() => void saveHoldingsClassSource('authoritative')}
+                />
+                <span>
+                  <span className="block text-sm font-medium text-slate-100">Use Tiingo (authoritative)</span>
+                  <span className="block text-xs text-slate-400 mt-1">
+                    Server classifies each ticker from Tiingo fund data. CSV asset_class is ignored. Requires Tiingo on the API.
+                  </span>
+                </span>
+              </label>
+            </fieldset>
+            <StatusLine status={classSourceStatus} />
+          </div>
+        </Card>
+      )}
 
       <Card
         title="Report header"

@@ -25,7 +25,7 @@ export type Portfolio = {
   sub_account_number?: string | null;
   tax_status?: string | null;
   portfolio_value: number;
-  asset_allocation: AssetAllocation;
+  asset_allocation: AssetAllocation | null;
   target_risk_profile?: string;
   created_at?: string;
 };

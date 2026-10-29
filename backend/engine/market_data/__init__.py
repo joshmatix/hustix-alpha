@@ -7,6 +7,7 @@ from engine.market_data.symbols import canonical_symbol
 
 __all__ = [
     "canonical_symbol",
+    "fetch_asset_classes",
     "fetch_closing_price",
     "fetch_closing_prices",
     "fetch_daily_closes",
@@ -71,3 +72,11 @@ def fetch_closing_prices(tickers: list[str]) -> dict[str, float]:
 
 def fetch_equity_prices(tickers: list[str]) -> dict[str, float]:
     return _fetch_many(tickers, fetch_equity_price)
+
+
+def fetch_asset_classes(tickers: list[str]) -> dict[str, str]:
+    if selected_provider() != "tiingo":
+        raise ValueError("fetch_asset_classes requires MARKET_DATA_PROVIDER=tiingo")
+    from engine.market_data import tiingo as vendor
+
+    return vendor.fetch_asset_classes(tickers)

@@ -51,6 +51,8 @@ def test_class_buckets_follow_the_label_before_the_comma():
     assert _allocation_bucket("Bond") == "bonds"
     assert _allocation_bucket("Commodity") == "realAssets"
     assert _allocation_bucket("Gold") == "realAssets"
+    assert _allocation_bucket("Long-Term Treasury") == "bonds"
+    assert _allocation_bucket("Bond, U.S., Long-Term Treasury") == "bonds"
 
 
 SCHWAB = """Positions for account Individual as of 09:13 PM ET, 02/04/2023
@@ -173,6 +175,40 @@ VTI,Equity,10,280.50
     assert row["current_price"] == "280.50"
 
 
+def test_price_est_maps_to_current_price():
+    exported = """ticker,asset_class,quantity,Price_Est
+TLT,Bond,100,95.25
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert row["ticker"] == "TLT"
+    assert row["current_price"] == "95.25"
+
+
+def test_bond_without_price_column_uses_placeholder():
+    exported = """ticker,asset_class,quantity
+TLT,Bond,100
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert row["current_price"] == "0"
+
+
+def test_equity_app_file_without_price_column_uses_placeholder():
+    exported = """ticker,asset_class,quantity
+VTI,Equity,10
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert row["ticker"] == "VTI"
+    assert row["current_price"] == "0"
+
+
+def test_app_file_market_value_derives_price():
+    exported = """ticker,asset_class,quantity,market_value
+TLT,Bond,100,9500
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert row["current_price"] == "95"
+
+
 def test_share_price_fills_current_price_on_the_app_file():
     exported = """ticker,asset_class,quantity,Share Price
 VTI,Equity,10,280.50
@@ -195,9 +231,66 @@ VTI,10,2800,ETF
     assert row["current_price"] == "280"
 
 
+def test_app_csv_allows_missing_asset_class_column():
+    exported = """ticker,quantity,current_price
+VTI,10,280
+""".encode()
+    row = parse_holdings_csv(exported)[0]
+    assert row["ticker"] == "VTI"
+    assert row.get("asset_class", "") == ""
+
+
 def test_unrecognized_csv_names_the_accepted_exports():
     with pytest.raises(HoldingsCsvError, match="Schwab, Fidelity, LPL, BNY Mellon, or Raymond James"):
         parse_holdings_csv(b"Foo,Bar\n1,2\n")
+
+
+def test_rejects_more_than_max_holdings_rows():
+    lines = ["ticker,asset_class,quantity,current_price"]
+    for index in range(101):
+        lines.append(f"SYM{index},Equity,1,10")
+    with pytest.raises(HoldingsCsvError, match="too many holdings"):
+        parse_holdings_csv("\n".join(lines).encode())
+
+
+def test_accepts_max_holdings_rows():
+    lines = ["ticker,asset_class,quantity,current_price"]
+    for index in range(100):
+        lines.append(f"SYM{index},Equity,1,10")
+    rows = parse_holdings_csv("\n".join(lines).encode())
+    assert len(rows) == 100
+
+
+def test_rejects_csv_larger_than_max_bytes():
+    oversized = b"x" * (512_001)
+    with pytest.raises(HoldingsCsvError, match="too large"):
+        parse_holdings_csv(oversized)
+
+
+@pytest.mark.asyncio
+async def test_read_bounded_upload_stops_before_buffering_entire_file():
+    from engine.holdings_csv import MAX_HOLDINGS_CSV_BYTES, read_bounded_upload
+
+    class FakeUpload:
+        def __init__(self, payload: bytes):
+            self.size = len(payload)
+            self._payload = payload
+            self._offset = 0
+
+        async def read(self, size: int = -1) -> bytes:
+            if self._offset >= len(self._payload):
+                return b""
+            if size < 0:
+                size = len(self._payload)
+            chunk = self._payload[self._offset : self._offset + size]
+            self._offset += len(chunk)
+            return chunk
+
+    ok = await read_bounded_upload(FakeUpload(b"a" * MAX_HOLDINGS_CSV_BYTES))
+    assert len(ok) == MAX_HOLDINGS_CSV_BYTES
+
+    with pytest.raises(HoldingsCsvError, match="too large"):
+        await read_bounded_upload(FakeUpload(b"b" * (MAX_HOLDINGS_CSV_BYTES + 1)))
 
 
 def test_singular_labels_split_the_pie():

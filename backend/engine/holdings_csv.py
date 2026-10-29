@@ -9,12 +9,21 @@ import csv
 import io
 import re
 
+from engine.equity_prices import uses_market_close_on_upload
+
 
 class HoldingsCsvError(ValueError):
     pass
 
 
-_APP_REQUIRED = {"ticker", "assetclass", "quantity", "currentprice"}
+MAX_HOLDINGS_ROWS = 100
+MAX_HOLDINGS_CSV_BYTES = 512_000
+CSV_TOO_LARGE_MESSAGE = (
+    "CSV file is too large (max 500 KB, including any broker header and footer)."
+)
+_READ_CHUNK_BYTES = 64 * 1024
+
+_APP_REQUIRED = {"ticker", "quantity"}
 
 _SYMBOL_KEYS = ("ticker", "symbol", "securitysymbol", "symbolcusip", "securityid")
 _QUANTITY_KEYS = (
@@ -37,6 +46,9 @@ _PRICE_KEYS = (
     "recentprice",
     "last",
     "shareprice",
+    "priceest",
+    "estimatedprice",
+    "estprice",
 )
 _VALUE_KEYS = ("marketvalue", "mktval", "mktvalmarketvalue", "currentvalue", "positiondollarvalue")
 _NAME_KEYS = ("description", "securitydescription", "securityname", "name", "assetname")
@@ -123,32 +135,72 @@ def _is_broker_header(found: dict[str, int]) -> bool:
     )
 
 
+def _is_app_csv_header(found: dict[str, int]) -> bool:
+    """Hustix app export: ticker + quantity, without broker name/type columns."""
+    if "ticker" not in found or _pick(found, _QUANTITY_KEYS) is None:
+        return False
+    if "assetclass" in found:
+        return True
+    if _pick(found, _NAME_KEYS) is not None or _pick(found, _CLASS_KEYS) is not None:
+        return False
+    return _pick(found, _PRICE_KEYS) is not None or _pick(found, _VALUE_KEYS) is not None
+
+
+def ensure_csv_byte_limit(contents: bytes) -> None:
+    if len(contents) > MAX_HOLDINGS_CSV_BYTES:
+        raise HoldingsCsvError(CSV_TOO_LARGE_MESSAGE)
+
+
+async def read_bounded_upload(file) -> bytes:
+    """Read an upload without buffering more than MAX_HOLDINGS_CSV_BYTES."""
+    declared = getattr(file, "size", None)
+    if declared is not None and declared > MAX_HOLDINGS_CSV_BYTES:
+        raise HoldingsCsvError(CSV_TOO_LARGE_MESSAGE)
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_HOLDINGS_CSV_BYTES:
+            raise HoldingsCsvError(CSV_TOO_LARGE_MESSAGE)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _enforce_holdings_limit(holdings: list[dict[str, str]]) -> list[dict[str, str]]:
+    if len(holdings) > MAX_HOLDINGS_ROWS:
+        raise HoldingsCsvError(
+            f"CSV has too many holdings ({len(holdings)}). Maximum is {MAX_HOLDINGS_ROWS}."
+        )
+    return holdings
+
+
 def parse_holdings_csv(contents: bytes) -> list[dict[str, str]]:
+    ensure_csv_byte_limit(contents)
     rows = _table(contents)
     if len(rows) < 2:
         raise HoldingsCsvError("CSV has no holdings.")
 
     header = _header_index(rows[0])
+    if _is_app_csv_header(header):
+        return _enforce_holdings_limit(_parse_app_rows(rows))
+
+    parsed = _parse_broker_rows(rows)
+    if parsed is not None:
+        return _enforce_holdings_limit(parsed)
+
     app_keys = _APP_REQUIRED & set(header)
-    if (
-        "ticker" in header
-        and "assetclass" in header
-        and _pick(header, _QUANTITY_KEYS) is not None
-        and _pick(header, _PRICE_KEYS) is not None
-    ):
-        return _parse_app_rows(rows)
     if len(app_keys) >= 2:
         missing = sorted(_display_name(key) for key in _APP_REQUIRED - set(header))
         raise HoldingsCsvError(f"CSV missing required columns: {', '.join(missing)}")
 
-    parsed = _parse_broker_rows(rows)
-    if parsed is None:
-        raise HoldingsCsvError(
-            "This CSV is not a holdings file. Upload a positions export from "
-            "Schwab, Fidelity, LPL, BNY Mellon, or Raymond James, or a file with "
-            "ticker, asset_class, quantity, and current_price."
-        )
-    return parsed
+    raise HoldingsCsvError(
+        "This CSV is not a holdings file. Upload a positions export from "
+        "Schwab, Fidelity, LPL, BNY Mellon, or Raymond James, or a file with "
+        "ticker, asset_class, quantity, and current_price (or market_value)."
+    )
 
 
 def _display_name(key: str) -> str:
@@ -156,6 +208,24 @@ def _display_name(key: str) -> str:
         "assetclass": "asset_class",
         "currentprice": "current_price",
     }.get(key, key)
+
+
+def _ensure_app_current_price(record: dict[str, str], line_no: int) -> None:
+    if _number(record.get("current_price", "")) is not None:
+        return
+    quantity = _number(record.get("quantity", ""))
+    market_value = _number(record.get("market_value", ""))
+    if quantity not in {None, 0} and market_value is not None:
+        record["current_price"] = _plain(market_value / quantity)
+        return
+    label = record.get("ticker") or record.get("asset_name") or f"row {line_no}"
+    ticker = str(record.get("ticker") or label)
+    if uses_market_close_on_upload(ticker, str(record.get("asset_class", ""))):
+        record["current_price"] = "0"
+        return
+    raise HoldingsCsvError(
+        f"Row {line_no}: {label} needs current_price, or market_value with quantity, for cash holdings."
+    )
 
 
 def _parse_app_rows(rows: list[list[str]]) -> list[dict[str, str]]:
@@ -177,11 +247,15 @@ def _parse_app_rows(rows: list[list[str]]) -> list[dict[str, str]]:
             if _compact(cell) in _PRICE_KEYS:
                 header[index] = "current_price"
                 break
-    required = {"ticker", "asset_class", "quantity", "current_price"}
+    if "market_value" not in header:
+        for index, cell in enumerate(header):
+            if _compact(cell) in _VALUE_KEYS:
+                header[index] = "market_value"
+                break
+    required = {"ticker", "quantity"}
     missing = required - set(header)
     if missing:
         raise HoldingsCsvError(f"CSV missing required columns: {', '.join(sorted(missing))}")
-
     width = len(header)
     parsed: list[dict[str, str]] = []
     for line_no, raw in enumerate(rows[1:], start=2):
@@ -200,6 +274,7 @@ def _parse_app_rows(rows: list[list[str]]) -> list[dict[str, str]]:
                 record["asset_name"],
                 record["asset_class"],
             )
+        _ensure_app_current_price(record, line_no)
         parsed.append(record)
     if not parsed:
         raise HoldingsCsvError("CSV has no holdings.")

@@ -5,8 +5,9 @@ from datetime import date, datetime
 
 import pytest
 
-from engine.market_data import eodhd, fetch_equity_price, provider_label, selected_provider
+from engine.market_data import eodhd, fetch_asset_classes, fetch_equity_price, provider_label, selected_provider
 from engine.market_data import tiingo
+from engine.market_data.etf_classification import classify_institutional_asset_class
 from engine.market_data.symbols import canonical_symbol, eodhd_symbol, tiingo_symbol
 from engine.market_data.yahoo import last_completed_close
 
@@ -245,6 +246,27 @@ def test_dollar_multiplier_keeps_the_saved_ratio_when_yahoo_is_empty(monkeypatch
     level, _change = tiingo.fetch_dollar_index()
     assert level == pytest.approx(28.4 * 3.52)
     assert json.loads(path.read_text())["as_of"] == "2026-10-17"
+
+
+def test_institutional_asset_class_overrides_and_rules():
+    assert classify_institutional_asset_class("ETF", "", "", "TLT") == "Bond, U.S., Long-Term Treasury"
+    assert classify_institutional_asset_class("ETF", "iShares 20+ Year Treasury Bond ETF", "", "XYZ") == (
+        "Bond, U.S., Long-Term Treasury"
+    )
+    assert classify_institutional_asset_class("Stock", "Apple Inc", "", "AAPL") == "Equity, U.S., Single Stock"
+
+
+def test_fetch_asset_classes_tiingo_only(monkeypatch):
+    monkeypatch.setenv("MARKET_DATA_PROVIDER", "yahoo")
+    with pytest.raises(ValueError):
+        fetch_asset_classes(["TLT"])
+
+    monkeypatch.setenv("MARKET_DATA_PROVIDER", "tiingo")
+    monkeypatch.setattr(
+        "engine.market_data.tiingo.fetch_asset_classes",
+        lambda tickers: {"TLT": "Bond, U.S., Long-Term Treasury"},
+    )
+    assert fetch_asset_classes(["TLT"]) == {"TLT": "Bond, U.S., Long-Term Treasury"}
 
 
 def test_missing_tiingo_key_is_an_error(monkeypatch):

@@ -5,9 +5,20 @@ from uuid import UUID, uuid4
 import datetime
 
 from database import SUPABASE_UNREACHABLE, SUPABASE_URL, authorize_client, client_for_token
-from engine.equity_prices import fetch_closing_prices, fetch_equity_price, is_equity_class, yahoo_symbol
-from engine.holdings_csv import HoldingsCsvError, number_field, parse_holdings_csv
-from engine.market_data import provider_label
+from engine.equity_prices import (
+    fetch_closing_prices,
+    fetch_equity_price,
+    is_equity_class,
+    uses_market_close_on_upload,
+    yahoo_symbol,
+)
+from engine.holdings_csv import (
+    HoldingsCsvError,
+    number_field,
+    parse_holdings_csv,
+    read_bounded_upload,
+)
+from engine.market_data import fetch_asset_classes, provider_label, selected_provider
 
 router = APIRouter(prefix="/api/portfolios", tags=["Portfolios"])
 
@@ -20,9 +31,7 @@ class PortfolioListResponse(BaseModel):
     sub_account_number: Optional[str] = None
     tax_status: Optional[str] = None
     portfolio_value: float = 0
-    asset_allocation: Dict[str, float] = Field(
-        default_factory=lambda: {"equities": 60, "bonds": 25, "realAssets": 10, "cash": 5}
-    )
+    asset_allocation: Optional[Dict[str, float]] = None
     target_risk_profile: Optional[str] = "Balanced"
     created_at: Optional[datetime.datetime] = None
 
@@ -84,7 +93,6 @@ def _required_account_code(value: Optional[str], label: str) -> str:
     return text
 
 
-DEFAULT_ALLOCATION = {"equities": 60, "bonds": 25, "realAssets": 10, "cash": 5}
 TAX_STATUSES = {"taxable", "tax_deferred", "tax_exempt"}
 PORTFOLIO_COLUMNS = (
     "id,name,description,account_number,sub_account_number,tax_status,account_alias,target_risk_profile,"
@@ -165,6 +173,22 @@ def _limit_block(db, firm_id: str | None, kind: str, count: int) -> dict | None:
     }
 
 
+def _firm_holdings_classification_source(db, firm_id: str | None) -> str:
+    if not firm_id:
+        return "csv"
+    firm = (
+        db.table("firms")
+        .select("holdings_classification_source")
+        .eq("id", firm_id)
+        .limit(1)
+        .execute()
+    )
+    if not firm.data:
+        return "csv"
+    source = str(firm.data[0].get("holdings_classification_source") or "csv").strip().lower()
+    return source if source in {"csv", "authoritative"} else "csv"
+
+
 def _portfolio_firm_id(db, portfolio_id: str) -> str | None:
     portfolio = (
         db.table("portfolios")
@@ -243,15 +267,20 @@ def _firm_for_new_portfolio(firm_ids: List[str], requested: Optional[UUID]) -> s
     )
 
 
-def _normalize_allocation(raw: Any) -> Dict[str, float]:
-    if not isinstance(raw, dict):
-        return dict(DEFAULT_ALLOCATION)
-    return {
-        "equities": float(raw.get("equities", raw.get("Equities", DEFAULT_ALLOCATION["equities"]))),
-        "bonds": float(raw.get("bonds", raw.get("Bonds", DEFAULT_ALLOCATION["bonds"]))),
-        "realAssets": float(raw.get("realAssets", raw.get("Real_Assets", DEFAULT_ALLOCATION["realAssets"]))),
-        "cash": float(raw.get("cash", raw.get("Cash", DEFAULT_ALLOCATION["cash"]))),
+def _normalize_allocation(raw: Any) -> Optional[Dict[str, float]]:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or not raw:
+        return None
+    normalized = {
+        "equities": float(raw.get("equities", raw.get("Equities", 0))),
+        "bonds": float(raw.get("bonds", raw.get("Bonds", 0))),
+        "realAssets": float(raw.get("realAssets", raw.get("Real_Assets", 0))),
+        "cash": float(raw.get("cash", raw.get("Cash", 0))),
     }
+    if sum(normalized.values()) <= 0:
+        return None
+    return normalized
 
 
 def _to_list_item(item: dict) -> dict:
@@ -264,7 +293,9 @@ def _to_list_item(item: dict) -> dict:
         "sub_account_number": (item.get("sub_account_number") or "").strip() or None,
         "tax_status": item.get("tax_status") if item.get("tax_status") in TAX_STATUSES else None,
         "portfolio_value": float(item.get("portfolio_value") or item.get("total_value") or 0),
-        "asset_allocation": _normalize_allocation(item.get("asset_allocation") or item.get("weights")),
+        "asset_allocation": _normalize_allocation(
+            item.get("asset_allocation") if item.get("asset_allocation") is not None else item.get("weights")
+        ),
         "target_risk_profile": item.get("target_risk_profile") or "Balanced",
         "created_at": item.get("created_at"),
     }
@@ -412,8 +443,9 @@ async def create_portfolio(
         "account_alias": portfolio_data.account_alias or name,
         "target_risk_profile": portfolio_data.target_risk_profile or "Balanced",
         "portfolio_value": 0 if portfolio_data.portfolio_value is None else portfolio_data.portfolio_value,
-        "asset_allocation": portfolio_data.asset_allocation or DEFAULT_ALLOCATION,
     }
+    if portfolio_data.asset_allocation is not None:
+        payload["asset_allocation"] = portfolio_data.asset_allocation
 
     try:
         response = db.table("portfolios").insert(payload).execute()
@@ -497,8 +529,29 @@ async def add_ticker(holding: HoldingCreate, authorization: Optional[str] = Head
 
 
 def _allocation_bucket(asset_class: str) -> str:
-    """Map a class label onto a pie slice. The first class word wins."""
-    text = str(asset_class).strip().lower().replace(",", " ")
+    """Map a class label onto a pie slice (equities / bonds / realAssets / cash)."""
+    text = " ".join(str(asset_class).strip().lower().replace(",", " ").split())
+    if not text:
+        return "equities"
+    if text in {"cash", "money market"} or (
+        "cash" in text and "equity" not in text and "stock" not in text
+    ):
+        return "cash"
+    bond_hints = (
+        "bond",
+        "treasury",
+        "fixed income",
+        "municipal",
+        "aggregate bond",
+        "total bond",
+        "tips",
+        "mortgage",
+        "note due",
+    )
+    if any(hint in text for hint in bond_hints):
+        return "bonds"
+    if text.startswith("gold") or "commod" in text or text.startswith("real"):
+        return "realAssets"
     for word in text.split():
         if word in {"equities", "equity", "stocks", "stock"} or word.startswith("equit") or word.startswith("stock"):
             return "equities"
@@ -555,8 +608,36 @@ async def upload_csv(
         raise HTTPException(status_code=404, detail="Portfolio not found.")
 
     try:
-        contents = await file.read()
+        contents = await read_bounded_upload(file)
         table = parse_holdings_csv(contents)
+        portfolio_key = str(portfolio_id)
+        firm_id = _portfolio_firm_id(db, portfolio_key)
+        class_source = _firm_holdings_classification_source(db, firm_id)
+
+        if class_source == "authoritative":
+            if selected_provider() != "tiingo":
+                raise HTTPException(
+                    status_code=422,
+                    detail="Authoritative classification requires Tiingo as the market data provider.",
+                )
+            tickers = sorted({yahoo_symbol(row["ticker"]) for row in table})
+            classes = fetch_asset_classes(tickers)
+            missing_class = sorted(ticker for ticker in tickers if ticker not in classes)
+            if missing_class:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Tiingo could not classify: {', '.join(missing_class)}",
+                )
+            for row in table:
+                row["asset_class"] = classes[yahoo_symbol(row["ticker"])]
+        else:
+            for line_no, row in enumerate(table, start=2):
+                if not str(row.get("asset_class", "")).strip():
+                    label = row.get("ticker") or f"row {line_no}"
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Row {line_no}: asset_class is required for {label} (this firm uses CSV classification).",
+                    )
 
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         records_to_insert = []
@@ -564,7 +645,7 @@ async def upload_csv(
         class_totals = {"equities": 0.0, "bonds": 0.0, "realAssets": 0.0, "cash": 0.0}
         parsed_rows = []
         for row in table:
-            asset_class = str(row["asset_class"]).strip()
+            asset_class = str(row.get("asset_class", "")).strip()
             ticker = yahoo_symbol(row["ticker"])
             parsed_rows.append({
                 "ticker": ticker,
@@ -577,10 +658,14 @@ async def upload_csv(
                 "equity": is_equity_class(asset_class),
             })
 
-        equity_prices = fetch_closing_prices(
-            [row["ticker"] for row in parsed_rows if row["equity"]]
-        )
-        missing = sorted({row["ticker"] for row in parsed_rows if row["equity"] and row["ticker"] not in equity_prices})
+        market_tickers = sorted({
+            row["ticker"]
+            for row in parsed_rows
+            if uses_market_close_on_upload(row["ticker"], row["asset_class"])
+            and row["current_price"] <= 0
+        })
+        market_prices = fetch_closing_prices(market_tickers) if market_tickers else {}
+        missing = sorted(ticker for ticker in market_tickers if ticker not in market_prices)
         if missing:
             raise HTTPException(
                 status_code=422,
@@ -588,7 +673,13 @@ async def upload_csv(
             )
 
         for row in parsed_rows:
-            price = equity_prices[row["ticker"]] if row["equity"] else row["current_price"]
+            if (
+                uses_market_close_on_upload(row["ticker"], row["asset_class"])
+                and row["current_price"] <= 0
+            ):
+                price = market_prices[row["ticker"]]
+            else:
+                price = row["current_price"]
             market_value = row["quantity"] * price
             total_value += market_value
             mapped = _allocation_bucket(row["asset_class"])
@@ -610,7 +701,6 @@ async def upload_csv(
             raise HTTPException(status_code=422, detail="CSV has no holdings.")
 
         ticker_count = len({row["ticker"] for row in parsed_rows if row["ticker"]})
-        portfolio_key = str(portfolio_id)
         blocked = _limit_block(
             db,
             _portfolio_firm_id(db, portfolio_key),
@@ -654,7 +744,7 @@ async def upload_csv(
                 db.table("portfolio_holdings").insert(previous_rows).execute()
             raise HTTPException(status_code=400, detail="Database rejected bulk CSV records insert.")
 
-        allocation = DEFAULT_ALLOCATION
+        allocation: Optional[Dict[str, float]] = None
         if total_value > 0:
             allocation = {
                 key: round((value / total_value) * 100, 1)
@@ -671,7 +761,7 @@ async def upload_csv(
             "records_imported": len(response.data),
             "portfolio_value": total_value,
             "asset_allocation": allocation,
-            "equity_prices": equity_prices,
+            "market_prices": market_prices,
         }
     except HTTPException:
         raise

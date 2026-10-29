@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { ensureProfile } from '@/lib/ensureProfile';
 import { acceptAgreement, fetchAgreement, hasAcceptedCurrentAgreement, type AgreementDocument } from '@/lib/agreement';
@@ -10,10 +10,10 @@ import { OAuthButtons } from '@/components/auth/OAuthButtons';
 import AuthenticatorEnroll from '@/components/auth/AuthenticatorEnroll';
 import AgreementBody from '@/components/auth/AgreementBody';
 import AgreementScroll from '@/components/auth/AgreementScroll';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function SignupPage() {
+function SignupPageContent() {
   const [fullName, setFullName] = useState('');
   const [firmName, setFirmName] = useState('');
   const [email, setEmail] = useState('');
@@ -30,7 +30,32 @@ export default function SignupPage() {
   const [localMail, setLocalMail] = useState(false);
   const [oauthUserId, setOauthUserId] = useState<string | null>(null);
   const [activeEmail, setActiveEmail] = useState<string | null>(null);
+  const [invitedSignup, setInvitedSignup] = useState(false);
+  const [inviteEmailLocked, setInviteEmailLocked] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const fromInvite = searchParams.get('email')?.trim() ?? '';
+    if (!fromInvite) return;
+    setEmail(fromInvite);
+    setInviteEmailLocked(true);
+    let cancelled = false;
+    void supabase.rpc('pending_firm_invite_signup_hint', { target_email: fromInvite }).then(({ data, error }) => {
+      if (cancelled || error || !data || typeof data !== 'object') return;
+      const hint = data as { firm_name?: string; full_name?: string };
+      const firm = typeof hint.firm_name === 'string' ? hint.firm_name.trim() : '';
+      const name = typeof hint.full_name === 'string' ? hint.full_name.trim() : '';
+      if (firm) {
+        setFirmName(firm);
+        setInvitedSignup(true);
+      }
+      if (name) setFullName((current) => (current.trim() ? current : name));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -236,7 +261,12 @@ export default function SignupPage() {
     }
 
     const host = window.location.hostname;
-    setLocalMail(host === '127.0.0.1' || host === 'localhost');
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    setLocalMail(
+      host === '127.0.0.1' ||
+        host === 'localhost' ||
+        /127\.0\.0\.1|localhost/.test(supabaseUrl),
+    );
     setPendingEmail(email);
     setStep('confirm');
     setLoading(false);
@@ -314,19 +344,25 @@ export default function SignupPage() {
         ) : step === 'confirm' ? (
           <div className="space-y-4 text-sm text-slate-300">
             <p>
-              The account for <span className="font-semibold text-white">{pendingEmail}</span> is waiting on email confirmation. Open the confirmation link, then this site continues to the agreement and authenticator app.
+              The firm invite email and this step are different. The invite only brought you to signup; Supabase sends a separate message titled{' '}
+              <span className="font-semibold text-white">Confirm your email for Hustix Macro</span>.
             </p>
-            {localMail && (
+            <p>
+              Account waiting: <span className="font-semibold text-white">{pendingEmail}</span>. After you confirm, sign in to continue agreement and authenticator setup.
+            </p>
+            {localMail ? (
               <p>
-                On this computer that message stays in the{' '}
+                Local dev does <span className="font-semibold text-white">not</span> send that message to Gmail or Resend. Open the{' '}
                 <a
                   href="http://127.0.0.1:54324"
                   className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline"
                 >
-                  local mail viewer
+                  local mail viewer (Mailpit)
                 </a>
-                . Open the newest message to {pendingEmail} and choose Confirm email address.
+                , find the newest mail to {pendingEmail}, and click <span className="font-semibold text-white">Confirm email address</span>.
               </p>
+            ) : (
+              <p>Check that inbox (and spam) for the Supabase confirmation message—not the firm invite.</p>
             )}
             <Link
               href="/login"
@@ -372,10 +408,11 @@ export default function SignupPage() {
               id="firm-name"
               type="text"
               required
+              readOnly={invitedSignup}
               maxLength={120}
               value={firmName}
               onChange={(e) => setFirmName(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition"
+              className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition read-only:text-slate-400"
               placeholder="Northwind Wealth"
             />
           </div>
@@ -387,12 +424,15 @@ export default function SignupPage() {
             <input
               type="email"
               required
-              readOnly={oauthUserId !== null}
+              readOnly={oauthUserId !== null || inviteEmailLocked}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 bg-slate-950/70 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition read-only:text-slate-400"
               placeholder="advisor@example.com"
             />
+            <p className="mt-1.5 text-xs text-slate-500">
+              Use an email for this firm only. To work with another firm on Hustix Macro, sign up again with a different address.
+            </p>
           </div>
 
           {oauthUserId === null && (
@@ -468,15 +508,31 @@ export default function SignupPage() {
         )}
 
         {/* Card Footer */}
-        <div className="border-t border-slate-800/80 pt-4 text-center">
-          <p className="text-xs text-slate-400">
-            Already have an account?{' '}
-            <Link href="/login" className="text-indigo-400 hover:text-indigo-300 font-medium hover:underline">
-              Sign in here
-            </Link>
-          </p>
-        </div>
+        {step !== 'confirm' && (
+          <div className="border-t border-slate-800/80 pt-4 text-center">
+            <p className="text-xs text-slate-400">
+              Already have an account?{' '}
+              <Link href="/login" className="text-indigo-400 hover:text-indigo-300 font-medium hover:underline">
+                Sign in here
+              </Link>
+            </p>
+          </div>
+        )}
       </div>
     </main>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+          <p className="text-sm text-slate-400">Loading signup...</p>
+        </main>
+      }
+    >
+      <SignupPageContent />
+    </Suspense>
   );
 }
