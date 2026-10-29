@@ -13,7 +13,7 @@
       background: #020617;
       color: #e2e8f0;
     }
-    main { max-width: 880px; margin: 0 auto; padding: 32px 20px 64px; }
+    main { max-width: 1120px; margin: 0 auto; padding: 32px 20px 64px; }
     h1 { margin: 0; font-size: 28px; }
     h2 { margin: 0 0 8px; font-size: 18px; }
     p { color: #94a3b8; line-height: 1.5; }
@@ -215,6 +215,178 @@
     }
     .delete-confirm label { margin-top: 10px; font-size: 13px; color: #fda4af; }
     .delete-confirm input { margin-top: 6px; }
+    .accounts-table { margin-top: 14px; }
+    .accounts-head,
+    .account-row {
+      display: grid;
+      grid-template-columns: minmax(200px, 1.6fr) minmax(160px, 1.2fr) minmax(170px, 1fr) minmax(110px, 0.8fr);
+      gap: 10px 14px;
+      align-items: center;
+      padding: 0 14px;
+    }
+    .accounts-head {
+      padding-bottom: 10px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid #1e293b;
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+    .account-row {
+      min-height: 72px;
+      margin-top: 8px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      font-size: 13px;
+      color: #e2e8f0;
+    }
+    .account-row.is-enabled {
+      background: linear-gradient(180deg, #1a2332 0%, #151c28 100%);
+      border-color: #2a3548;
+    }
+    .account-row.is-disabled {
+      background: #0c1017;
+      border-color: #161b24;
+      color: #94a3b8;
+    }
+    .account-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .account-user-text {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .account-avatar {
+      flex-shrink: 0;
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: #334155;
+      color: #cbd5e1;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      overflow: hidden;
+    }
+    .account-avatar svg { width: 22px; height: 22px; opacity: 0.85; }
+    .account-name {
+      font-weight: 600;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .account-email {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: #64748b;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .account-email.verified { color: #34d399; }
+    .account-row.is-enabled .account-email:not(.verified) { color: #94a3b8; }
+    .account-company strong {
+      display: block;
+      font-size: 14px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .account-plan-chip {
+      margin-top: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: rgba(15, 23, 42, 0.9);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: #64748b;
+      text-transform: uppercase;
+    }
+    .account-plan-chip span:last-child { color: #cbd5e1; }
+    .account-verified {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #334155;
+      background: #111827;
+      color: #64748b;
+    }
+    .account-verified.ok {
+      border-color: #065f46;
+      background: rgba(6, 95, 70, 0.35);
+      color: #34d399;
+    }
+    .account-date {
+      align-self: end;
+      text-align: right;
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.35;
+      padding-bottom: 2px;
+    }
+    .account-row.is-enabled .account-date { color: #94a3b8; }
+    .account-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .account-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .account-toggle.disable {
+      background: #2a1218;
+      border-color: #7f1d1d;
+      color: #fb7185;
+    }
+    .account-toggle.enable {
+      background: #0f1a14;
+      border-color: #166534;
+      color: #4ade80;
+    }
+    .account-toggle:disabled { opacity: 0.45; cursor: default; }
+    .account-toggle svg { width: 13px; height: 13px; flex-shrink: 0; }
+    .account-delete {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: #fb7185;
+      cursor: pointer;
+    }
+    .account-delete:hover { background: rgba(190, 18, 60, 0.15); }
+    .account-delete svg { width: 15px; height: 15px; }
   </style>
 </head>
 <body>
@@ -287,21 +459,19 @@
       </section>
 
       <section class="card">
-        <h2>Signed-in accounts</h2>
-        <p>Advisors with an open session, and the firm account they are on.</p>
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Firm</th>
-              <th>Plan</th>
-              <th>Last active</th>
-            </tr>
-          </thead>
-          <tbody id="accounts"></tbody>
-        </table>
-        <p id="accounts-empty" class="banner hidden">No one is signed in.</p>
+        <h2>All accounts</h2>
+        <p>Advisor login accounts on this database.</p>
+        <div class="accounts-table">
+          <div class="accounts-head">
+            <div>User</div>
+            <div>Company / plan</div>
+            <div style="text-align:right;">Status / action</div>
+            <div style="text-align:right;">Date added</div>
+          </div>
+          <div id="accounts"></div>
+        </div>
+        <p id="accounts-message" class="banner hidden"></p>
+        <p id="accounts-empty" class="banner hidden">No accounts.</p>
       </section>
 
       <section id="plan-limits-section" class="card">
@@ -467,6 +637,7 @@
     let relationshipView = 'advisors';
     const accountsBody = document.querySelector('#accounts');
     const accountsEmpty = document.querySelector('#accounts-empty');
+    const accountsMessage = document.querySelector('#accounts-message');
     const plansBody = document.querySelector('#plans');
     const serviceMessage = document.querySelector('#service-message');
     const limitsMessage = document.querySelector('#limits-message');
@@ -805,14 +976,17 @@
         });
         firmRows = result.firms || firmRows;
         if (result.firm) firmDetail = result.firm;
+        if (result.accounts) renderAccounts(result.accounts);
         renderFirmList();
         renderFirmDetail();
         renderFirmRelations(userId);
         firmMessage.className = 'banner ok';
         firmMessage.textContent = enabled ? 'Advisor enabled.' : 'Advisor disabled.';
+        void showAccountsMessage(firmMessage.textContent, true);
       } catch (error) {
         firmMessage.className = 'banner error';
         firmMessage.textContent = error.message;
+        void showAccountsMessage(error.message, false);
       }
     }
 
@@ -1235,26 +1409,177 @@
       refreshFirmConsoleSelection();
     }
 
+    async function deleteAdvisorAccount(userId, email) {
+      const label = email || 'this account';
+      if (
+        !window.confirm(
+          `Permanently delete ${label}?\n\nThis removes the login, profile, and firm memberships. This cannot be undone.`,
+        )
+      ) {
+        return;
+      }
+      firmMessage.className = 'banner';
+      firmMessage.textContent = '';
+      try {
+        const result = await request(`/api/advisors/${userId}/delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ firm_id: selectedFirmId }),
+        });
+        firmRows = result.firms || firmRows;
+        if (result.firm) firmDetail = result.firm;
+        if (result.accounts) renderAccounts(result.accounts);
+        renderFirmList();
+        renderFirmDetail();
+        renderFirmRelations();
+        const deletedEmail = result.deleted?.email || label;
+        firmMessage.className = 'banner ok';
+        firmMessage.textContent = `Deleted ${deletedEmail}.`;
+        void showAccountsMessage(firmMessage.textContent, true);
+      } catch (error) {
+        firmMessage.className = 'banner error';
+        firmMessage.textContent = error.message;
+        void showAccountsMessage(error.message, false);
+      }
+    }
+
+    function accountInitials(fullName, email) {
+      const source = (fullName || email || '?').trim();
+      const parts = source.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return source.slice(0, 2).toUpperCase();
+    }
+
+    function formatAccountCreated(value) {
+      if (!value) return '—';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '—';
+      return date.toLocaleString(undefined, {
+        month: '2-digit',
+        day: '2-digit',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+    }
+
+    function svgIcon(name) {
+      const ns = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      const paths = {
+        user: ['M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2', 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8'],
+        power: ['M18.36 6.64a9 9 0 1 1-12.73 0', 'M12 2v10'],
+        check: ['M20 6 9 17l-5-5'],
+        x: ['M18 6 6 18', 'M6 6l12 12'],
+        trash: [
+          'M3 6h18',
+          'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6',
+          'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
+          'M10 11v6',
+          'M14 11v6',
+        ],
+        verified: ['M20 6 9 17l-5-5'],
+      };
+      for (const d of paths[name] || paths.check) {
+        const el = document.createElementNS(ns, 'path');
+        el.setAttribute('d', d);
+        svg.append(el);
+      }
+      return svg;
+    }
+
     function renderAccounts(rows) {
       accountsBody.replaceChildren();
       accountsEmpty.classList.toggle('hidden', rows.length > 0);
       for (const account of rows) {
-        const tr = document.createElement('tr');
-        const lastSeen = account.last_seen ? new Date(account.last_seen) : null;
-        const cells = [
-          account.full_name || '—',
-          account.email || '—',
-          account.firm_name || '—',
-          account.plan_code || '—',
-          lastSeen && !Number.isNaN(lastSeen.getTime()) ? lastSeen.toLocaleString() : '—',
-        ];
-        for (const value of cells) {
-          const td = document.createElement('td');
-          td.textContent = value;
-          tr.append(td);
+        const enabled = account.enabled !== false && account.enabled !== 'f';
+        const firmOpen = account.firm_enabled !== false && account.firm_enabled !== 'f';
+        const verified = account.verified === true || account.verified === 't';
+        const planLabel = String(account.plan_code || 'free').replace(/_/g, ' ').toUpperCase();
+        const displayName = account.full_name?.trim() || account.email?.split('@')[0] || '—';
+
+        const row = document.createElement('div');
+        row.className = `account-row ${enabled ? 'is-enabled' : 'is-disabled'}`;
+
+        const userCell = document.createElement('div');
+        userCell.className = 'account-user';
+        const avatar = document.createElement('div');
+        avatar.className = 'account-avatar';
+        avatar.textContent = accountInitials(account.full_name, account.email);
+        const userText = document.createElement('div');
+        userText.className = 'account-user-text';
+        const name = document.createElement('div');
+        name.className = 'account-name';
+        name.textContent = displayName;
+        name.title = displayName;
+        const email = document.createElement('div');
+        email.className = `account-email${verified ? ' verified' : ''}`;
+        email.textContent = account.email || '—';
+        email.title = verified ? 'Email verified' : (account.email || 'Not verified');
+        userText.append(name, email);
+        userCell.append(avatar, userText);
+
+        const companyCell = document.createElement('div');
+        const companyName = document.createElement('strong');
+        companyName.textContent = account.firm_name || '—';
+        companyName.title = account.firm_name || '';
+        const planChip = document.createElement('div');
+        planChip.className = 'account-plan-chip';
+        const planPrefix = document.createElement('span');
+        planPrefix.textContent = 'Plan:';
+        const planValue = document.createElement('span');
+        planValue.textContent = planLabel;
+        planChip.append(planPrefix, planValue);
+        companyCell.append(companyName, planChip);
+
+        const dateCell = document.createElement('div');
+        dateCell.className = 'account-date';
+        dateCell.textContent = formatAccountCreated(account.created_at);
+
+        const actionsCell = document.createElement('div');
+        actionsCell.className = 'account-actions';
+        if (account.user_id) {
+          const toggle = document.createElement('button');
+          toggle.type = 'button';
+          toggle.className = `account-toggle ${enabled ? 'disable' : 'enable'}`;
+          toggle.append(svgIcon(enabled ? 'power' : 'check'));
+          const toggleLabel = document.createElement('span');
+          toggleLabel.textContent = enabled ? 'Disable' : 'Enable';
+          toggle.append(toggleLabel);
+          toggle.disabled = !enabled && !firmOpen;
+          toggle.title = toggle.disabled ? 'Enable the firm before enabling this account' : '';
+          toggle.addEventListener('click', () => {
+            void setAdvisorAccess(account.user_id, !enabled);
+          });
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.className = 'account-delete';
+          deleteBtn.title = 'Delete account';
+          deleteBtn.append(svgIcon('trash'));
+          deleteBtn.addEventListener('click', () => {
+            void deleteAdvisorAccount(account.user_id, account.email);
+          });
+          actionsCell.append(toggle, deleteBtn);
+        } else {
+          actionsCell.textContent = '—';
         }
-        accountsBody.append(tr);
+
+        row.append(userCell, companyCell, actionsCell, dateCell);
+        accountsBody.append(row);
       }
+    }
+
+    async function showAccountsMessage(text, ok) {
+      if (!accountsMessage) return;
+      accountsMessage.className = ok ? 'banner ok' : 'banner error';
+      accountsMessage.textContent = text;
+      accountsMessage.classList.remove('hidden');
     }
 
     function renderPlans(rows) {

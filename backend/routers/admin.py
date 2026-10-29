@@ -53,6 +53,10 @@ class AdvisorAccessBody(BaseModel):
     enabled: bool
 
 
+class AdvisorDeleteBody(BaseModel):
+    user_id: str
+
+
 class FirmAccessBody(BaseModel):
     firm_id: str
     enabled: bool
@@ -272,13 +276,13 @@ def _read_accounts() -> tuple[list, str | None]:
         result = supabase.rpc("admin_open_accounts").execute()
     except Exception as exc:
         print(f"[admin] account list failed: {exc}")
-        return [], "Run supabase/migrations/admin_cloud.sql on this database, then refresh."
+        return [], "Run supabase/migrations/admin_all_accounts.sql on this database, then refresh."
     data = result.data
     if isinstance(data, str):
         import json
         data = json.loads(data or "[]")
     if not isinstance(data, list):
-        return [], "Could not read signed-in accounts."
+        return [], "Could not read accounts."
     return data, None
 
 
@@ -350,7 +354,41 @@ def state(request: Request):
 def advisor_access(body: AdvisorAccessBody, request: Request):
     _require_admin(request)
     _require_database()
-    return _mutate_directory("admin_set_advisor_access", {"target_user": body.user_id, "enabled": body.enabled})
+    directory = _mutate_directory(
+        "admin_set_advisor_access",
+        {"target_user": body.user_id, "enabled": body.enabled},
+    )
+    accounts, accounts_error = _read_accounts()
+    return {
+        **directory,
+        "ok": True,
+        "accounts": accounts,
+        "accounts_error": accounts_error,
+    }
+
+
+@router.post("/advisors/delete")
+def advisor_delete(body: AdvisorDeleteBody, request: Request):
+    _require_admin(request)
+    _require_database()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Database is not configured.")
+    try:
+        supabase.rpc("admin_delete_advisor", {"target_user": body.user_id}).execute()
+    except Exception as exc:
+        detail = _rpc_message(exc)
+        if "admin_delete_advisor" in detail and "PGRST202" in str(exc):
+            detail = "Run supabase/migrations/admin_delete_advisor.sql on this database."
+        raise HTTPException(status_code=422, detail=detail) from exc
+    accounts, accounts_error = _read_accounts()
+    directory, advisors_error = _read_directory()
+    return {
+        **directory,
+        "ok": True,
+        "accounts": accounts,
+        "accounts_error": accounts_error,
+        "advisors_error": advisors_error,
+    }
 
 
 @router.post("/firms/access")

@@ -28,20 +28,45 @@ def _dollar_index() -> tuple[float | None, float | None]:
     return fetch_dollar_index()
 
 
+def _bitcoin() -> tuple[float | None, float | None]:
+    """BTC-USD from the market-data provider, with day-over-day percent change."""
+    from engine.market_data import fetch_daily_closes, fetch_equity_price
+
+    latest = fetch_equity_price("BTC-USD")
+    ordered = sorted(fetch_daily_closes("BTC-USD").items())
+    if latest is None and ordered:
+        latest = ordered[-1][1]
+    if not ordered:
+        return latest, None
+    # Prefer the previous completed close as the change baseline.
+    prior = ordered[-2][1] if len(ordered) >= 2 else None
+    if (
+        latest is not None
+        and prior is not None
+        and abs(ordered[-1][1] - latest) / max(abs(latest), 1e-9) > 1e-6
+        and ordered[-1][1] != 0
+    ):
+        # Spot differs from the latest daily bar; change vs that bar instead.
+        prior = ordered[-1][1]
+    change = None
+    if latest is not None and prior is not None and prior != 0:
+        change = (latest - prior) / prior * 100
+    return latest, change
+
+
 def fetch_macro_indicators() -> dict:
     """Fetches yield, policy-rate, inflation, Bitcoin, and the dollar index, plus the latest move."""
     if not FRED_API_KEY:
         raise ValueError("FRED_API_KEY is missing. Define it in backend/.env to enable live feeds.")
 
     # Fed funds uses the daily effective rate so the header change is a day-over-day move.
-    # Bitcoin is the Coinbase daily close. Rate changes are percentage points.
-    # Bitcoin_change_pct and Dollar_Index_change_pct are percent moves from the prior close.
+    # Bitcoin comes from the market-data provider (Tiingo/EODHD/Yahoo), not FRED.
+    # Rate changes are percentage points. *_change_pct values are percent moves.
     series_ids = {
         "10Y_Yield": "DGS10",
         "2Y_Yield": "DGS2",
         "CPI_Inflation": "CPIAUCSL",
         "Fed_Funds_Rate": "DFF",
-        "Bitcoin": "CBBTCUSD",
     }
 
     macro_data = {}
@@ -60,14 +85,17 @@ def fetch_macro_indicators() -> dict:
         macro_data[name] = latest
         if latest is None or prior is None:
             change = None
-        elif name == "Bitcoin" and prior != 0:
-            change = (latest - prior) / prior * 100
         else:
             change = latest - prior
-        if name == "Bitcoin":
-            macro_data["Bitcoin_change_pct"] = change
-        elif name in ("10Y_Yield", "Fed_Funds_Rate"):
+        if name in ("10Y_Yield", "Fed_Funds_Rate"):
             macro_data[f"{name}_change"] = change
+
+    try:
+        bitcoin_level, bitcoin_change = _bitcoin()
+    except Exception:
+        bitcoin_level, bitcoin_change = None, None
+    macro_data["Bitcoin"] = bitcoin_level
+    macro_data["Bitcoin_change_pct"] = bitcoin_change
 
     try:
         dollar_level, dollar_change = _dollar_index()
